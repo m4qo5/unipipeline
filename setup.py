@@ -30,5 +30,5 @@ setup(
     ],
     packages=["unipipeline"],
     include_package_data=True,
-    install_requires=["jinja2", "pyyaml"]
+    install_requires=["jinja2", "pyyaml", "kafka-python", "pika", "pydantic"]
 )
