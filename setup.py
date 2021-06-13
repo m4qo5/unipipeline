@@ -10,8 +10,8 @@ with open(path.join(HERE, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name="unipipeline",
-    version="1.0.0",
-    description="simple way to build the declarative and distributed data pipelines",
+    version="1.0.1",
+    description="simple way to build the declarative and distributed data pipelines with python. it supports rabbitmq or kafka as a broker",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/aliaksandr-master/unipipeline",
@@ -28,7 +28,7 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Operating System :: OS Independent"
     ],
-    packages=["unipipeline"],
+    packages=find_packages(),
     include_package_data=True,
     install_requires=["jinja2", "pyyaml", "kafka-python", "pika", "pydantic"]
 )

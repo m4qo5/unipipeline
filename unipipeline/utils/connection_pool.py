@@ -88,4 +88,4 @@ class ConnectionPool:
         return ConnectionManager(rc, identifier, connection_obj)
 
 
-pool = ConnectionPool()
+connection_pool = ConnectionPool()

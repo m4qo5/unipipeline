@@ -8,7 +8,7 @@ from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition, UniMessageCodec
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta
-from unipipeline.utils.connection_pool import ConnectionObj, TConnectionObj, pool
+from unipipeline.utils.connection_pool import ConnectionObj, TConnectionObj, connection_pool
 
 BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
 
@@ -74,7 +74,7 @@ class AmqpUniBroker(UniBroker):
         self._connection_key = self.get_connection_uri()
         url_params_pr = urlparse(url=self._connection_key)
 
-        self._connector = pool.new_manager(RMQConnectionObj(ConnectionParameters(
+        self._connector = connection_pool.new_manager(RMQConnectionObj(ConnectionParameters(
             heartbeat=self.definition.rmq_definition.heartbeat,
             blocked_connection_timeout=self.definition.rmq_definition.blocked_connection_timeout,
             socket_timeout=self.definition.rmq_definition.socket_timeout,
