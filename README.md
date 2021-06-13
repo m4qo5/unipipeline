@@ -1,2 +1,2 @@
 # unipipeline
-simple way to build the declarative and destributed data pipelines. 
+simple way to build the declarative and distributed data pipelines. 
