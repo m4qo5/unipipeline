@@ -40,7 +40,7 @@ class RMQConnectionObj(ConnectionObj[BlockingConnection]):
         self._connection: Optional[BlockingConnection] = None
 
     def __hash__(self) -> int:
-        return hash(self._params)
+        return hash(f'{self._params.host}{self._params.port}{self._params.credentials.username}{self._params.credentials.password}')
 
     def get(self) -> TConnectionObj:
         assert self._connection is not None
@@ -74,7 +74,7 @@ class AmqpUniBroker(UniBroker):
         self._connection_key = self.get_connection_uri()
         url_params_pr = urlparse(url=self._connection_key)
 
-        self._connector = connection_pool.new_manager(RMQConnectionObj(ConnectionParameters(
+        params = ConnectionParameters(
             heartbeat=self.definition.rmq_definition.heartbeat,
             blocked_connection_timeout=self.definition.rmq_definition.blocked_connection_timeout,
             socket_timeout=self.definition.rmq_definition.socket_timeout,
@@ -83,7 +83,9 @@ class AmqpUniBroker(UniBroker):
             host=url_params_pr.hostname,
             port=url_params_pr.port,
             credentials=PlainCredentials(url_params_pr.username, url_params_pr.password, erase_on_connect=False),
-        )))
+        )
+
+        self._connector = connection_pool.new_manager(RMQConnectionObj(params))
 
         self._read_channel: Optional[BlockingChannel] = None
         self._write_channel: Optional[BlockingChannel] = None
