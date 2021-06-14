@@ -98,7 +98,6 @@ class Uni:
                 message_codec=UniMessageCodec(
                     content_type=definition["content_type"],
                     compression_content_type=definition["compression"],
-                    encoding=definition["encoding"],
                 ),
                 rmq_definition=UniBrokerRMQPropsDefinition(
                     exchange_name=definition['exchange_name'],

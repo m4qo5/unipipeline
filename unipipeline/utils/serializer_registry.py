@@ -12,7 +12,6 @@ COMPRESSION__BZ2 = 'application/x-bz2'
 COMPRESSION__LZMA = 'application/x-lzma'
 
 CONTENT_TYPE__BINARY = 'binary'
-CONTENT_ENCODING__UTF8 = 'utf-8'
 
 
 TContentEncoding = str

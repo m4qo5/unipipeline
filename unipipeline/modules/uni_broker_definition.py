@@ -5,8 +5,6 @@ from pydantic import BaseModel, validator
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 from unipipeline.utils.serializer_registry import serializer_registry, compressor_registry
 
-SUPPORTED_ENCODINGS = {'utf-8', }
-
 
 TContent = TypeVar('TContent')
 
