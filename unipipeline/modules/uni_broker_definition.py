@@ -19,7 +19,9 @@ class UniMessageCodec(BaseModel, Generic[TContent]):
         return v
 
     @validator("compression")
-    def compression_must_be_supported(cls, v: str) -> str:
+    def compression_must_be_supported(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
         compressor_registry.assert_supports(v)
         return v
 

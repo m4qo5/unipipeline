@@ -164,7 +164,6 @@ class AmqpUniBroker(UniBroker):
     def parse_body(self, body: bytes, properties: BasicProperties) -> UniMessageMeta:
         codec: UniMessageCodec[Any] = UniMessageCodec(
             compression=properties.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
-            encoding=properties.content_encoding,
             content_type=properties.content_type
         )
         body_uncompressed = codec.decompress(body)
