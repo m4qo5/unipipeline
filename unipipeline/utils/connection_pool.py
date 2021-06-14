@@ -61,7 +61,6 @@ class ConnectionManager(Generic[TConnectionObj]):
 
     def __del__(self) -> None:
         self.disconnect()
-        self._rc = None
 
     def __enter__(self) -> TConnectionObj:
         return self.connect()
@@ -76,7 +75,7 @@ class ConnectionPool:
         self._registry: Dict[int, ConnectionRC[Any]] = dict()
         self._id_counter: int = 0
 
-    def new_manager(self, connection_obj: ConnectionObj[TConnectionObj]) -> ConnectionManager[int, TConnectionObj]:
+    def new_manager(self, connection_obj: ConnectionObj[TConnectionObj]) -> ConnectionManager[TConnectionObj]:
         identifier = self._id_counter
         self._id_counter += 1
 

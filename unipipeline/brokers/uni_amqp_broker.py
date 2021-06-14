@@ -138,6 +138,7 @@ class AmqpUniBroker(UniBroker):
             raise ConnectionError('you cannot consume twice!')
         self._consuming_started = True
         self._bind(True, topic)
+        assert self._read_channel is not None
         self._read_channel.basic_qos(prefetch_count=prefetch)
         self._read_channel.basic_consume(
             queue=topic,
@@ -147,12 +148,12 @@ class AmqpUniBroker(UniBroker):
         self._read_channel.start_consuming()
 
     def serialize_body(self, meta: UniMessageMeta) -> Tuple[bytes, BasicProperties]:
-        encoding, meta_dumps = self.definition.message_codec.dumps(meta.dict())
+        meta_dumps = self.definition.message_codec.dumps(meta.dict())
         meta_compressed = self.definition.message_codec.compress(meta_dumps)
 
         properties = BasicProperties(
             content_type=self.definition.message_codec.content_type,
-            content_encoding=encoding,
+            content_encoding='utf-8',
             delivery_mode=2 if self.definition.is_persistent else 0,
             headers={BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.message_codec.compression}
         )
@@ -181,6 +182,7 @@ class AmqpUniBroker(UniBroker):
 
         body, properties = self.serialize_body(meta)
 
+        assert self._write_channel is not None
         self._write_channel.basic_publish(
             exchange=self.get_exchange_name(),
             routing_key=topic,

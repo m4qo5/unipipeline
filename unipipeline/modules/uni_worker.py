@@ -57,7 +57,9 @@ class UniWorker(Generic[TMessage]):
         assert issubclass(worker_type, UniWorker)
         w_def = self._index.get_worker_definition_by_type(worker_type, UniWorker)
         w = worker_type(w_def, self._index)
-        w.send(data, meta=self._current_meta.create_child(data))
+        assert self._current_meta is not None
+        meta = self._current_meta.create_child(data)
+        w.send(data, meta=meta)
 
     def process_message(self, meta: UniMessageMeta, manager: UniBrokerMessageManager) -> None:
         logger.debug("worker %s message %s received", self._definition.name, meta)

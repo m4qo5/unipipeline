@@ -45,15 +45,17 @@ class UniKafkaBroker(UniBroker):
             self.stop_producing()
 
     def stop_producing(self) -> None:
+        assert self._producer is not None
         self._producer.close()
         self._producer = None
 
     def stop_consuming(self) -> None:
+        assert self._consumer is not None
         self._consumer.close()
         self._consumer = None
 
     def serialize_body(self, meta: UniMessageMeta) -> Tuple[bytes, bytes]:
-        _, meta_dumps = self.definition.message_codec.dumps(meta.dict())
+        meta_dumps = self.definition.message_codec.dumps(meta.dict())
         return str(meta.id).encode('utf8'), bytes(meta_dumps, encoding='utf8')
 
     def parse_body(self, msg: ConsumerRecord) -> UniMessageMeta:
@@ -86,5 +88,6 @@ class UniKafkaBroker(UniBroker):
     def publish(self, topic: str, meta: UniMessageMeta) -> None:
         self.connect()
         key, value = self.serialize_body(meta)
+        assert self._producer is not None
         self._producer.send(topic=topic, value=value, key=key)
         self._producer.flush()
