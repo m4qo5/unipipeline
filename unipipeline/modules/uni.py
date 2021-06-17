@@ -97,7 +97,7 @@ class Uni:
                 type=parse_type(template(definition["type"], data)),
                 message_codec=UniMessageCodec(
                     content_type=definition["content_type"],
-                    compression_content_type=definition["compression"],
+                    compression=definition["compression"],
                 ),
                 rmq_definition=UniBrokerRMQPropsDefinition(
                     exchange_name=definition['exchange_name'],
@@ -108,7 +108,6 @@ class Uni:
                     exchange_type=definition['exchange_type'],
                 ),
                 kafka_definition=UniBrokerKafkaPropsDefinition(
-                    bootstrap_servers=definition['bootstrap_servers'],
                     api_version=definition['api_version'],
                 )
 

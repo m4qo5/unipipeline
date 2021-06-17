@@ -48,7 +48,6 @@ class UniMessageCodec(BaseModel, Generic[TContent]):
 
 
 class UniBrokerKafkaPropsDefinition(BaseModel):
-    bootstrap_servers: str
     api_version: Tuple[int, int]
 
 

@@ -21,14 +21,17 @@ class UniKafkaBroker(UniBroker):
     def __init__(self, definition: UniBrokerDefinition[bytes]) -> None:
         super().__init__(definition)
 
-        self._bootstrap_servers = self.definition.kafka_definition.bootstrap_servers
+        self._bootstrap_servers = self.get_boostrap_servers()
 
         self._consumer: Optional[KafkaConsumer] = None
         self._producer: Optional[KafkaProducer] = None
 
-        self._security_conf = self._get_security_conf()
+        self._security_conf: Dict[str, Any] = self.get_security_conf()
 
-    def _get_security_conf(self) -> Dict[str, Any]:
+    def get_boostrap_servers(self) -> str:
+        raise NotImplementedError(f'method get_boostrap_server must be implemented for {type(self).__name__}')
+
+    def get_security_conf(self) -> Dict[str, Any]:
         raise NotImplementedError(f'method get_security_conf must be implemented for {type(self).__name__}')
 
     def connect(self) -> None:
