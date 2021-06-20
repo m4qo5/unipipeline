@@ -34,7 +34,7 @@ class UniBroker:
         processor: Callable[[UniMessageMeta, UniBrokerMessageManager], None],
         consumer_tag: str,
         worker_name: str,
-        prefetch: int = 1
+        prefetch: int = 1,
     ) -> None:
         raise NotImplementedError(f'method consume must be implemented for {type(self).__name__}')
 
