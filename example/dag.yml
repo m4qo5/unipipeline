@@ -2,10 +2,10 @@
 
 brokers:
   default_broker:
-    import_template: "MemoryUniBroker"
+    import_template: "unipipeline.brokers.uni_memory_broker:UniMemoryBroker"
 
   ender_broker:
-    import_template: "LoggingUniBroker"
+    import_template: "example.brokers.uni_log_broker:LogBroker"
 
 
 messages:
@@ -23,7 +23,7 @@ waitings:
   __default__:
     retry_max_count: 100
     retry_delay_s: 1
-    type: example.messages.waitings.{{name}}_wating:{{name|camel}}Waiting
+    import_template: example.waitings.{{name}}_wating:{{name|camel}}Waiting
 
   common_db: {}
 
@@ -49,21 +49,18 @@ workers:
     output_workers:
       - ender_second_worker
     waiting_for:
-      - data_logger_db
+      - common_db
 
   intermediate_second_worker:
     input_message: inetermediate_message
     output_workers:
       - ender_frist_worker
-    waiting_for:
-      - data_logger_db
 
   ender_frist_worker:
     input_message: ender_message
-    waiting_for:
-      - data_logger_db
 
   ender_second_worker:
     input_message: ender_message
+    broker: ender_broker
     waiting_for:
-      - data_logger_db
+      - common_db
