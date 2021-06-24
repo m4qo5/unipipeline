@@ -22,4 +22,6 @@ python_version = "3.8"
 [scripts]
 pack = "python3 setup.py sdist bdist_wheel"
 upload_pypi = "twine upload dist/*"
-check = "mypy ./unipipeline"
+check = "mypy ./unipipeline ./example"
+
+example = "./example/bin-start.sh"
