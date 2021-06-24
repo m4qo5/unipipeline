@@ -1,5 +1,5 @@
 import json
-from typing import Optional, Tuple, Callable, Any, Dict
+from typing import Optional, Tuple, Callable, Any, Dict, List
 
 from kafka import KafkaProducer, KafkaConsumer
 from kafka.consumer.fetcher import ConsumerRecord
@@ -28,7 +28,7 @@ class UniKafkaBroker(UniBroker):
 
         self._security_conf: Dict[str, Any] = self.get_security_conf()
 
-    def get_boostrap_servers(self) -> str:
+    def get_boostrap_servers(self) -> List[str]:
         raise NotImplementedError(f'method get_boostrap_server must be implemented for {type(self).__name__}')
 
     def get_security_conf(self) -> Dict[str, Any]:
