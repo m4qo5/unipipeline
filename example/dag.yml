@@ -19,6 +19,12 @@ messages:
   ender_message: {}
 
 
+cron:
+  task_name:
+    worker: my_super_cron_worker
+    when: 0/1 * * * *
+
+
 waitings:
   __default__:
     retry_max_count: 100
@@ -38,6 +44,9 @@ workers:
     ack_after_success: true
 
     outpt_workers: []
+
+  my_super_cron_worker:
+    input_message: uni_cron_message
 
   input_worker:
     input_message: input_message

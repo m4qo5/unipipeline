@@ -19,4 +19,8 @@ u.get_worker("input_worker").send(dict())
 
 u.get_worker("input_worker").consume()
 
+u.get_worker("my_super_cron_worker").consume()
+
 print("it works!")
+
+u.start_cron()
