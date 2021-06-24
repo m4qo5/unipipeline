@@ -1,8 +1,8 @@
 import json
 from typing import Optional, Tuple, Callable, Any, Dict, List
 
-from kafka import KafkaProducer, KafkaConsumer
-from kafka.consumer.fetcher import ConsumerRecord
+from kafka import KafkaProducer, KafkaConsumer  # type: ignore
+from kafka.consumer.fetcher import ConsumerRecord  # type: ignore
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition

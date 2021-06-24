@@ -1,8 +1,8 @@
 from typing import Callable, Optional, Any, Tuple, TypeVar
 from urllib.parse import urlparse
 
-from pika import ConnectionParameters, PlainCredentials, BlockingConnection, BasicProperties, spec
-from pika.adapters.blocking_connection import BlockingChannel
+from pika import ConnectionParameters, PlainCredentials, BlockingConnection, BasicProperties, spec  # type: ignore
+from pika.adapters.blocking_connection import BlockingChannel  # type: ignore
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition, UniMessageCodec
