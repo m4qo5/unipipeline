@@ -1,9 +1,13 @@
-from typing import Dict, List, Any
+import logging
+from time import sleep
+from typing import Dict, List, Any, Tuple, Optional
 
 import yaml  # type: ignore
+from crontab import CronTab  # type: ignore
 
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition, UniMessageCodec, UniBrokerRMQPropsDefinition, UniBrokerKafkaPropsDefinition
+from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.modules.uni_definition import UniDefinition
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_type_definition import UniMessageTypeDefinition
@@ -14,6 +18,12 @@ from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.parse_definition import parse_definition
 from unipipeline.utils.parse_type import parse_type
 from unipipeline.utils.template import template
+
+
+UNI_CRON_MESSAGE = "uni_cron_message"
+
+
+logger = logging.getLogger(__name__)
 
 
 class Uni:
@@ -28,6 +38,7 @@ class Uni:
             brokers=self._parse_brokers(),
             messages=self._parse_messages(),
             workers=self._parse_workers(),
+            cron_tasks=self._parse_cron_tasks(),
         )
 
     def check_load_all(self, create: bool = False) -> None:
@@ -43,14 +54,78 @@ class Uni:
         for waiting in self._definition.waitings.values():
             waiting.type.import_class(UniWaiting, create, create_template_params=waiting)
 
+    def start_cron(self) -> None:
+        from unipipeline.messages.uni_cron_message import UniCronMessage  # circular =(
+
+        crontab: Dict[int, Tuple[CronTab, UniCronTaskDefinition, UniWorker[UniCronMessage]]] = dict()
+        w_index: Dict[str, UniWorker] = dict()
+        for i, task in enumerate(self._definition.cron_tasks.values()):
+            if task.worker.name not in w_index:
+                w_index[task.worker.name] = self.get_worker(task.worker.name)
+            crontab[i] = (CronTab(task.when), task, w_index[task.worker.name])
+
+        if len(crontab.keys()) == 0:
+            return
+
+        while True:
+            min_delay: Optional[int] = None
+            notification_list: List[int] = list()
+            for i, (c, t, w) in crontab.items():
+                sec = c.next(default_utc=False)
+                if min_delay is None:
+                    min_delay = sec
+                if sec < min_delay:
+                    notification_list = []
+                if sec <= min_delay:
+                    notification_list.append(i)
+
+            if min_delay is None:
+                return
+
+            logger.info("sleep %s seconds before running the tasks: %s", min_delay, [crontab[i][1].name for i in notification_list])
+
+            sleep(min_delay)
+
+            logger.info("run the tasks: %s", [crontab[i][1].name for i in notification_list])
+
+            for i in notification_list:
+                c, t, w = crontab[i]
+                w.send(w.message_type(
+                    task_name=t.name,
+                ))
+
     def get_worker(self, name: str) -> UniWorker[Any]:
         definition = self._definition.get_worker(name)
         worker_type = definition.type.import_class(UniWorker)
         w = worker_type(definition=definition, index=self._definition)
         return w
 
-    def _parse_messages(self) -> Dict[str, UniMessageTypeDefinition]:
+    def _parse_cron_tasks(self) -> Dict[str, UniCronTaskDefinition]:
         result = dict()
+        workers = self._parse_workers()
+        for name, definition in parse_definition(self._config.get("cron", dict()), dict()):
+            w = workers[definition["worker"]]
+            if w.input_message.name != UNI_CRON_MESSAGE:
+                raise ValueError(f"input_message of worker '{w.name}' must be '{UNI_CRON_MESSAGE}'. '{w.input_message.name}' was given")
+            result[name] = UniCronTaskDefinition(
+                name=name,
+                worker=w,
+                when=definition["when"],
+            )
+        return result
+
+    def _parse_messages(self) -> Dict[str, UniMessageTypeDefinition]:
+        from unipipeline import UniModuleDefinition
+        result = {
+            UNI_CRON_MESSAGE: UniMessageTypeDefinition(
+                name=UNI_CRON_MESSAGE,
+                type=UniModuleDefinition(
+                    module="unipipeline.messages.uni_cron_message",
+                    class_name="UniCronMessage",
+                ),
+            )
+        }
+
         for name, definition in parse_definition(self._config["messages"], dict()):
             import_template = definition.pop("import_template")
             result[name] = UniMessageTypeDefinition(
@@ -135,6 +210,10 @@ class Uni:
             waiting_for=[],
         )
 
+        brokers = self._parse_brokers()
+        messages = self._parse_messages()
+        waitings = self._parse_waitings()
+
         for name, definition in parse_definition(self._config["workers"], defaults):
             assert isinstance(definition["output_workers"], list)
             output_workers = definition["output_workers"]
@@ -143,12 +222,12 @@ class Uni:
                 assert isinstance(ow, str), f"ow must be str. {type(ow)} given"
                 out_workers.add(ow)
 
-            definition["broker"] = self._parse_brokers()[definition["broker"]]
-            definition["input_message"] = self._parse_messages()[definition["input_message"]]
+            definition["broker"] = brokers[definition["broker"]]
+            definition["input_message"] = messages[definition["input_message"]]
 
             watings: List[UniWaitingDefinition] = list()
             for w in definition["waiting_for"]:
-                watings.append(self._parse_waitings()[w])
+                watings.append(waitings[w])
 
             definition.update(dict(
                 type=parse_type(template(definition["import_template"], definition)),

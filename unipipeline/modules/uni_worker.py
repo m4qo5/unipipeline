@@ -1,5 +1,5 @@
 import logging
-from typing import Generic, Type, Any, TypeVar, Optional, Dict
+from typing import Generic, Type, Any, TypeVar, Optional, Dict, Union
 from uuid import uuid4
 
 from unipipeline.modules.uni_broker import UniBrokerMessageManager
@@ -32,6 +32,10 @@ class UniWorker(Generic[TMessage]):
         self._uni_message_type: Type[TMessage] = self._uni_definition.input_message.type.import_class(UniMessage)  # type: ignore
         self._uni_consumer_tag: str = f'{self._uni_definition.name}__{uuid4()}'
         self._uni_worker_instances_for_sending: Dict[Type[UniWorker], UniWorker] = dict()
+
+    @property
+    def message_type(self) -> Type[TMessage]:
+        return self._uni_message_type
 
     def consume(self) -> None:
         self._uni_index.wait_related_brokers(self._uni_definition.name)
@@ -66,7 +70,7 @@ class UniWorker(Generic[TMessage]):
                 raise UniPayloadParsingError(e)
         return self._uni_payload_cache
 
-    def send(self, payload: Dict[str, Any], meta: Optional[UniMessageMeta] = None) -> None:
+    def send(self, payload: Union[Dict[str, Any], TMessage], meta: Optional[UniMessageMeta] = None) -> None:
         if isinstance(payload, self._uni_message_type):
             payload_data = payload.dict()
         elif isinstance(payload, dict):
@@ -120,9 +124,9 @@ class UniWorker(Generic[TMessage]):
 
         if unsupported_err_topic:
             assert meta.error is not None  # for mypy needs
-            e = NotImplementedError(f'{meta.error.error_topic} is not implemented in process_message')
-            logger.error(e)
-            self.move_to_error_topic(UniMessageMetaErrTopic.SYSTEM_ERR, e)
+            err = NotImplementedError(f'{meta.error.error_topic} is not implemented in process_message')
+            logger.error(err)
+            self.move_to_error_topic(UniMessageMetaErrTopic.SYSTEM_ERR, err)
 
         if not self._uni_moved and self._uni_definition.auto_ack:
             manager.ack()

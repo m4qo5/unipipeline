@@ -2,6 +2,7 @@ from typing import Dict, Type, TypeVar, Any
 
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
+from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.modules.uni_message_type_definition import UniMessageTypeDefinition
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
@@ -17,11 +18,13 @@ class UniDefinition:
         workers: Dict[str, UniWorkerDefinition],
         waitings: Dict[str, UniWaitingDefinition],
         messages: Dict[str, UniMessageTypeDefinition],
+        cron_tasks: Dict[str, UniCronTaskDefinition],
     ) -> None:
         self._brokers = brokers
         self._workers = workers
         self._waitings = waitings
         self._messages = messages
+        self._cron_tasks = cron_tasks
         self._connected_brokers: Dict[str, UniBroker] = dict()
         self._worker_definition_by_type: Dict[Any, UniWorkerDefinition] = dict()
 
@@ -31,6 +34,10 @@ class UniDefinition:
     @property
     def brokers(self) -> Dict[str, UniBrokerDefinition[Any]]:
         return self._brokers
+
+    @property
+    def cron_tasks(self) -> Dict[str, UniCronTaskDefinition]:
+        return self._cron_tasks
 
     @property
     def workers(self) -> Dict[str, UniWorkerDefinition]:
