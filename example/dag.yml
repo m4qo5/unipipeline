@@ -1,0 +1,69 @@
+---
+
+brokers:
+  default_broker:
+    import_template: "MemoryUniBroker"
+
+  ender_broker:
+    import_template: "LoggingUniBroker"
+
+
+messages:
+  __default__:
+    import_template: "example.messages.{{name}}:{{name|camel}}"
+
+  input_message: {}
+
+  inetermediate_message: {}
+
+  ender_message: {}
+
+
+waitings:
+  __default__:
+    retry_max_count: 100
+    retry_delay_s: 1
+    type: example.messages.waitings.{{name}}_wating:{{name|camel}}Waiting
+
+  common_db: {}
+
+
+workers:
+  __default__:
+    import_template: "example.workers.{{name}}:{{name|camel}}"
+
+    broker: default_broker
+    topic: "{{name}}"
+    prefetch: 1
+    ack_after_success: true
+
+    outpt_workers: []
+
+  input_worker:
+    input_message: input_message
+    waiting_for:
+      - common_db
+
+  intermediate_first_worker:
+    input_message: inetermediate_message
+    output_workers:
+      - ender_second_worker
+    waiting_for:
+      - data_logger_db
+
+  intermediate_second_worker:
+    input_message: inetermediate_message
+    output_workers:
+      - ender_frist_worker
+    waiting_for:
+      - data_logger_db
+
+  ender_frist_worker:
+    input_message: ender_message
+    waiting_for:
+      - data_logger_db
+
+  ender_second_worker:
+    input_message: ender_message
+    waiting_for:
+      - data_logger_db
