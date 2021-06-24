@@ -7,8 +7,6 @@ from unipipeline.modules.uni_message_type_definition import UniMessageTypeDefini
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 
-WORKER_ERROR_NAME = '__error__'
-
 
 class UniWorkerDefinition(BaseModel):
     name: str
@@ -43,13 +41,13 @@ class UniWorkerDefinition(BaseModel):
         return v
 
     def get_related_broker_names(self, index_of_workers: Dict[str, 'UniWorkerDefinition']) -> Set[str]:
-        result = {self.broker.name, index_of_workers[WORKER_ERROR_NAME].broker.name}
+        result = {self.broker.name,}
         for w_name in self.output_workers:
             result.add(index_of_workers[w_name].broker.name)
         return result
 
     def get_related_worker_names(self) -> Set[str]:
-        result = {self.name, WORKER_ERROR_NAME}
+        result = {self.name,}
         for w_name in self.output_workers:
             result.add(w_name)
         return result

@@ -60,8 +60,8 @@ class UniMessageMeta(BaseModel):
             parent=self.dict(),
             error=UniMessageMetaErr(
                 error_topic=error_topic,
-                error_type=error.__name__,
+                error_type=type(error).__name__,
                 error_message=str(error),
-                retry_times=self.error.retry_times + 1 if self.has_error else 0
+                retry_times=self.error.retry_times + 1 if self.error is not None else 0
             ),
         )

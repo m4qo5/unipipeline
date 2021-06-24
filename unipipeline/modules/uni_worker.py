@@ -68,12 +68,12 @@ class UniWorker(Generic[TMessage]):
 
     def send(self, payload: Dict[str, Any], meta: Optional[UniMessageMeta] = None) -> None:
         if isinstance(payload, self._uni_message_type):
-            pass
+            payload_data = payload.dict()
         elif isinstance(payload, dict):
-            payload = self._uni_message_type(**payload)
+            payload_data = self._uni_message_type(**payload).dict()
         else:
             raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
-        meta = meta if meta is not None else UniMessageMeta.create_new(payload.dict())
+        meta = meta if meta is not None else UniMessageMeta.create_new(payload_data)
         self._uni_index.get_connected_broker_instance(self._uni_definition.broker.name).publish(self._uni_definition.topic, meta)
         logger.info("worker %s sent message %s to %s topic", self._uni_definition.name, meta, self._uni_definition.topic)
 
@@ -101,9 +101,11 @@ class UniWorker(Generic[TMessage]):
             try:
                 self.handle_message(self.payload)
             except Exception as e:
+                logger.error(e)
                 self.move_to_error_topic(UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
         else:
             try:
+                assert meta.error is not None  # for mypy needs
                 if meta.error.error_topic is UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR:
                     self.handle_error_message_handling(self.payload)
                 elif meta.error.error_topic is UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR:
@@ -113,10 +115,14 @@ class UniWorker(Generic[TMessage]):
                 else:
                     unsupported_err_topic = True
             except Exception as e:
+                logger.error(e)
                 self.move_to_error_topic(UniMessageMetaErrTopic.ERROR_HANDLING_ERR, e)
 
         if unsupported_err_topic:
-            self.move_to_error_topic(UniMessageMetaErrTopic.SYSTEM_ERR, NotImplementedError(f'{meta.error.error_topic} is not implemented in process_message'))
+            assert meta.error is not None  # for mypy needs
+            e = NotImplementedError(f'{meta.error.error_topic} is not implemented in process_message')
+            logger.error(e)
+            self.move_to_error_topic(UniMessageMetaErrTopic.SYSTEM_ERR, e)
 
         if not self._uni_moved and self._uni_definition.auto_ack:
             manager.ack()

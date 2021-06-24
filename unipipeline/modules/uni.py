@@ -1,6 +1,6 @@
 from typing import Dict, List, Any
 
-import yaml
+import yaml  # type: ignore
 
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition, UniMessageCodec, UniBrokerRMQPropsDefinition, UniBrokerKafkaPropsDefinition
@@ -10,7 +10,7 @@ from unipipeline.modules.uni_message_type_definition import UniMessageTypeDefini
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 from unipipeline.modules.uni_wating import UniWaiting
 from unipipeline.modules.uni_worker import UniWorker
-from unipipeline.modules.uni_worker_definition import UniWorkerDefinition, WORKER_ERROR_NAME
+from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.parse_definition import parse_definition
 from unipipeline.utils.parse_type import parse_type
 from unipipeline.utils.template import template
@@ -30,18 +30,18 @@ class Uni:
             workers=self._parse_workers(),
         )
 
-    def check_load_all(self) -> None:
+    def check_load_all(self, create: bool = False) -> None:
         for b in self._definition.brokers.values():
-            b.type.import_class(UniBroker)
+            b.type.import_class(UniBroker, create, create_template_params=b)
 
         for m in self._definition.messages.values():
-            m.type.import_class(UniMessage)
+            m.type.import_class(UniMessage, create, create_template_params=m)
 
         for worker in self._definition.workers.values():
-            worker.type.import_class(UniWorker)
+            worker.type.import_class(UniWorker, create, create_template_params=worker)
 
         for waiting in self._definition.waitings.values():
-            waiting.type.import_class(UniWaiting)
+            waiting.type.import_class(UniWaiting, create, create_template_params=waiting)
 
     def get_worker(self, name: str) -> UniWorker[Any]:
         definition = self._definition.get_worker(name)
@@ -51,50 +51,53 @@ class Uni:
 
     def _parse_messages(self) -> Dict[str, UniMessageTypeDefinition]:
         result = dict()
-        for definition in parse_definition(self._config["messages"]):
-            name = definition["name"]
-            data = dict(
-                name=name,
-                version=definition["version"],
-            )
+        for name, definition in parse_definition(self._config["messages"], dict()):
+            import_template = definition.pop("import_template")
             result[name] = UniMessageTypeDefinition(
-                **data,
-                type=parse_type(template(definition["type"], data)),
+                **definition,
+                type=parse_type(template(import_template, definition)),
             )
         return result
 
     def _parse_waitings(self) -> Dict[str, UniWaitingDefinition]:
         result = dict()
-        for definition in parse_definition(self._config['waitings']):
-            name = definition["name"]
-            data = dict(
-                name=name,
-                retry_max_count=definition["retry_max_count"],
-                retry_delay_s=definition["retry_delay_s"],
-            )
+        defaults = dict(
+            retry_max_count=3,
+            retry_delay_s=10,
+        )
+        for name, definition in parse_definition(self._config['waitings'], defaults):
             result[name] = UniWaitingDefinition(
-                **data,
-                type=parse_type(template(definition["type"], data)),
+                **definition,
+                type=parse_type(template(definition["import_template"], definition)),
             )
         return result
 
     def _parse_brokers(self) -> Dict[str, UniBrokerDefinition[Any]]:
         result: Dict[str, Any] = dict()
-        for definition in parse_definition(self._config["brokers"]):
-            name = definition["name"]
-            data = dict(
-                name=name,
-                retry_max_count=definition["retry_max_count"],
-                retry_delay_s=definition["retry_delay_s"],
-                passive=definition["passive"],
-                durable=definition["durable"],
-                auto_delete=definition["auto_delete"],
-                is_persistent=definition["is_persistent"],
-            )
+        defaults = dict(
+            retry_max_count=3,
+            retry_delay_s=10,
 
+            content_type="application/json",
+            compression=None,
+
+            exchange_name="communication",
+            exchange_type="direct",
+
+            heartbeat=600,
+            blocked_connection_timeout=300,
+            socket_timeout=300,
+            stack_timeout=300,
+            passive=False,
+            durable=True,
+            auto_delete=False,
+            is_persistent=True,
+            api_version=[0, 10],
+        )
+        for name, definition in parse_definition(self._config["brokers"], defaults):
             result[name] = UniBrokerDefinition(
-                **data,
-                type=parse_type(template(definition["type"], data)),
+                **definition,
+                type=parse_type(template(definition["import_template"], definition)),
                 message_codec=UniMessageCodec(
                     content_type=definition["content_type"],
                     compression=definition["compression"],
@@ -119,9 +122,20 @@ class Uni:
 
         out_workers = set()
 
-        for definition in parse_definition(self._config["workers"], {WORKER_ERROR_NAME, }):
-            name = definition["name"]
+        defaults = dict(
+            output_workers=[],
+            topic="{{name}}__{{input_message.name}}",
+            broker="default_broker",
+            prefetch=1,
+            retry_max_count=3,
+            retry_delay_s=1,
+            max_ttl_s=None,
+            is_permanent=True,
+            auto_ack=True,
+            waiting_for=[],
+        )
 
+        for name, definition in parse_definition(self._config["workers"], defaults):
             assert isinstance(definition["output_workers"], list)
             output_workers = definition["output_workers"]
 
@@ -129,32 +143,21 @@ class Uni:
                 assert isinstance(ow, str), f"ow must be str. {type(ow)} given"
                 out_workers.add(ow)
 
-            broker = self._parse_brokers()[definition["broker"]]
-            input_message = self._parse_messages()[definition["input_message"]]
+            definition["broker"] = self._parse_brokers()[definition["broker"]]
+            definition["input_message"] = self._parse_messages()[definition["input_message"]]
 
             watings: List[UniWaitingDefinition] = list()
             for w in definition["waiting_for"]:
                 watings.append(self._parse_waitings()[w])
 
-            data = dict(
-                name=name,
-                broker=broker,
-                is_permanent=definition["is_permanent"],
-                auto_ack=definition["auto_ack"],
-                prefetch=definition["prefetch"],
-                input_message=input_message,
-                retry_max_count=definition["retry_max_count"],
-                retry_delay_s=definition["retry_delay_s"],
-                max_ttl_s=definition["max_ttl_s"],
-            )
-
-            defn = UniWorkerDefinition(
-                type=parse_type(template(definition["type"], data)),
-                topic=template(definition["topic"], data),
+            definition.update(dict(
+                type=parse_type(template(definition["import_template"], definition)),
+                topic=template(definition["topic"], definition),
                 output_workers=output_workers,
                 waitings=watings,
-                **data,
-            )
+            ))
+
+            defn = UniWorkerDefinition(**definition)
 
             result[name] = defn
 
