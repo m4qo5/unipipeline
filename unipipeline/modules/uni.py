@@ -1,10 +1,11 @@
 import logging
 from time import sleep
-from typing import Dict, List, Any, Tuple, Optional
+from typing import Dict, List, Any, Tuple, Optional, NamedTuple
 
 import yaml  # type: ignore
 from crontab import CronTab  # type: ignore
 
+from unipipeline.messages.uni_cron_message import UniCronMessage
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition, UniMessageCodec, UniBrokerRMQPropsDefinition, UniBrokerKafkaPropsDefinition
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
@@ -24,6 +25,44 @@ UNI_CRON_MESSAGE = "uni_cron_message"
 
 
 logger = logging.getLogger(__name__)
+
+
+class CronJob(NamedTuple):
+    id: int
+    name: str
+    crontab: CronTab
+    worker: UniWorker[UniCronMessage]
+    message: UniCronMessage
+
+    def new(self, id: int, task_def: UniCronTaskDefinition, worker: UniWorker[UniCronMessage]) -> 'CronJob':
+        return CronJob(
+            id=id,
+            name=task_def.name,
+            crontab=CronTab(task_def.when),
+            worker=worker,
+            message=UniCronMessage(
+                task_name=task_def.name
+            )
+        )
+
+    @staticmethod
+    def search_next_tasks(all_tasks: List['CronJob']) -> Tuple[float, List['CronJob']]:
+        min_delay: Optional[int] = None
+        notification_list: List[CronJob] = []
+        for cj in all_tasks:
+            sec = cj.crontab.next(default_utc=False)
+            if min_delay is None:
+                min_delay = sec
+            if sec < min_delay:
+                notification_list.clear()
+                min_delay = sec
+            if sec <= min_delay:
+                notification_list.append(cj)
+
+        return min_delay, notification_list
+
+    def send(self) -> None:
+        self.worker.send(self.message)
 
 
 class Uni:
@@ -55,44 +94,30 @@ class Uni:
             waiting.type.import_class(UniWaiting, create, create_template_params=waiting)
 
     def start_cron(self) -> None:
-        from unipipeline.messages.uni_cron_message import UniCronMessage  # circular =(
-
-        crontab: Dict[int, Tuple[CronTab, UniCronTaskDefinition, UniWorker[UniCronMessage]]] = dict()
+        cron_jobs: List[CronJob] = dict()
         w_index: Dict[str, UniWorker] = dict()
         for i, task in enumerate(self._definition.cron_tasks.values()):
             if task.worker.name not in w_index:
                 w_index[task.worker.name] = self.get_worker(task.worker.name)
-            crontab[i] = (CronTab(task.when), task, w_index[task.worker.name])
+            cron_jobs.append(CronJob.new(i, task, w_index[task.worker.name]))
 
-        if len(crontab.keys()) == 0:
+        if len(cron_jobs) == 0:
             return
 
         while True:
-            min_delay: Optional[int] = None
-            notification_list: List[int] = list()
-            for i, (c, t, w) in crontab.items():
-                sec = c.next(default_utc=False)
-                if min_delay is None:
-                    min_delay = sec
-                if sec < min_delay:
-                    notification_list = []
-                if sec <= min_delay:
-                    notification_list.append(i)
+            delay, tasks = CronJob.search_next_tasks(cron_jobs)
 
-            if min_delay is None:
+            if delay is None:
                 return
 
-            logger.info("sleep %s seconds before running the tasks: %s", min_delay, [crontab[i][1].name for i in notification_list])
+            logger.info("sleep %s seconds before running the tasks: %s", delay, [cj.name for cj in tasks])
 
-            sleep(min_delay)
+            sleep(delay)
 
-            logger.info("run the tasks: %s", [crontab[i][1].name for i in notification_list])
+            logger.info("run the tasks: %s", [cj.name for cj in tasks])
 
-            for i in notification_list:
-                c, t, w = crontab[i]
-                w.send(w.message_type(
-                    task_name=t.name,
-                ))
+            for cj in tasks:
+                cj.send()
 
     def get_worker(self, name: str) -> UniWorker[Any]:
         definition = self._definition.get_worker(name)

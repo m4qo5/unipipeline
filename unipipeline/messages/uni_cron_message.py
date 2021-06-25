@@ -1,4 +1,4 @@
-from unipipeline import UniMessage
+from unipipeline.modules.uni_message import UniMessage
 
 
 class UniCronMessage(UniMessage):
