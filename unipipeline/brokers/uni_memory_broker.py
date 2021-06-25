@@ -114,6 +114,7 @@ class QL:
 
                     logger.info('ql(%s).process_all :: lsg_id=%s :: i=%s :: msg_id=%s :: %s', self._name, lst_id, i, msg_id, meta)
                     lst(meta, manager)
+                    logger.debug('ql(%s).process_all len_listeners=%s :: messages=%s', self._name, len(self._listeners), self.messages_to_process_count())
 
 
 class UniMemoryBroker(UniBroker):

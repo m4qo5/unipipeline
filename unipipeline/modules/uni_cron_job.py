@@ -28,11 +28,11 @@ class UniCronJob(NamedTuple):
         )
 
     @staticmethod
-    def search_next_tasks(all_tasks: List['UniCronJob']) -> Tuple[Optional[float], List['UniCronJob']]:
-        min_delay: Optional[float] = None
+    def search_next_tasks(all_tasks: List['UniCronJob']) -> Tuple[Optional[int], List['UniCronJob']]:
+        min_delay: Optional[int] = None
         notification_list: List[UniCronJob] = []
         for cj in all_tasks:
-            sec = cj.crontab.next(default_utc=False)
+            sec = int(cj.crontab.next(default_utc=False))
             if min_delay is None:
                 min_delay = sec
             if sec < min_delay:

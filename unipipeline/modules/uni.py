@@ -41,6 +41,8 @@ class Uni:
         if len(cron_jobs) == 0:
             return
 
+        logger.info(f'cron jobs defined: {", ".join(cj.name for cj in cron_jobs)}')
+
         while True:
             delay, tasks = UniCronJob.search_next_tasks(cron_jobs)
 
@@ -49,12 +51,15 @@ class Uni:
 
             logger.info("sleep %s seconds before running the tasks: %s", delay, [cj.name for cj in tasks])
 
-            sleep(delay)
+            if delay > 0:
+                sleep(delay)
 
             logger.info("run the tasks: %s", [cj.name for cj in tasks])
 
             for cj in tasks:
                 cj.send()
+
+            sleep(1.1)  # delay for correct next iteration
 
     def get_worker(self, name: str, singleton: bool = True) -> UniWorker[UniMessage]:
         return self._mediator.get_worker(name, singleton)

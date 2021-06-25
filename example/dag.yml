@@ -24,6 +24,14 @@ cron:
     worker: my_super_cron_worker
     when: 0/1 * * * *
 
+  my_mega_task:
+    worker: my_super_cron_worker
+    when: 0/2 * * * *
+
+  my_puper_task:
+    worker: my_super_cron_worker
+    when: 0/3 * * * *
+
 
 waitings:
   __default__:
