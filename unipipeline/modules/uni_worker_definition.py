@@ -19,7 +19,7 @@ class UniWorkerDefinition(BaseModel):
     retry_max_count: int
     retry_delay_s: int
     max_ttl_s: Optional[int]
-    auto_ack: bool
+    ack_after_success: bool
     waitings: List[UniWaitingDefinition]
 
     @validator("prefetch")

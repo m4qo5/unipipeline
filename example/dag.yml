@@ -20,7 +20,7 @@ messages:
 
 
 cron:
-  task_name:
+  my_super_task:
     worker: my_super_cron_worker
     when: 0/1 * * * *
 
@@ -41,9 +41,6 @@ workers:
     broker: default_broker
     topic: "{{name}}"
     prefetch: 1
-    ack_after_success: true
-
-    outpt_workers: []
 
   my_super_cron_worker:
     input_message: uni_cron_message

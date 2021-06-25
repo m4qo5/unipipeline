@@ -3,7 +3,7 @@ from unipipeline.brokers.uni_kafka_broker import UniKafkaBroker, KafkaUniBrokerM
 from unipipeline.modules.uni import Uni
 from unipipeline.modules.uni_broker import UniBrokerMessageManager, UniBroker
 from unipipeline.modules.uni_broker_definition import UniMessageCodec, UniBrokerKafkaPropsDefinition, UniBrokerRMQPropsDefinition, UniBrokerDefinition
-from unipipeline.modules.uni_definition import UniDefinition
+from unipipeline.modules.uni_mediator import UniMediator
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 from unipipeline.modules.uni_message_type_definition import UniMessageTypeDefinition
@@ -28,7 +28,7 @@ __all__ = (
     "UniBrokerKafkaPropsDefinition",
     "UniBrokerRMQPropsDefinition",
     "UniBrokerDefinition",
-    "UniDefinition",
+    "UniMediator",
     "UniMessage",
     "UniMessageMeta",
     "UniMessageTypeDefinition",

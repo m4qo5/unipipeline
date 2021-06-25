@@ -1,7 +1,7 @@
 import os.path
 from importlib import import_module, invalidate_caches
 from time import sleep
-from typing import NamedTuple, Generic, Type, TypeVar, Dict, Any, MappingView
+from typing import NamedTuple, Generic, Type, TypeVar, Any
 
 from unipipeline.utils.template import template
 
@@ -70,7 +70,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
     module: str
     class_name: str
 
-    def import_class(self, type: Type[T], auto_create: bool = False, create_template_params: Any = None) -> Type[T]:
+    def import_class(self, class_type: Type[T], auto_create: bool = False, create_template_params: Any = None) -> Type[T]:
         try:
             mdl = import_module(self.module)
         except ModuleNotFoundError:
@@ -84,7 +84,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
                     with open(path_init, "wt+") as fi:
                         fi.write("")
                 with open(path, 'wt') as fm:
-                    fm.writelines(template(tpl_map[type.__name__], {
+                    fm.writelines(template(tpl_map[class_type.__name__], {
                         "data": create_template_params,
                         "name": self.class_name,
                     }))
@@ -98,5 +98,6 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
             else:
                 raise
         tp = getattr(mdl, self.class_name)
-        assert issubclass(tp, type)
+        if not issubclass(tp, class_type):
+            ValueError(f'class {self.class_name} is not subclass of {class_type.__name__}')
         return tp
