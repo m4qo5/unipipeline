@@ -2,7 +2,8 @@ import logging
 from collections import deque
 from typing import Callable, Dict, TypeVar, Tuple, Optional, Deque
 
-from unipipeline import UniBroker, UniMessageMeta, UniBrokerMessageManager
+from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager
+from unipipeline.modules.uni_message_meta import UniMessageMeta
 
 logger = logging.getLogger(__name__)
 

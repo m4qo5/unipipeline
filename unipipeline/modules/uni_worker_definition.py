@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Set, Any
 from pydantic import BaseModel, validator
 
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
-from unipipeline.modules.uni_message_type_definition import UniMessageTypeDefinition
+from unipipeline.modules.uni_message_definition import UniMessageDefinition
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 
@@ -14,7 +14,7 @@ class UniWorkerDefinition(BaseModel):
     type: UniModuleDefinition
     topic: str
     prefetch: int
-    input_message: UniMessageTypeDefinition
+    input_message: UniMessageDefinition
     output_workers: List[str]
     retry_max_count: int
     retry_delay_s: int

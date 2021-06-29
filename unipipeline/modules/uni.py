@@ -2,7 +2,7 @@ import logging
 from time import sleep
 
 from unipipeline.modules.uni_broker import UniBroker
-from unipipeline.modules.uni_config import UniConfig, ConfigError
+from unipipeline.modules.uni_config import UniConfig, UniConfigError
 from unipipeline.modules.uni_cron_job import UniCronJob
 from unipipeline.modules.uni_mediator import UniMediator
 from unipipeline.modules.uni_message import UniMessage
@@ -20,18 +20,19 @@ class Uni:
 
     def check_load_all(self, create: bool = False) -> None:
         try:
-            for b in self._config.brokers.values():
-                b.type.import_class(UniBroker, create, create_template_params=b)
+            for broker_def in self._config.brokers.values():
+                broker_def.type.import_class(UniBroker, create, create_template_params=broker_def)
 
-            for m in self._config.messages.values():
-                m.type.import_class(UniMessage, create, create_template_params=m)
+            for message_def in self._config.messages.values():
+                message_def.type.import_class(UniMessage, create, create_template_params=message_def)
 
-            for worker in self._config.workers.values():
-                worker.type.import_class(UniWorker, create, create_template_params=worker)
+            for worker_def in self._config.workers.values():
+                worker_def.type.import_class(UniWorker, create, create_template_params=worker_def)
 
-            for waiting in self._config.waitings.values():
-                waiting.type.import_class(UniWaiting, create, create_template_params=waiting)
-        except (ParseDefinitionError, ConfigError) as e:
+            for waiting_def in self._config.waitings.values():
+                waiting_def.type.import_class(UniWaiting, create, create_template_params=waiting_def)
+
+        except (ParseDefinitionError, UniConfigError) as e:
             print(f"ERROR: {e}")
             exit(1)
 

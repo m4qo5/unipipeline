@@ -9,7 +9,7 @@ from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 
 
-class KafkaUniBrokerMessageManager(UniBrokerMessageManager):
+class UniKafkaBrokerMessageManager(UniBrokerMessageManager):
     def reject(self) -> None:
         pass
 
@@ -85,7 +85,7 @@ class UniKafkaBroker(UniBroker):
 
         for msg in self._consumer:
             meta = self.parse_body(msg)
-            manager = KafkaUniBrokerMessageManager()
+            manager = UniKafkaBrokerMessageManager()
             processor(meta, manager)
 
     def publish(self, topic: str, meta: UniMessageMeta) -> None:

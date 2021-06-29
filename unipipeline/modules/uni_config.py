@@ -2,13 +2,14 @@ from typing import Dict, Any, List
 
 import yaml  # type: ignore
 
+from unipipeline.modules.uni_module_definition import UniModuleDefinition
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
-from unipipeline.modules.uni_message_type_definition import UniMessageTypeDefinition
+from unipipeline.modules.uni_message_definition import UniMessageDefinition
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 from unipipeline.modules.uni_broker_definition import  UniBrokerDefinition
-from unipipeline.modules.uni_broker_definition import UniMessageCodec
+from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_broker_definition import UniBrokerKafkaPropsDefinition
-from unipipeline.modules.uni_broker_definition import UniBrokerRMQPropsDefinition
+from unipipeline.modules.uni_broker_definition import UniAmqpBrokerPropsDefinition
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.utils.parse_definition import parse_definition
 from unipipeline.utils.parse_type import parse_type
@@ -17,7 +18,7 @@ from unipipeline.utils.template import template
 UNI_CRON_MESSAGE = "uni_cron_message"
 
 
-class ConfigError(Exception):
+class UniConfigError(Exception):
     pass
 
 
@@ -30,7 +31,7 @@ class UniConfig:
         self._config_loaded = False
         self._waitings_index: Dict[str, UniWaitingDefinition] = dict()
         self._brokers_index: Dict[str, UniBrokerDefinition] = dict()
-        self._messages_index: Dict[str, UniMessageTypeDefinition] = dict()
+        self._messages_index: Dict[str, UniMessageDefinition] = dict()
         self._workers_index: Dict[str, UniWorkerDefinition] = dict()
         self._cron_tasks_index: Dict[str, UniCronTaskDefinition] = dict()
 
@@ -55,7 +56,7 @@ class UniConfig:
         return self._waitings_index
 
     @property
-    def messages(self) -> Dict[str, UniMessageTypeDefinition]:
+    def messages(self) -> Dict[str, UniMessageDefinition]:
         self._parse()
         return self._messages_index
 
@@ -66,7 +67,7 @@ class UniConfig:
         with open(self._file_path, "rt") as f:
             self._config = yaml.safe_load(f)
         if not isinstance(self._config, dict):
-            raise ConfigError('config must be dict')
+            raise UniConfigError('config must be dict')
         return self._config
 
     def _parse(self) -> None:
@@ -94,11 +95,9 @@ class UniConfig:
             )
         return result
 
-    def _parse_messages(self, config: Dict[str, Any]) -> Dict[str, UniMessageTypeDefinition]:
-        from unipipeline import UniModuleDefinition
-
+    def _parse_messages(self, config: Dict[str, Any]) -> Dict[str, UniMessageDefinition]:
         result = {
-            UNI_CRON_MESSAGE: UniMessageTypeDefinition(
+            UNI_CRON_MESSAGE: UniMessageDefinition(
                 name=UNI_CRON_MESSAGE,
                 type=UniModuleDefinition(
                     module="unipipeline.messages.uni_cron_message",
@@ -107,9 +106,12 @@ class UniConfig:
             )
         }
 
+        if "messages" not in config:
+            raise UniConfigError(f'messages is not defined in config')
+
         for name, definition in parse_definition("messages", config["messages"], dict(), {"import_template", }):
             import_template = definition.pop("import_template")
-            result[name] = UniMessageTypeDefinition(
+            result[name] = UniMessageDefinition(
                 **definition,
                 type=parse_type(template(import_template, definition)),
             )
@@ -122,7 +124,8 @@ class UniConfig:
             retry_max_count=3,
             retry_delay_s=10,
         )
-        for name, definition in parse_definition('waitings', config['waitings'], defaults, {"import_template", }):
+
+        for name, definition in parse_definition('waitings', config.get('waitings', dict()), defaults, {"import_template", }):
             result[name] = UniWaitingDefinition(
                 **definition,
                 type=parse_type(template(definition["import_template"], definition)),
@@ -152,6 +155,10 @@ class UniConfig:
             is_persistent=True,
             api_version=[0, 10],
         )
+
+        if "brokers" not in config:
+            raise UniConfigError(f'brokers is not defined in config')
+
         for name, definition in parse_definition("brokers", config["brokers"], defaults, {"import_template", }):
             result[name] = UniBrokerDefinition(
                 **definition,
@@ -160,7 +167,7 @@ class UniConfig:
                     content_type=definition["content_type"],
                     compression=definition["compression"],
                 ),
-                rmq_definition=UniBrokerRMQPropsDefinition(
+                rmq_definition=UniAmqpBrokerPropsDefinition(
                     exchange_name=definition['exchange_name'],
                     heartbeat=definition['heartbeat'],
                     blocked_connection_timeout=definition['blocked_connection_timeout'],
@@ -178,7 +185,7 @@ class UniConfig:
         self,
         config: Dict[str, Any],
         brokers: Dict[str, UniBrokerDefinition],
-        messages: Dict[str, UniMessageTypeDefinition],
+        messages: Dict[str, UniMessageDefinition],
         waitings: Dict[str, UniWaitingDefinition]
     ) -> Dict[str, UniWorkerDefinition]:
         result = dict()
@@ -186,7 +193,7 @@ class UniConfig:
         out_workers = set()
 
         defaults = dict(
-            topic="{{name}}__{{input_message.name}}",
+            topic="{{name}}",
             broker="default_broker",
             prefetch=1,
             retry_max_count=3,
@@ -198,24 +205,27 @@ class UniConfig:
             output_workers=[],
         )
 
-        for name, definition in parse_definition("workers", config["workers"], defaults, {"import_template", "input_message", "broker"}):
+        if "workers" not in config:
+            raise UniConfigError(f'workers is not defined in config')
+
+        for name, definition in parse_definition("workers", config["workers"], defaults, {"import_template", "input_message"}):
             for ow in definition["output_workers"]:
                 out_workers.add(ow)
 
             br = definition["broker"]
             if br not in brokers:
-                raise ConfigError(f'definition workers->{name} has invalid broker: {br}')
+                raise UniConfigError(f'definition workers->{name} has invalid broker: {br}')
             definition["broker"] = brokers[br]
 
             im = definition["input_message"]
             if im not in messages:
-                raise ConfigError(f'definition workers->{name} has invalid input_message: {im}')
+                raise UniConfigError(f'definition workers->{name} has invalid input_message: {im}')
             definition["input_message"] = messages[im]
 
             waitings_: List[UniWaitingDefinition] = list()
             for w in definition["waiting_for"]:
                 if w not in waitings:
-                    raise ConfigError(f'definition workers->{name} has invalid waiting_for: {w}')
+                    raise UniConfigError(f'definition workers->{name} has invalid waiting_for: {w}')
                 waitings_.append(waitings[w])
 
             definition.update(
@@ -230,6 +240,6 @@ class UniConfig:
 
         out_intersection_workers = set(result.keys()).intersection(out_workers)
         if len(out_intersection_workers) != len(out_workers):
-            raise ConfigError(f'workers definition has invalid worker_names (in output_workers prop): {", ".join(out_intersection_workers)}')
+            raise UniConfigError(f'workers definition has invalid worker_names (in output_workers prop): {", ".join(out_intersection_workers)}')
 
         return result

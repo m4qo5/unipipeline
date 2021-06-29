@@ -5,7 +5,8 @@ from pika import ConnectionParameters, PlainCredentials, BlockingConnection, Bas
 from pika.adapters.blocking_connection import BlockingChannel  # type: ignore
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager
-from unipipeline.modules.uni_broker_definition import UniBrokerDefinition, UniMessageCodec
+from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
+from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 from unipipeline.utils.connection_pool import ConnectionObj, TConnectionObj, connection_pool
@@ -16,7 +17,7 @@ BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
 TMessage = TypeVar('TMessage', bound=UniMessage)
 
 
-class AmqpUniBrokerMessageManager(UniBrokerMessageManager):
+class UniAmqpBrokerMessageManager(UniBrokerMessageManager):
 
     def __init__(self, channel: BlockingChannel, method_frame: spec.Basic.Deliver) -> None:
         self._channel = channel
@@ -33,7 +34,7 @@ class AmqpUniBrokerMessageManager(UniBrokerMessageManager):
         self._channel.basic_ack(delivery_tag=self._method_frame.delivery_tag)
 
 
-class RMQConnectionObj(ConnectionObj[BlockingConnection]):
+class UniAmqpBrokerConnectionObj(ConnectionObj[BlockingConnection]):
 
     def __init__(self, params: ConnectionParameters) -> None:
         self._params = params
@@ -60,7 +61,7 @@ class RMQConnectionObj(ConnectionObj[BlockingConnection]):
             self._connection = None
 
 
-class AmqpUniBroker(UniBroker):
+class UniAmqpBroker(UniBroker):
     @classmethod
     def get_connection_uri(cls) -> str:
         raise NotImplementedError(f"cls method get_connection_uri must be implemented for class '{cls.__name__}'")
@@ -85,7 +86,7 @@ class AmqpUniBroker(UniBroker):
             credentials=PlainCredentials(url_params_pr.username, url_params_pr.password, erase_on_connect=False),
         )
 
-        self._connector = connection_pool.new_manager(RMQConnectionObj(params))
+        self._connector = connection_pool.new_manager(UniAmqpBrokerConnectionObj(params))
 
         self._read_channel: Optional[BlockingChannel] = None
         self._write_channel: Optional[BlockingChannel] = None
@@ -172,7 +173,7 @@ class AmqpUniBroker(UniBroker):
 
     def _wrap_message(self, processor: Callable[[UniMessageMeta, UniBrokerMessageManager], None]) -> Callable[[BlockingChannel, Any, Any, bytes], None]:
         def wrapper(channel: BlockingChannel, method_frame: spec.Basic.Deliver, properties: BasicProperties, body: bytes) -> None:
-            manager = AmqpUniBrokerMessageManager(channel, method_frame)
+            manager = UniAmqpBrokerMessageManager(channel, method_frame)
             meta = self.parse_body(body, properties)
             processor(meta, manager)
 

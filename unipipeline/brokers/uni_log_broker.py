@@ -4,7 +4,8 @@ from logging import Logger
 from typing import Callable
 from uuid import uuid4
 
-from unipipeline import UniBroker, UniMessageMeta, UniBrokerMessageManager
+from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager
+from unipipeline.modules.uni_message_meta import UniMessageMeta
 
 
 class UniLogBroker(UniBroker):
