@@ -11,6 +11,7 @@ from unipipeline.modules.uni_message import UniMessage
 class UniCronJob(NamedTuple):
     id: int
     name: str
+    alone: bool
     crontab: CronTab
     worker: UniWorker[UniMessage]
     message: UniCronMessage
@@ -22,6 +23,7 @@ class UniCronJob(NamedTuple):
             name=task_def.name,
             crontab=CronTab(task_def.when),
             worker=worker,
+            alone=task_def.alone,
             message=UniCronMessage(
                 task_name=task_def.name
             )

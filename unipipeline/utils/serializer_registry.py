@@ -11,8 +11,6 @@ COMPRESSION__GZIP = 'application/x-gzip'
 COMPRESSION__BZ2 = 'application/x-bz2'
 COMPRESSION__LZMA = 'application/x-lzma'
 
-CONTENT_TYPE__BINARY = 'binary'
-
 
 TContentEncoding = str
 TContentType = str

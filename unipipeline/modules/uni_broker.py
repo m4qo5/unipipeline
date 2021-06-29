@@ -1,5 +1,4 @@
 import logging
-from time import sleep
 from typing import Callable, TypeVar, Any
 
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
@@ -41,21 +40,9 @@ class UniBroker:
     def publish(self, topic: str, meta: UniMessageMeta) -> None:
         raise NotImplementedError(f'method consume must be implemented for {type(self).__name__}')
 
+    def get_topic_size(self, topic: str) -> int:
+        raise NotImplementedError(f'method get_topic_size must be implemented for {type(self).__name__}')
+
     @property
     def definition(self) -> UniBrokerDefinition[Any]:
         return self._definition
-
-    @staticmethod
-    def waiting_for_connection(definition: UniBrokerDefinition[Any]) -> 'UniBroker':
-        broker_type = definition.type.import_class(UniBroker)
-        for try_count in range(definition.retry_max_count):
-            try:
-                b = broker_type(definition=definition)
-                b.connect()
-                logger.debug('%s is available', broker_type.__name__)
-                return b
-            except Exception as e:
-                logger.debug('retry connect to broker %s [%s/%s] : %s', broker_type.__name__, try_count, definition.retry_max_count, str(e))
-                sleep(definition.retry_delay_s)
-                continue
-        raise ConnectionError(f'unavailable connection to {broker_type.__name__}')

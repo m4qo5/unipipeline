@@ -25,6 +25,9 @@ class {{name}}(UniBroker):
 
     def publish(self, topic: str, meta: UniMessageMeta) -> None:
         raise NotImplementedError('method publish must be specified for class "{{name}}"')
+    
+    def get_topic_size(self, topic: str) -> int:
+        raise NotImplementedError(f'method get_topic_size must be implemented for class "{{name}}"')
 
 '''
 
@@ -69,6 +72,16 @@ tpl_map = {
 class UniModuleDefinition(NamedTuple, Generic[T]):
     module: str
     class_name: str
+
+    @staticmethod
+    def parse(type_def: str) -> 'UniModuleDefinition':
+        assert isinstance(type_def, str), f"type_def must be str. {type(type_def)} given"
+        spec = type_def.split(":")
+        assert len(spec) == 2, f'must have 2 segments. {len(spec)} was given from "{type_def}"'
+        return UniModuleDefinition(
+            module=spec[0],
+            class_name=spec[1],
+        )
 
     def import_class(self, class_type: Type[T], auto_create: bool = False, create_template_params: Any = None) -> Type[T]:
         try:

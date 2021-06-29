@@ -1,6 +1,7 @@
 from functools import reduce
 from operator import or_
 from typing import Dict, Any, Set, Iterator, Tuple
+from uuid import uuid4
 
 
 class ParseDefinitionError(Exception):
@@ -51,5 +52,6 @@ def parse_definition(conf_name: str, definitions: Dict[str, Any], defaults: Dict
             raise ParseDefinitionError(f'definition of {conf_name}->{name} has invalid props: {max_set_of_keys}!={definition_keys}')
 
         definition["name"] = name
+        definition["id"] = uuid4()
 
         yield name, definition

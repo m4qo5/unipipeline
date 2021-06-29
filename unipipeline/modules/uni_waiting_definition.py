@@ -1,5 +1,6 @@
 import logging
 from time import sleep
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class UniWaitingDefinition(BaseModel):
+    id: UUID
     name: str
     retry_max_count: int
     retry_delay_s: int
@@ -23,7 +25,7 @@ class UniWaitingDefinition(BaseModel):
                 w.try_to_connect()
                 logger.info('%s is available in inu', waiting_type.__name__)
                 return
-            except Exception:
+            except ConnectionError:
                 logger.debug('retry wait for %s [%s/%s]', waiting_type.__name__, try_count, self.retry_max_count)
                 sleep(self.retry_delay_s)
                 continue

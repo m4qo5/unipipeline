@@ -1,4 +1,5 @@
 from typing import List, Optional, Dict, Set, Any
+from uuid import UUID
 
 from pydantic import BaseModel, validator
 
@@ -9,6 +10,7 @@ from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 
 
 class UniWorkerDefinition(BaseModel):
+    id: UUID
     name: str
     broker: UniBrokerDefinition[Any]
     type: UniModuleDefinition

@@ -1,4 +1,5 @@
-from typing import Tuple, TypeVar, Generic
+from typing import Tuple, TypeVar, Generic, Dict, Any
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -23,8 +24,12 @@ TContent = TypeVar('TContent')
 
 
 class UniBrokerDefinition(BaseModel, Generic[TContent]):
+    id: UUID
     name: str
     type: UniModuleDefinition
+
+    # _dynamic_data: Dict[str, Any]
+
     retry_max_count: int
     retry_delay_s: int
     passive: bool

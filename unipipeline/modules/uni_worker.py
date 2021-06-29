@@ -39,7 +39,7 @@ class UniWorker(Generic[TMessage]):
 
     def consume(self) -> None:
         self._uni_mediator.wait_related_brokers(self._uni_definition.name)
-        main_broker = self._uni_mediator.get_connected_broker_instance(self._uni_definition.broker.name)
+        main_broker = self._uni_mediator.get_connected_broker(self._uni_definition.broker.name)
 
         self._uni_definition.wait_everything()
         logger.info("worker %s start consuming", self._uni_definition.name)
@@ -70,7 +70,7 @@ class UniWorker(Generic[TMessage]):
                 raise UniPayloadParsingError(e)
         return self._uni_payload_cache
 
-    def send(self, payload: Union[Dict[str, Any], TMessage], meta: Optional[UniMessageMeta] = None) -> None:
+    def send(self, payload: Union[Dict[str, Any], TMessage], meta: Optional[UniMessageMeta] = None, alone: bool = False) -> None:
         if isinstance(payload, self._uni_message_type):
             payload_data = payload.dict()
         elif isinstance(payload, dict):
@@ -78,7 +78,13 @@ class UniWorker(Generic[TMessage]):
         else:
             raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
         meta = meta if meta is not None else UniMessageMeta.create_new(payload_data)
-        self._uni_mediator.get_connected_broker_instance(self._uni_definition.broker.name).publish(self._uni_definition.topic, meta)
+        br = self._uni_mediator.get_connected_broker(self._uni_definition.broker.name)
+        if alone:
+            size = br.get_topic_size(self._uni_definition.topic)
+            if size != 0:
+                logger.info("worker %s skipped, because topic %s has %s messages", self._uni_definition.name, self._uni_definition.topic, size)
+                return
+        br.publish(self._uni_definition.topic, meta)
         logger.info("worker %s sent message %s to %s topic", self._uni_definition.name, meta, self._uni_definition.topic)
 
     def send_to_worker(self, worker_type: Type['UniWorker[TMessage]'], data: Any) -> None:
@@ -100,12 +106,13 @@ class UniWorker(Generic[TMessage]):
         self._uni_moved = False
         self._uni_current_meta = meta
         self._uni_current_manager = manager
-        self._uni_payload_cache = None
 
         unsupported_err_topic = False
         if not meta.has_error:
             try:
                 self.handle_message(self.payload)
+            except UniPayloadParsingError as e:
+                self.move_to_error_topic(UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR, e)
             except Exception as e:
                 logger.error(e)
                 self.move_to_error_topic(UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
@@ -137,7 +144,6 @@ class UniWorker(Generic[TMessage]):
         self._uni_moved = False
         self._uni_current_meta = None
         self._uni_current_manager = None
-        self._uni_payload_cache = None
 
     def handle_message(self, message: TMessage) -> None:
         raise NotImplementedError(f'method handle_message not implemented for {type(self).__name__}')
@@ -145,7 +151,7 @@ class UniWorker(Generic[TMessage]):
     def move_to_error_topic(self, err_topic: UniMessageMetaErrTopic, err: Exception) -> None:
         self._uni_moved = True
         meta = self.meta.create_error_child(err_topic, err)
-        self._uni_mediator.get_connected_broker_instance(self._uni_definition.broker.name).publish(f'{self._uni_definition.topic}__{err_topic.value}', meta)
+        self._uni_mediator.get_connected_broker(self._uni_definition.broker.name).publish(f'{self._uni_definition.topic}__{err_topic.value}', meta)
         self.manager.ack()
 
     def handle_error_message_handling(self, message: TMessage) -> None:

@@ -1,8 +1,10 @@
 from typing import Dict, Any, List
+from uuid import uuid4
 
 import yaml  # type: ignore
 
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
+from unipipeline.modules.uni_service_definition import UniServiceDefinition
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.modules.uni_message_definition import UniMessageDefinition
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
@@ -12,7 +14,7 @@ from unipipeline.modules.uni_broker_definition import UniBrokerKafkaPropsDefinit
 from unipipeline.modules.uni_broker_definition import UniAmqpBrokerPropsDefinition
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.utils.parse_definition import parse_definition
-from unipipeline.utils.parse_type import parse_type
+from unipipeline.utils.serializer_registry import CONTENT_TYPE__APPLICATION_JSON
 from unipipeline.utils.template import template
 
 UNI_CRON_MESSAGE = "uni_cron_message"
@@ -73,29 +75,34 @@ class UniConfig:
     def _parse(self) -> None:
         if self._parsed:
             return
-
-        self._waitings_index = self._parse_waitings(self._load_config())
-        self._brokers_index = self._parse_brokers(self._load_config())
-        self._messages_index = self._parse_messages(self._load_config())
-        self._workers_index = self._parse_workers(self._load_config(), self._brokers_index, self._messages_index, self._waitings_index)
-        self._cron_tasks_index = self._parse_cron_tasks(self._load_config(), self._workers_index)
-
         self._parsed = True
 
-    def _parse_cron_tasks(self, config: Dict[str, Any], workers: Dict[str, UniWorkerDefinition]) -> Dict[str, UniCronTaskDefinition]:
+        self._service = self._parse_service(self._load_config())
+        self._waitings_index = self._parse_waitings(self._load_config(), self._service)
+        self._brokers_index = self._parse_brokers(self._load_config(), self._service)
+        self._messages_index = self._parse_messages(self._load_config(), self._service)
+        self._workers_index = self._parse_workers(self._load_config(), self._service, self._brokers_index, self._messages_index, self._waitings_index)
+        self._cron_tasks_index = self._parse_cron_tasks(self._load_config(), self._service, self._workers_index)
+
+    def _parse_cron_tasks(self, config: Dict[str, Any], service: UniServiceDefinition, workers: Dict[str, UniWorkerDefinition]) -> Dict[str, UniCronTaskDefinition]:
         result = dict()
-        for name, definition in parse_definition("cron", config.get("cron", dict()), dict(), {"when", "worker"}):
-            w = workers[definition["worker"]]
-            if w.input_message.name != UNI_CRON_MESSAGE:
-                raise ValueError(f"input_message of worker '{w.name}' must be '{UNI_CRON_MESSAGE}'. '{w.input_message.name}' was given")
+        defaults = dict(
+            alone=True,
+        )
+        for name, definition in parse_definition("cron", config.get("cron", dict()), defaults, {"when", "worker"}):
+            worker_def = workers[definition["worker"]]
+            if worker_def.input_message.name != UNI_CRON_MESSAGE:
+                raise ValueError(f"input_message of worker '{worker_def.name}' must be '{UNI_CRON_MESSAGE}'. '{worker_def.input_message.name}' was given")
             result[name] = UniCronTaskDefinition(
+                id=definition["id"],
                 name=name,
-                worker=w,
+                worker=worker_def,
                 when=definition["when"],
+                alone=definition["alone"]
             )
         return result
 
-    def _parse_messages(self, config: Dict[str, Any]) -> Dict[str, UniMessageDefinition]:
+    def _parse_messages(self, config: Dict[str, Any], service: UniServiceDefinition) -> Dict[str, UniMessageDefinition]:
         result = {
             UNI_CRON_MESSAGE: UniMessageDefinition(
                 name=UNI_CRON_MESSAGE,
@@ -111,14 +118,15 @@ class UniConfig:
 
         for name, definition in parse_definition("messages", config["messages"], dict(), {"import_template", }):
             import_template = definition.pop("import_template")
+            id = definition.pop("id")
             result[name] = UniMessageDefinition(
                 **definition,
-                type=parse_type(template(import_template, definition)),
+                type=UniModuleDefinition.parse(template(import_template, **definition, **{"service": service, "id": id})),
             )
 
         return result
 
-    def _parse_waitings(self, config: Dict[str, Any]) -> Dict[str, UniWaitingDefinition]:
+    def _parse_waitings(self, config: Dict[str, Any], service: UniServiceDefinition) -> Dict[str, UniWaitingDefinition]:
         result = dict()
         defaults = dict(
             retry_max_count=3,
@@ -128,23 +136,22 @@ class UniConfig:
         for name, definition in parse_definition('waitings', config.get('waitings', dict()), defaults, {"import_template", }):
             result[name] = UniWaitingDefinition(
                 **definition,
-                type=parse_type(template(definition["import_template"], definition)),
+                type=UniModuleDefinition.parse(template(definition["import_template"], **definition, **{"service": service})),
             )
 
         return result
 
-    def _parse_brokers(self, config: Dict[str, Any]) -> Dict[str, UniBrokerDefinition[Any]]:
+    def _parse_brokers(self, config: Dict[str, Any], service: UniServiceDefinition) -> Dict[str, UniBrokerDefinition[Any]]:
         result: Dict[str, UniBrokerDefinition] = dict()
         defaults = dict(
             retry_max_count=3,
             retry_delay_s=10,
 
-            content_type="application/json",
+            content_type=CONTENT_TYPE__APPLICATION_JSON,
             compression=None,
 
             exchange_name="communication",
             exchange_type="direct",
-
             heartbeat=600,
             blocked_connection_timeout=300,
             socket_timeout=300,
@@ -162,7 +169,7 @@ class UniConfig:
         for name, definition in parse_definition("brokers", config["brokers"], defaults, {"import_template", }):
             result[name] = UniBrokerDefinition(
                 **definition,
-                type=parse_type(template(definition["import_template"], definition)),
+                type=UniModuleDefinition.parse(template(definition["import_template"], **definition, **{"service": service})),
                 message_codec=UniMessageCodec(
                     content_type=definition["content_type"],
                     compression=definition["compression"],
@@ -181,9 +188,24 @@ class UniConfig:
             )
         return result
 
+    def _parse_service(self, config: Dict[str, Any]) -> UniServiceDefinition:
+        if "service" not in config:
+            raise UniConfigError(f'service is not defined in config')
+
+        service_conf = config["service"]
+
+        if "name" not in service_conf:
+            raise UniConfigError(f'service->name is not defined')
+
+        return UniServiceDefinition(
+            name=service_conf["name"],
+            id=uuid4(),
+        )
+
     def _parse_workers(
         self,
         config: Dict[str, Any],
+        service: UniServiceDefinition,
         brokers: Dict[str, UniBrokerDefinition],
         messages: Dict[str, UniMessageDefinition],
         waitings: Dict[str, UniWaitingDefinition]
@@ -193,13 +215,17 @@ class UniConfig:
         out_workers = set()
 
         defaults = dict(
+            max_ttl_s=None,
+            is_permanent=True,
+
+            retry_max_count=3,
+            retry_delay_s=1,
             topic="{{name}}",
             broker="default_broker",
             prefetch=1,
-            retry_max_count=3,
-            retry_delay_s=1,
-            max_ttl_s=None,
-            is_permanent=True,
+
+            # notification_file="/var/unipipeline/{{service.name}}/{{service.id}}/worker_{{name}}_{{id}}/metrics",
+
             ack_after_success=True,
             waiting_for=[],
             output_workers=[],
@@ -229,8 +255,8 @@ class UniConfig:
                 waitings_.append(waitings[w])
 
             definition.update(
-                type=parse_type(template(definition["import_template"], definition)),
-                topic=template(definition["topic"], definition),
+                type=UniModuleDefinition.parse(template(definition["import_template"], **definition, **{"service": service})),
+                topic=template(definition["topic"], **definition, **{"service": service}),
                 waitings=waitings_,
             )
 

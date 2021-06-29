@@ -1,3 +1,5 @@
+import logging
+from time import sleep
 from typing import Dict, Type, TypeVar, Any
 
 from unipipeline.modules.uni_worker import UniWorker
@@ -8,6 +10,8 @@ from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 
 TMessage = TypeVar('TMessage')
 T = TypeVar('T')
+
+logger = logging.getLogger(__name__)
 
 
 class UniMediator:
@@ -33,15 +37,32 @@ class UniMediator:
     def config(self) -> UniConfig:
         return self._config
 
-    def get_connected_broker_instance(self, name: str) -> UniBroker:
+    def get_connected_broker(self, name: str) -> UniBroker:
+        if name in self._connected_brokers:
+            return self._connected_brokers[name]
+
+        broker_def = self.config.brokers[name]
+        broker_type = broker_def.type.import_class(UniBroker)
+        for try_count in range(broker_def.retry_max_count):
+            try:
+                br = broker_type(definition=broker_def)
+                br.connect()
+                logger.debug('%s is available', broker_def.name)
+                self._connected_brokers[name] = br
+                break
+            except ConnectionError as e:
+                logger.debug('retry connect to broker %s [%s/%s] : %s', broker_def.name, try_count, broker_def.retry_max_count, str(e))
+                sleep(broker_def.retry_delay_s)
+                continue
         if name not in self._connected_brokers:
-            self._connected_brokers[name] = UniBroker.waiting_for_connection(self.config.brokers[name])
+            raise ConnectionError(f'unavailable connection to {broker_def.name}')
+
         return self._connected_brokers[name]
 
     def wait_related_brokers(self, worker_name: str) -> None:
         broker_names = self.config.workers[worker_name].get_related_broker_names(self.config.workers)
         for bn in broker_names:
-            self.get_connected_broker_instance(bn)
+            self.get_connected_broker(bn)
 
     def load_workers(self, uni_type: Type[T]) -> None:
         if self._worker_definition_by_type:
