@@ -3,6 +3,7 @@ from typing import Optional, Tuple, Callable, Any, Dict, List
 
 from kafka import KafkaProducer, KafkaConsumer  # type: ignore
 from kafka.consumer.fetcher import ConsumerRecord  # type: ignore
+from pydantic import BaseModel
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
@@ -17,9 +18,17 @@ class UniKafkaBrokerMessageManager(UniBrokerMessageManager):
         pass
 
 
+class UniKafkaBrokerConf(BaseModel):
+    api_version: List[int]
+
+
 class UniKafkaBroker(UniBroker):
     def __init__(self, definition: UniBrokerDefinition[bytes]) -> None:
         super().__init__(definition)
+
+        self.conf = UniKafkaBrokerConf(**self.definition.configure_dynamic(dict(
+           api_version=None
+        )))
 
         self._bootstrap_servers = self.get_boostrap_servers()
 
@@ -37,7 +46,7 @@ class UniKafkaBroker(UniBroker):
     def connect(self) -> None:
         self._producer = KafkaProducer(
             bootstrap_servers=self._bootstrap_servers,
-            api_version=self.definition.kafka_definition.api_version,
+            api_version=self.conf.api_version,
             **self._security_conf,
         )
 
@@ -58,7 +67,7 @@ class UniKafkaBroker(UniBroker):
         self._consumer = None
 
     def serialize_body(self, meta: UniMessageMeta) -> Tuple[bytes, bytes]:
-        meta_dumps = self.definition.message_codec.dumps(meta.dict())
+        meta_dumps = self.definition.codec.dumps(meta.dict())
         return str(meta.id).encode('utf8'), bytes(meta_dumps, encoding='utf8')
 
     def parse_body(self, msg: ConsumerRecord) -> UniMessageMeta:
@@ -77,7 +86,7 @@ class UniKafkaBroker(UniBroker):
 
         self._consumer = KafkaConsumer(
             topic,
-            api_version=self.definition.kafka_definition.api_version,
+            api_version=self.conf.api_version,
             bootstrap_servers=self._bootstrap_servers,
             value_deserializer=lambda m: json.loads(m.decode('utf-8')),
             group_id=worker_name,

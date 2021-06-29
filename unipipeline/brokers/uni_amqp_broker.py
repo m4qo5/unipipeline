@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 
 from pika import ConnectionParameters, PlainCredentials, BlockingConnection, BasicProperties, spec  # type: ignore
 from pika.adapters.blocking_connection import BlockingChannel  # type: ignore
+from pydantic import BaseModel
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
@@ -61,32 +62,57 @@ class UniAmqpBrokerConnectionObj(ConnectionObj[BlockingConnection]):
             self._connection = None
 
 
+class UniAmqpBrokerConfig(BaseModel):
+    exchange_name: str
+    heartbeat: int
+    blocked_connection_timeout: int
+    socket_timeout: int
+    stack_timeout: int
+    exchange_type: str
+    durable: bool
+    auto_delete: bool
+    passive: bool
+    is_persistent: bool
+
+
 class UniAmqpBroker(UniBroker):
     @classmethod
     def get_connection_uri(cls) -> str:
         raise NotImplementedError(f"cls method get_connection_uri must be implemented for class '{cls.__name__}'")
 
     def get_exchange_name(self) -> str:
-        return self.definition.rmq_definition.exchange_name
+        return self.conf.exchange_name
 
     def __init__(self, definition: UniBrokerDefinition[bytes]) -> None:
         super().__init__(definition)
 
+        self.conf = UniAmqpBrokerConfig(**self.definition.configure_dynamic(dict(
+            exchange_name="communication",
+            exchange_type="direct",
+            heartbeat=600,
+            blocked_connection_timeout=300,
+            socket_timeout=300,
+            stack_timeout=300,
+            durable=True,
+            passive=False,
+            retry_delay_s=3,
+            auto_delete=False,
+            is_persistent=True,
+        )))
+
         self._connection_key = self.get_connection_uri()
         url_params_pr = urlparse(url=self._connection_key)
 
-        params = ConnectionParameters(
-            heartbeat=self.definition.rmq_definition.heartbeat,
-            blocked_connection_timeout=self.definition.rmq_definition.blocked_connection_timeout,
-            socket_timeout=self.definition.rmq_definition.socket_timeout,
-            stack_timeout=self.definition.rmq_definition.stack_timeout,
+        self._connector = connection_pool.new_manager(UniAmqpBrokerConnectionObj(ConnectionParameters(
+            heartbeat=self.conf.heartbeat,
+            blocked_connection_timeout=self.conf.blocked_connection_timeout,
+            socket_timeout=self.conf.socket_timeout,
+            stack_timeout=self.conf.stack_timeout,
             retry_delay=self.definition.retry_delay_s,
             host=url_params_pr.hostname,
             port=url_params_pr.port,
             credentials=PlainCredentials(url_params_pr.username, url_params_pr.password, erase_on_connect=False),
-        )
-
-        self._connector = connection_pool.new_manager(UniAmqpBrokerConnectionObj(params))
+        )))
 
         self._read_channel: Optional[BlockingChannel] = None
         self._write_channel: Optional[BlockingChannel] = None
@@ -111,16 +137,16 @@ class UniAmqpBroker(UniBroker):
         exchange = self.get_exchange_name()
         channel.exchange_declare(
             exchange=exchange,
-            exchange_type=self.definition.rmq_definition.exchange_type,
-            passive=self.definition.passive,
-            durable=self.definition.durable,
-            auto_delete=self.definition.auto_delete,
+            exchange_type=self.conf.exchange_type,
+            passive=self.conf.passive,
+            durable=self.conf.durable,
+            auto_delete=self.conf.auto_delete,
         )
 
         channel.queue_declare(
             queue=topic,
-            durable=self.definition.durable,
-            auto_delete=self.definition.auto_delete
+            durable=self.conf.durable,
+            auto_delete=self.conf.auto_delete
         )
         channel.queue_bind(queue=topic, exchange=exchange, routing_key=topic)
 
@@ -151,14 +177,14 @@ class UniAmqpBroker(UniBroker):
         self._read_channel.start_consuming()
 
     def serialize_body(self, meta: UniMessageMeta) -> Tuple[bytes, BasicProperties]:
-        meta_dumps = self.definition.message_codec.dumps(meta.dict())
-        meta_compressed = self.definition.message_codec.compress(meta_dumps)
+        meta_dumps = self.definition.codec.dumps(meta.dict())
+        meta_compressed = self.definition.codec.compress(meta_dumps)
 
         properties = BasicProperties(
-            content_type=self.definition.message_codec.content_type,
+            content_type=self.definition.codec.content_type,
             content_encoding='utf-8',
-            delivery_mode=2 if self.definition.is_persistent else 0,
-            headers={BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.message_codec.compression}
+            delivery_mode=2 if self.conf.is_persistent else 0,
+            headers={BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.codec.compression}
         )
         return meta_compressed, properties
 

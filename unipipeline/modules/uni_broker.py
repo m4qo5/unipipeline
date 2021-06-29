@@ -43,6 +43,9 @@ class UniBroker:
     def get_topic_size(self, topic: str) -> int:
         raise NotImplementedError(f'method get_topic_size must be implemented for {type(self).__name__}')
 
+    def initialize_topic(self, topic: str) -> None:
+        raise NotImplementedError(f'method initialize_topic must be implemented for {type(self).__name__}')
+
     @property
     def definition(self) -> UniBrokerDefinition[Any]:
         return self._definition

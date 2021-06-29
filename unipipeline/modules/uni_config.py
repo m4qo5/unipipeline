@@ -10,8 +10,6 @@ from unipipeline.modules.uni_message_definition import UniMessageDefinition
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 from unipipeline.modules.uni_broker_definition import  UniBrokerDefinition
 from unipipeline.modules.uni_message_codec import UniMessageCodec
-from unipipeline.modules.uni_broker_definition import UniBrokerKafkaPropsDefinition
-from unipipeline.modules.uni_broker_definition import UniAmqpBrokerPropsDefinition
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.utils.parse_definition import parse_definition
 from unipipeline.utils.serializer_registry import CONTENT_TYPE__APPLICATION_JSON
@@ -89,7 +87,7 @@ class UniConfig:
         defaults = dict(
             alone=True,
         )
-        for name, definition in parse_definition("cron", config.get("cron", dict()), defaults, {"when", "worker"}):
+        for name, definition, other_props in parse_definition("cron", config.get("cron", dict()), defaults, {"when", "worker"}):
             worker_def = workers[definition["worker"]]
             if worker_def.input_message.name != UNI_CRON_MESSAGE:
                 raise ValueError(f"input_message of worker '{worker_def.name}' must be '{UNI_CRON_MESSAGE}'. '{worker_def.input_message.name}' was given")
@@ -98,7 +96,8 @@ class UniConfig:
                 name=name,
                 worker=worker_def,
                 when=definition["when"],
-                alone=definition["alone"]
+                alone=definition["alone"],
+                _dynamic_props_=other_props,
             )
         return result
 
@@ -116,12 +115,13 @@ class UniConfig:
         if "messages" not in config:
             raise UniConfigError(f'messages is not defined in config')
 
-        for name, definition in parse_definition("messages", config["messages"], dict(), {"import_template", }):
+        for name, definition, other_props in parse_definition("messages", config["messages"], dict(), {"import_template", }):
             import_template = definition.pop("import_template")
             id = definition.pop("id")
             result[name] = UniMessageDefinition(
                 **definition,
                 type=UniModuleDefinition.parse(template(import_template, **definition, **{"service": service, "id": id})),
+                _dynamic_props_=other_props,
             )
 
         return result
@@ -133,10 +133,11 @@ class UniConfig:
             retry_delay_s=10,
         )
 
-        for name, definition in parse_definition('waitings', config.get('waitings', dict()), defaults, {"import_template", }):
+        for name, definition, other_props in parse_definition('waitings', config.get('waitings', dict()), defaults, {"import_template", }):
             result[name] = UniWaitingDefinition(
                 **definition,
                 type=UniModuleDefinition.parse(template(definition["import_template"], **definition, **{"service": service})),
+                _dynamic_props_=other_props
             )
 
         return result
@@ -150,41 +151,21 @@ class UniConfig:
             content_type=CONTENT_TYPE__APPLICATION_JSON,
             compression=None,
 
-            exchange_name="communication",
-            exchange_type="direct",
-            heartbeat=600,
-            blocked_connection_timeout=300,
-            socket_timeout=300,
-            stack_timeout=300,
-            passive=False,
-            durable=True,
-            auto_delete=False,
-            is_persistent=True,
             api_version=[0, 10],
         )
 
         if "brokers" not in config:
             raise UniConfigError(f'brokers is not defined in config')
 
-        for name, definition in parse_definition("brokers", config["brokers"], defaults, {"import_template", }):
+        for name, definition, other_def in parse_definition("brokers", config["brokers"], defaults, {"import_template", }):
             result[name] = UniBrokerDefinition(
                 **definition,
                 type=UniModuleDefinition.parse(template(definition["import_template"], **definition, **{"service": service})),
-                message_codec=UniMessageCodec(
+                codec=UniMessageCodec(
                     content_type=definition["content_type"],
                     compression=definition["compression"],
                 ),
-                rmq_definition=UniAmqpBrokerPropsDefinition(
-                    exchange_name=definition['exchange_name'],
-                    heartbeat=definition['heartbeat'],
-                    blocked_connection_timeout=definition['blocked_connection_timeout'],
-                    socket_timeout=definition['socket_timeout'],
-                    stack_timeout=definition['stack_timeout'],
-                    exchange_type=definition['exchange_type'],
-                ),
-                kafka_definition=UniBrokerKafkaPropsDefinition(
-                    api_version=definition['api_version'],
-                )
+                _dynamic_props_=other_def,
             )
         return result
 
@@ -214,7 +195,7 @@ class UniConfig:
 
         out_workers = set()
 
-        defaults = dict(
+        defaults: Dict[str, Any] = dict(
             max_ttl_s=None,
             is_permanent=True,
 
@@ -234,7 +215,7 @@ class UniConfig:
         if "workers" not in config:
             raise UniConfigError(f'workers is not defined in config')
 
-        for name, definition in parse_definition("workers", config["workers"], defaults, {"import_template", "input_message"}):
+        for name, definition, other_props in parse_definition("workers", config["workers"], defaults, {"import_template", "input_message"}):
             for ow in definition["output_workers"]:
                 out_workers.add(ow)
 
@@ -260,7 +241,10 @@ class UniConfig:
                 waitings=waitings_,
             )
 
-            defn = UniWorkerDefinition(**definition)
+            defn = UniWorkerDefinition(
+                **definition,
+                _dynamic_props_=other_props,
+            )
 
             result[name] = defn
 

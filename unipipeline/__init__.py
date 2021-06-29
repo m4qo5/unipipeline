@@ -1,11 +1,12 @@
-from unipipeline.brokers.uni_amqp_broker import UniAmqpBroker, UniAmqpBrokerMessageManager, UniAmqpBrokerConnectionObj
-from unipipeline.brokers.uni_kafka_broker import UniKafkaBroker, UniKafkaBrokerMessageManager
+from unipipeline.brokers.uni_amqp_broker import UniAmqpBroker, UniAmqpBrokerMessageManager, UniAmqpBrokerConnectionObj, UniAmqpBrokerConfig
+from unipipeline.brokers.uni_kafka_broker import UniKafkaBroker, UniKafkaBrokerMessageManager, UniKafkaBrokerConf
 from unipipeline.brokers.uni_log_broker import UniLogBroker
 from unipipeline.brokers.uni_memory_broker import UniMemoryBroker, UniMemoryBrokerMessageManager
 from unipipeline.messages.uni_cron_message import UniCronMessage
 from unipipeline.modules.uni import Uni
 from unipipeline.modules.uni_broker import UniBrokerMessageManager, UniBroker
-from unipipeline.modules.uni_broker_definition import UniBrokerKafkaPropsDefinition, UniAmqpBrokerPropsDefinition, UniBrokerDefinition
+from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
+from unipipeline.modules.uni_definition import UniDefinition
 from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_config import UniConfig, UniConfigError
 from unipipeline.modules.uni_cron_job import UniCronJob
@@ -29,6 +30,7 @@ __all__ = (
     "UniConfig",
     "UniConfigError",
     "UniMediator",
+    "UniDefinition",
     "UniModuleDefinition",
     "UniServiceDefinition",
 
@@ -57,9 +59,9 @@ __all__ = (
     "UniBrokerDefinition",
 
     "UniAmqpBroker",
+    "UniAmqpBrokerConfig",
     "UniAmqpBrokerConnectionObj",
     "UniAmqpBrokerMessageManager",
-    "UniAmqpBrokerPropsDefinition",
 
     "UniLogBroker",
 
@@ -67,8 +69,8 @@ __all__ = (
     "UniMemoryBrokerMessageManager",
 
     "UniKafkaBroker",
+    "UniKafkaBrokerConf",
     "UniKafkaBrokerMessageManager",
-    "UniBrokerKafkaPropsDefinition",
 
     # message
     "UniMessage",

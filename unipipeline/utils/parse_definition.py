@@ -1,28 +1,32 @@
-from functools import reduce
-from operator import or_
 from typing import Dict, Any, Set, Iterator, Tuple
 from uuid import uuid4
+
+
+COMMON_PROP = "__default__"
 
 
 class ParseDefinitionError(Exception):
     pass
 
 
-def parse_definition(conf_name: str, definitions: Dict[str, Any], defaults: Dict[str, Any], required: Set[str], sys_names: Set[str] = None) -> Iterator[Tuple[str, Dict[str, Any]]]:
+def parse_definition(conf_name: str, definitions: Dict[str, Any], defaults: Dict[str, Any], required_keys: Set[str], sys_names: Set[str] = None) -> Iterator[Tuple[str, Dict[str, Any], Dict[str, Any]]]:
     if sys_names is None:
         sys_names = set()
 
     if not isinstance(definitions, dict):
         raise ParseDefinitionError(f'definition of {conf_name} has invalid type. must be dict')
 
-    max_set_of_keys = reduce(or_, [set(defaults.keys()), required])
-    defaults = dict(defaults)
-    defaults.update(definitions.get("__default__", dict()))
+    defaults_keys = set(defaults.keys())
+
+    common = definitions.get(COMMON_PROP, dict())
 
     for name, raw_definition in definitions.items():
+        other_props: Dict[str, Any] = dict()
+        definition = dict(defaults)
+
         name = str(name)
         if name.startswith("_"):
-            if name == "__default__":
+            if name == COMMON_PROP:
                 continue
             elif name in sys_names:
                 pass
@@ -32,26 +36,24 @@ def parse_definition(conf_name: str, definitions: Dict[str, Any], defaults: Dict
         if not isinstance(raw_definition, dict):
             raise ParseDefinitionError(f'definition of {conf_name}->{name} has invalid type. must be dict')
 
-        definition = dict(defaults)
-        definition.update(raw_definition)
+        raw_definition.update(common)
 
-        definition_keys = set(definition.keys())
+        for k, v in raw_definition.items():
+            if k in defaults_keys:
+                definition[k] = v
+                vd = defaults.get(k, None)
+                if vd is not None and type(vd) != type(v):
+                    raise ParseDefinitionError(f'definition of {conf_name}->{name} has invalid key "{k}" type')
+            elif k in required_keys:
+                definition[k] = v
+            else:
+                other_props[k] = v
 
-        for k, v in definition.items():
-            vd = defaults.get(k, None)
-            if vd is not None and type(vd) != type(v):
-                raise ParseDefinitionError(f'definition of {conf_name}->{name} has invalid key "{k}" type')
-
-        if max_set_of_keys != definition_keys:
-            required_props = max_set_of_keys.difference(definition_keys)
-            invalid_props = definition_keys.difference(max_set_of_keys)
-            if len(invalid_props) > 0:
-                raise ParseDefinitionError(f'definition of {conf_name}->{name} has invalid extra props: {", ".join(invalid_props)}')
-            if len(required_props) > 0:
-                raise ParseDefinitionError(f'definition of {conf_name}->{name} has no required props: {", ".join(required_props)}')
-            raise ParseDefinitionError(f'definition of {conf_name}->{name} has invalid props: {max_set_of_keys}!={definition_keys}')
+        for rk in required_keys:
+            if rk not in definition:
+                raise ParseDefinitionError(f'definition of {conf_name}->{name} has no required prop "{rk}"')
 
         definition["name"] = name
         definition["id"] = uuid4()
 
-        yield name, definition
+        yield name, definition, other_props

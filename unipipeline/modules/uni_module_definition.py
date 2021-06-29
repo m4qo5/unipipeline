@@ -28,6 +28,9 @@ class {{name}}(UniBroker):
     
     def get_topic_size(self, topic: str) -> int:
         raise NotImplementedError(f'method get_topic_size must be implemented for class "{{name}}"')
+    
+    def initialize_topic(self, topic: str) -> None:
+        raise NotImplementedError(f'method initialize_topic must be implemented for class "{{name}}"')
 
 '''
 
@@ -97,10 +100,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
                     with open(path_init, "wt+") as fi:
                         fi.write("")
                 with open(path, 'wt') as fm:
-                    fm.writelines(template(tpl_map[class_type.__name__], {
-                        "data": create_template_params,
-                        "name": self.class_name,
-                    }))
+                    fm.writelines(template(tpl_map[class_type.__name__], data=create_template_params, name=self.class_name))
                 for i in range(10):  # because fs has cache time
                     try:
                         mdl = import_module(self.module)

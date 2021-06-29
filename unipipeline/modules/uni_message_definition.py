@@ -1,8 +1,7 @@
-from typing import NamedTuple
-
+from unipipeline.modules.uni_definition import UniDefinition
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 
 
-class UniMessageDefinition(NamedTuple):
+class UniMessageDefinition(UniDefinition):
     name: str
     type: UniModuleDefinition

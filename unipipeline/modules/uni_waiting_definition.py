@@ -2,15 +2,14 @@ import logging
 from time import sleep
 from uuid import UUID
 
-from pydantic import BaseModel
-
+from unipipeline.modules.uni_definition import UniDefinition
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 from unipipeline.modules.uni_wating import UniWaiting
 
 logger = logging.getLogger(__name__)
 
 
-class UniWaitingDefinition(BaseModel):
+class UniWaitingDefinition(UniDefinition):
     id: UUID
     name: str
     retry_max_count: int
