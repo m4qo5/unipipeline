@@ -1,5 +1,9 @@
 ---
 
+service:
+  name: "example"
+
+
 brokers:
   default_broker:
     import_template: "unipipeline.brokers.uni_memory_broker:UniMemoryBroker"
@@ -35,8 +39,6 @@ cron:
 
 waitings:
   __default__:
-    retry_max_count: 100
-    retry_delay_s: 1
     import_template: example.waitings.{{name}}_wating:{{name|camel}}Waiting
 
   common_db: {}
@@ -45,10 +47,6 @@ waitings:
 workers:
   __default__:
     import_template: "example.workers.{{name}}:{{name|camel}}"
-
-    broker: default_broker
-    topic: "{{name}}"
-    prefetch: 1
 
   my_super_cron_worker:
     input_message: uni_cron_message
