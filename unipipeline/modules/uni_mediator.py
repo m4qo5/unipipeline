@@ -9,7 +9,6 @@ from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_worker import UniWorker
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 
-TMessage = TypeVar('TMessage')
 TWorker = TypeVar('TWorker', bound=UniWorker)
 
 logger = logging.getLogger(__name__)
@@ -58,7 +57,7 @@ class UniMediator:
 
         return self._message_types[name]
 
-    def send_to(self, worker_name: str, payload: Union[Dict[str, Any], TMessage], parent_meta: Optional[UniMessageMeta] = None, alone: bool = False) -> None:
+    def send_to(self, worker_name: str, payload: Union[Dict[str, Any], UniMessage], parent_meta: Optional[UniMessageMeta] = None, alone: bool = False) -> None:
         if worker_name not in self._worker_initiialized_list:
             raise OverflowError(f'worker {worker_name} was not initialized')
 
@@ -151,7 +150,7 @@ class UniMediator:
                     self._brokers_with_topics_initialized[bn].add(topic)
             self._brokers_with_topics_to_init = dict()
 
-    def get_worker(self, worker: Union[Type['UniWorker[TMessage]'], str], singleton: bool = True) -> UniWorker[UniMessage]:
+    def get_worker(self, worker: Union[Type['UniWorker[UniMessage]'], str], singleton: bool = True) -> UniWorker[UniMessage]:
         wd = self._config.get_worker_definition(worker)
         if not singleton or wd.name not in self._worker_instance_indexes:
             worker_type = wd.type.import_class(UniWorker)
