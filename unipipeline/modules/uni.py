@@ -70,7 +70,12 @@ class Uni:
     def get_worker(self, name: str, singleton: bool = True) -> UniWorker[UniMessage]:
         return self._mediator.get_worker(name, singleton)
 
-    def initialize(self, create: bool = True) -> None:
+    def initialize(self, everything: bool = False, create: bool = True) -> None:
+        if everything:
+            for wn in self._config.workers.keys():
+                self._mediator.add_worker_to_init_list(wn, no_related=True)
+            self.initialize(everything=False, create=create)
+            return
         self._mediator.initialize(create=create)
 
     def consume(self, name: str) -> None:
