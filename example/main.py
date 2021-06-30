@@ -13,15 +13,17 @@ CWD = os.path.dirname(os.path.abspath(__file__))
 
 u = Uni(f"{CWD}/dag.yml")
 
-u.check_load_all(create=True)
+u.check(create=True)
 
-u.send_to_worker("input_worker", dict())
+u.init_producer_worker('input_worker')
 
-u.consume("input_worker")
+u.init_consumer_worker("input_worker")
 
-u.consume("my_super_cron_worker")
+u.init_consumer_worker("my_super_cron_worker")
 
 u.initialize(create=True)
+
+u.send_to("input_worker", dict())
 
 u.start_consuming()
 
