@@ -1,46 +1,27 @@
 from typing import List, Optional, Dict, Set, Any
 from uuid import UUID
 
-from pydantic import BaseModel, validator
+from pydantic import validator
 
+from unipipeline.modules.uni_definition import UniDefinition
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_message_definition import UniMessageDefinition
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 
 
-class UniWorkerDefinition(BaseModel):
+class UniWorkerDefinition(UniDefinition):
     id: UUID
     name: str
     broker: UniBrokerDefinition[Any]
     type: UniModuleDefinition
     topic: str
-    prefetch: int
+    error_topic: str
+    error_payload_topic: str
     input_message: UniMessageDefinition
-    output_workers: List[str]
-    retry_max_count: int
-    retry_delay_s: int
-    max_ttl_s: Optional[int]
+    output_workers: Set[str]
     ack_after_success: bool
-    waitings: List[UniWaitingDefinition]
-
-    @validator("prefetch")
-    def prefetch_must_be_gte_1(cls, v: int) -> Optional[int]:
-        if v < 1:
-            raise ValueError("must be >= 1")
-        return v
-
-    @validator("retry_max_count")
-    def retry_max_count_must_be_gt_0(cls, v: int) -> Optional[int]:
-        if v < 0:
-            raise ValueError("must be >= 0")
-        return v
-
-    @validator("retry_delay_s")
-    def retry_delay_s_must_be_gt_0(cls, v: int) -> Optional[int]:
-        if v < 0:
-            raise ValueError("must be >= 0")
-        return v
+    waitings: Set[UniWaitingDefinition]
 
     def get_related_broker_names(self, index_of_workers: Dict[str, 'UniWorkerDefinition']) -> Set[str]:
         result = {self.broker.name,}
@@ -53,7 +34,3 @@ class UniWorkerDefinition(BaseModel):
         for w_name in self.output_workers:
             result.add(w_name)
         return result
-
-    def wait_everything(self) -> None:
-        for wd in self.waitings:
-            wd.wait()

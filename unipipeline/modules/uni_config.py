@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Set
 from uuid import uuid4
 
 import yaml  # type: ignore
@@ -32,7 +32,8 @@ class UniConfig:
         self._waitings_index: Dict[str, UniWaitingDefinition] = dict()
         self._brokers_index: Dict[str, UniBrokerDefinition] = dict()
         self._messages_index: Dict[str, UniMessageDefinition] = dict()
-        self._workers_index: Dict[str, UniWorkerDefinition] = dict()
+        self._workers_by_name_index: Dict[str, UniWorkerDefinition] = dict()
+        self._workers_by_class_index: Dict[str, UniWorkerDefinition] = dict()
         self._cron_tasks_index: Dict[str, UniCronTaskDefinition] = dict()
 
     @property
@@ -48,7 +49,12 @@ class UniConfig:
     @property
     def workers(self) -> Dict[str, UniWorkerDefinition]:
         self._parse()
-        return self._workers_index
+        return self._workers_by_name_index
+
+    @property
+    def workers_by_class(self) -> Dict[str, UniWorkerDefinition]:
+        self._parse()
+        return self._workers_by_class_index
 
     @property
     def waitings(self) -> Dict[str, UniWaitingDefinition]:
@@ -79,8 +85,12 @@ class UniConfig:
         self._waitings_index = self._parse_waitings(self._load_config(), self._service)
         self._brokers_index = self._parse_brokers(self._load_config(), self._service)
         self._messages_index = self._parse_messages(self._load_config(), self._service)
-        self._workers_index = self._parse_workers(self._load_config(), self._service, self._brokers_index, self._messages_index, self._waitings_index)
-        self._cron_tasks_index = self._parse_cron_tasks(self._load_config(), self._service, self._workers_index)
+        self._workers_by_name_index = self._parse_workers(self._load_config(), self._service, self._brokers_index, self._messages_index, self._waitings_index)
+
+        for w in self._workers_by_class_index.values():
+            self._workers_by_class_index[w.type.class_name] = w
+
+        self._cron_tasks_index = self._parse_cron_tasks(self._load_config(), self._service, self._workers_by_name_index)
 
     def _parse_cron_tasks(self, config: Dict[str, Any], service: UniServiceDefinition, workers: Dict[str, UniWorkerDefinition]) -> Dict[str, UniCronTaskDefinition]:
         result = dict()
@@ -202,6 +212,8 @@ class UniConfig:
             retry_max_count=3,
             retry_delay_s=1,
             topic="{{name}}",
+            error_payload_topic="{{name}}__error__payload",
+            error_topic="{{name}}__error",
             broker="default_broker",
             prefetch=1,
 
@@ -229,20 +241,25 @@ class UniConfig:
                 raise UniConfigError(f'definition workers->{name} has invalid input_message: {im}')
             definition["input_message"] = messages[im]
 
-            waitings_: List[UniWaitingDefinition] = list()
+            waitings_: Set[UniWaitingDefinition] = set()
             for w in definition["waiting_for"]:
                 if w not in waitings:
                     raise UniConfigError(f'definition workers->{name} has invalid waiting_for: {w}')
-                waitings_.append(waitings[w])
+                waitings_.add(waitings[w])
 
-            definition.update(
-                type=UniModuleDefinition.parse(template(definition["import_template"], **definition, **{"service": service})),
-                topic=template(definition["topic"], **definition, **{"service": service}),
-                waitings=waitings_,
-            )
+            topic_template = definition.pop('topic')
+            error_topic_template = definition.pop('error_topic')
+            error_payload_topic_template = definition.pop('error_payload_topic')
+
+            template_data = {**definition, "service": service}
 
             defn = UniWorkerDefinition(
                 **definition,
+                type=UniModuleDefinition.parse(template(definition["import_template"], **template_data)),
+                topic=template(topic_template, **template_data),
+                error_topic=template(error_topic_template, **template_data),
+                error_payload_topic=template(error_payload_topic_template, **template_data),
+                waitings=waitings_,
                 _dynamic_props_=other_props,
             )
 

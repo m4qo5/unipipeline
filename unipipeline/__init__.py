@@ -4,7 +4,7 @@ from unipipeline.brokers.uni_log_broker import UniLogBroker
 from unipipeline.brokers.uni_memory_broker import UniMemoryBroker, UniMemoryBrokerMessageManager
 from unipipeline.messages.uni_cron_message import UniCronMessage
 from unipipeline.modules.uni import Uni
-from unipipeline.modules.uni_broker import UniBrokerMessageManager, UniBroker
+from unipipeline.modules.uni_broker import UniBrokerMessageManager, UniBroker, UniBrokerConsumer
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_definition import UniDefinition
 from unipipeline.modules.uni_message_codec import UniMessageCodec
@@ -56,6 +56,7 @@ __all__ = (
     # broker
     "UniBrokerMessageManager",
     "UniBroker",
+    "UniBrokerConsumer",
     "UniBrokerDefinition",
 
     "UniAmqpBroker",

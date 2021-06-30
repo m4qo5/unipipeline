@@ -1,14 +1,23 @@
 import json
 import logging
 from logging import Logger
-from typing import Callable
+from typing import Set, List
 from uuid import uuid4
 
-from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager
+from unipipeline.modules.uni_broker import UniBroker, UniBrokerConsumer
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 
 
 class UniLogBroker(UniBroker):
+    def start_consuming(self) -> None:
+        self._logger.info(f'{self._logging_prefix} start consuming')
+
+    def get_topic_approximate_messages_count(self, topic: str) -> int:
+        return 0
+
+    def initialize(self, topics: Set[str]) -> None:
+        self._logger.info(f'{self._logging_prefix} initialized')
+
     def mk_logger(self) -> Logger:
         return logging.getLogger(__name__)
 
@@ -26,8 +35,9 @@ class UniLogBroker(UniBroker):
     def close(self) -> None:
         self._logger.info(f'{self._logging_prefix} close')
 
-    def consume(self, topic: str, processor: Callable[[UniMessageMeta, UniBrokerMessageManager], None], consumer_tag: str, worker_name: str, prefetch: int = 1) -> None:
-        self._logger.info(f'{self._logging_prefix} consume {consumer_tag} :: {worker_name}')
+    def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
+        self._logger.info(f'{self._logging_prefix} consume {consumer.id} :: {consumer.group_id}')
 
-    def publish(self, topic: str, meta: UniMessageMeta) -> None:
-        self._logger.info(f'{self._logging_prefix} publish {json.dumps(meta.dict())}')
+    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
+        for meta in meta_list:
+            self._logger.info(f'{self._logging_prefix} publish {json.dumps(meta.dict())}')

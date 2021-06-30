@@ -2,7 +2,7 @@ import logging
 from typing import Generic, Type, Any, TypeVar, Optional, Dict, Union
 from uuid import uuid4
 
-from unipipeline.modules.uni_broker import UniBrokerMessageManager
+from unipipeline.modules.uni_broker import UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
@@ -24,13 +24,13 @@ class UniWorker(Generic[TMessage]):
     ) -> None:
         from unipipeline.modules.uni_mediator import UniMediator
         self._uni_moved = False
+        self._uni_consume_initialized = False
         self._uni_payload_cache: Optional[TMessage] = None
         self._uni_current_meta: Optional[UniMessageMeta] = None
         self._uni_current_manager: Optional[UniBrokerMessageManager] = None
         self._uni_definition = definition
         self._uni_mediator: UniMediator = mediator
         self._uni_message_type: Type[TMessage] = self._uni_definition.input_message.type.import_class(UniMessage)  # type: ignore
-        self._uni_consumer_tag: str = f'{self._uni_definition.name}__{uuid4()}'
         self._uni_worker_instances_for_sending: Dict[Type[UniWorker], UniWorker] = dict()
 
     @property
@@ -38,18 +38,24 @@ class UniWorker(Generic[TMessage]):
         return self._uni_message_type
 
     def consume(self) -> None:
-        self._uni_mediator.wait_related_brokers(self._uni_definition.name)
-        main_broker = self._uni_mediator.get_connected_broker(self._uni_definition.broker.name)
+        if self._uni_consume_initialized:
+            raise OverflowError(f'consumer of worker "{self._uni_definition.name}" has already initialized')
+        self._uni_consume_initialized = True
+        br = self._uni_mediator.get_broker(self._uni_definition.broker.name)
 
-        self._uni_definition.wait_everything()
         logger.info("worker %s start consuming", self._uni_definition.name)
-        main_broker.consume(
+        br.add_topic_consumer(
             topic=self._uni_definition.topic,
-            processor=self.process_message,
-            consumer_tag=self._uni_consumer_tag,
-            prefetch=self._uni_definition.prefetch,
-            worker_name=self._uni_definition.name,
+            consumer=UniBrokerConsumer(
+                id=f'{self._uni_definition.name}__{uuid4()}',
+                group_id=self._uni_definition.name,
+                message_handler=self.process_message
+            ),
         )
+
+    @property
+    def definition(self) -> UniWorkerDefinition:
+        return self._uni_definition
 
     @property
     def meta(self) -> UniMessageMeta:
@@ -78,23 +84,26 @@ class UniWorker(Generic[TMessage]):
         else:
             raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
         meta = meta if meta is not None else UniMessageMeta.create_new(payload_data)
-        br = self._uni_mediator.get_connected_broker(self._uni_definition.broker.name)
+
+        br = self._uni_mediator.get_broker(self._uni_definition.broker.name)
+
         if alone:
-            size = br.get_topic_size(self._uni_definition.topic)
+            size = br.get_topic_approximate_messages_count(self._uni_definition.topic)
             if size != 0:
                 logger.info("worker %s skipped, because topic %s has %s messages", self._uni_definition.name, self._uni_definition.topic, size)
                 return
-        br.publish(self._uni_definition.topic, meta)
-        logger.info("worker %s sent message %s to %s topic", self._uni_definition.name, meta, self._uni_definition.topic)
+
+        br.publish(self._uni_definition.topic, [meta])  # TODO: make it list by default
+        logger.info("worker %s sent message to topic '%s':: %s", self._uni_definition.name, self._uni_definition.topic, meta)
 
     def send_to_worker(self, worker_type: Type['UniWorker[TMessage]'], data: Any) -> None:
         if worker_type not in self._uni_worker_instances_for_sending:
             if not issubclass(worker_type, UniWorker):
                 raise ValueError(f'worker_type {worker_type.__name__} is not subclass of UniWorker')
-            w_def = self._uni_mediator.get_worker_definition_by_type(worker_type, UniWorker)
+            w_def = self._uni_mediator.config.workers_by_class[worker_type.__name__]
             if w_def.name not in self._uni_definition.output_workers:
                 raise ValueError(f'worker {w_def.name} is not defined in workers->{self._uni_definition.name}->output_workers')
-            w = worker_type(w_def, self._uni_mediator)
+            w = self._uni_mediator.get_worker(w_def.name)
             self._uni_worker_instances_for_sending[worker_type] = w
 
         assert self._uni_current_meta is not None
@@ -151,7 +160,11 @@ class UniWorker(Generic[TMessage]):
     def move_to_error_topic(self, err_topic: UniMessageMetaErrTopic, err: Exception) -> None:
         self._uni_moved = True
         meta = self.meta.create_error_child(err_topic, err)
-        self._uni_mediator.get_connected_broker(self._uni_definition.broker.name).publish(f'{self._uni_definition.topic}__{err_topic.value}', meta)
+        br = self._uni_mediator.get_broker(self._uni_definition.broker.name)
+        error_topic = self.definition.error_topic
+        if error_topic is UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR:
+            error_topic = self.definition.error_payload_topic
+        br.publish(error_topic, [meta])
         self.manager.ack()
 
     def handle_error_message_handling(self, message: TMessage) -> None:

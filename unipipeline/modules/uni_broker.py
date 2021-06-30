@@ -1,11 +1,9 @@
 import logging
-from typing import Callable, TypeVar, Any
+from typing import Callable, Any, Set, NamedTuple, List
 
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
-from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 
-TMessage = TypeVar('TMessage', bound=UniMessage)
 logger = logging.getLogger(__name__)
 
 
@@ -15,6 +13,12 @@ class UniBrokerMessageManager:
 
     def ack(self) -> None:
         raise NotImplementedError(f'method acknowledge must be specified for class "{type(self).__name__}"')
+
+
+class UniBrokerConsumer(NamedTuple):
+    id: str
+    group_id: str
+    message_handler: Callable[[UniMessageMeta, UniBrokerMessageManager], None]
 
 
 class UniBroker:
@@ -27,23 +31,19 @@ class UniBroker:
     def close(self) -> None:
         raise NotImplementedError(f'method close must be implemented for {type(self).__name__}')
 
-    def consume(
-        self,
-        topic: str,
-        processor: Callable[[UniMessageMeta, UniBrokerMessageManager], None],
-        consumer_tag: str,
-        worker_name: str,
-        prefetch: int = 1,
-    ) -> None:
+    def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
         raise NotImplementedError(f'method consume must be implemented for {type(self).__name__}')
 
-    def publish(self, topic: str, meta: UniMessageMeta) -> None:
+    def start_consuming(self) -> None:
+        raise NotImplementedError(f'method start_consuming must be implemented for {type(self).__name__}')
+
+    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
         raise NotImplementedError(f'method consume must be implemented for {type(self).__name__}')
 
-    def get_topic_size(self, topic: str) -> int:
+    def get_topic_approximate_messages_count(self, topic: str) -> int:
         raise NotImplementedError(f'method get_topic_size must be implemented for {type(self).__name__}')
 
-    def initialize_topic(self, topic: str) -> None:
+    def initialize(self, topics: Set[str]) -> None:
         raise NotImplementedError(f'method initialize_topic must be implemented for {type(self).__name__}')
 
     @property

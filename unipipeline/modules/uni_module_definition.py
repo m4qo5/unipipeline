@@ -8,29 +8,33 @@ from unipipeline.utils.template import template
 T = TypeVar('T')
 
 uni_broker_template = '''
-from typing import Callable
+from typing import Set, List
 
-from unipipeline import UniBroker, UniMessageMeta, UniBrokerMessageManager
+from unipipeline import UniBroker, UniMessageMeta, UniBrokerConsumer
 
 
 class {{name}}(UniBroker):
+
     def connect(self) -> None:
         raise NotImplementedError('method connect must be specified for class "{{name}}"')
 
     def close(self) -> None:
         raise NotImplementedError('method close must be specified for class "{{name}}"')
 
-    def consume(self, topic: str, processor: Callable[[UniMessageMeta, UniBrokerMessageManager], None], consumer_tag: str, worker_name: str, prefetch: int = 1) -> None:
-        raise NotImplementedError('method consume must be specified for class "{{name}}"')
+    def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
+        raise NotImplementedError('method add_topic_consumer must be specified for class "{{name}}"')
 
-    def publish(self, topic: str, meta: UniMessageMeta) -> None:
+    def start_consuming(self) -> None:
+        raise NotImplementedError('method start_consuming must be specified for class "{{name}}"')
+
+    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
         raise NotImplementedError('method publish must be specified for class "{{name}}"')
-    
-    def get_topic_size(self, topic: str) -> int:
-        raise NotImplementedError(f'method get_topic_size must be implemented for class "{{name}}"')
-    
-    def initialize_topic(self, topic: str) -> None:
-        raise NotImplementedError(f'method initialize_topic must be implemented for class "{{name}}"')
+
+    def get_topic_approximate_messages_count(self, topic: str) -> int:
+        raise NotImplementedError('method get_topic_approximate_messages_count must be specified for class "{{name}}"')
+
+    def initialize(self, topics: Set[str]) -> None:
+        raise NotImplementedError('method initialize must be specified for class "{{name}}"')
 
 '''
 

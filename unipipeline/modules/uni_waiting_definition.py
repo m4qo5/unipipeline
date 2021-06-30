@@ -16,6 +16,9 @@ class UniWaitingDefinition(UniDefinition):
     retry_delay_s: int
     type: UniModuleDefinition
 
+    def __hash__(self) -> int:
+        return hash(self.id)
+
     def wait(self) -> None:
         waiting_type = self.type.import_class(UniWaiting)
         for try_count in range(self.retry_max_count):

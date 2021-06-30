@@ -1,5 +1,6 @@
 import logging
 from time import sleep
+from typing import Dict, Any
 
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_config import UniConfig, UniConfigError
@@ -62,5 +63,25 @@ class Uni:
 
             sleep(1.1)  # delay for correct next iteration
 
+    @property
+    def config(self) -> UniConfig:
+        return self._config
+
     def get_worker(self, name: str, singleton: bool = True) -> UniWorker[UniMessage]:
         return self._mediator.get_worker(name, singleton)
+
+    def initialize(self, create: bool = True) -> None:
+        self._mediator.initialize(create=create)
+
+    def consume(self, name: str) -> None:
+        self._mediator.add_worker_to_init_list(name, no_related=False)
+        self._mediator.add_worker_to_consume_list(name)
+
+    def send_to_worker(self, name, data: Dict[str, Any]) -> None:
+        self._mediator.add_worker_to_init_list(name, no_related=True)
+        self._mediator.initialize()
+        w = self._mediator.get_worker(name)
+        w.send(data)
+
+    def start_consuming(self) -> None:
+        self._mediator.start_consuming()

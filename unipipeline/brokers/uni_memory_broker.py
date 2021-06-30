@@ -1,8 +1,8 @@
 import logging
 from collections import deque
-from typing import Callable, Dict, TypeVar, Tuple, Optional, Deque
+from typing import Callable, Dict, TypeVar, Tuple, Optional, Deque, Set, List
 
-from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager
+from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 
 logger = logging.getLogger(__name__)
@@ -40,11 +40,10 @@ class QL:
         self._msg_counter += 1
         msg_id = self._msg_counter
         self._waiting_for_process.append((msg_id, msg))
-        logger.debug('ql(%s).add_msg msg_id=%s', self._name, msg_id)
         return msg_id
 
     def move_back_from_reserved(self, msg_id: int) -> None:
-        logger.debug('ql(%s).move_back_from_reserved', self._name)
+        logger.debug('%s ql.move_back_from_reserved', self._name)
         if self._in_process is None:
             return
 
@@ -60,11 +59,11 @@ class QL:
 
         item = self._waiting_for_process.popleft()
         self._in_process = item
-        logger.debug('ql(%s).reserve_next msg_id=%s', self._name, item[0])
+        logger.debug('%s ql.reserve_next msg_id=%s', self._name, item[0])
         return item
 
     def mark_as_processed(self, msg_id: int) -> None:
-        logger.debug('ql(%s).mark_as_processed msg_id=%s', self._name, msg_id)
+        logger.debug('%s ql.mark_as_processed msg_id=%s', self._name, msg_id)
         if self._in_process is None:
             return
 
@@ -92,7 +91,7 @@ class QL:
         return self.messages_to_process_count() > 0
 
     def process_all(self) -> None:
-        logger.debug('ql(%s).process_all len_listeners=%s :: messages=%s', self._name, len(self._listeners), self.messages_to_process_count())
+        logger.debug('%s ql.process_all len_listeners=%s :: messages=%s', self._name, len(self._listeners), self.messages_to_process_count())
         if len(self._listeners) == 0:
             return
 
@@ -113,13 +112,24 @@ class QL:
                     (msg_id, meta) = self.reserve_next()
                     manager = UniMemoryBrokerMessageManager(self, msg_id)
 
-                    logger.info('ql(%s).process_all :: lsg_id=%s :: i=%s :: msg_id=%s :: %s', self._name, lst_id, i, msg_id, meta)
+                    logger.info('%s ql.process_all :: lsg_id=%s :: i=%s :: msg_id=%s :: %s', self._name, lst_id, i, msg_id, meta)
                     lst(meta, manager)
-                    logger.debug('ql(%s).process_all len_listeners=%s :: messages=%s', self._name, len(self._listeners), self.messages_to_process_count())
+                    logger.debug('%s ql.process_all len_listeners=%s :: messages=%s', self._name, len(self._listeners), self.messages_to_process_count())
 
 
 class UniMemoryBroker(UniBroker):
-    _queues_by_topic: Dict[str, QL] = dict()
+    def __init__(self, *args, **kwargs) -> None:
+        super(UniMemoryBroker, self).__init__(*args, **kwargs)
+        self._consuming_started = False
+        self._queues_by_topic: Dict[str, QL] = dict()
+        self._consumers_count = 0
+
+    def get_topic_approximate_messages_count(self, topic: str) -> int:
+        return self._queues_by_topic[topic].messages_to_process_count()
+
+    def initialize(self, topics: Set[str]) -> None:
+        for topic in topics:
+            self._queues_by_topic[topic] = QL(f'{self.definition.name}->{topic}')
 
     def connect(self) -> None:
         pass
@@ -127,19 +137,29 @@ class UniMemoryBroker(UniBroker):
     def close(self) -> None:
         pass
 
-    def _get_ql(self, topic: str) -> QL:
-        name = topic
-        topic = f'{self.definition.name}:@:@:{topic}'
-        if topic not in UniMemoryBroker._queues_by_topic:
-            UniMemoryBroker._queues_by_topic[topic] = QL(f'{self.definition.name}->{name}')
-        return UniMemoryBroker._queues_by_topic[topic]
+    def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
+        self._consumers_count += 1
+        self._queues_by_topic[topic].add_listener(consumer.message_handler, 1)
+        logger.info('%s consumer for topic "%s" added with consumer_tag "%s"', self.definition.name, topic, consumer.id)
 
-    def consume(self, topic: str, processor: TConsumer, consumer_tag: str, worker_name: str, prefetch: int = 1) -> None:
-        ql = self._get_ql(topic)
-        ql.add_listener(processor, prefetch)
-        ql.process_all()
+    def start_consuming(self) -> None:
+        if self._consuming_started:
+            raise OverflowError(f'consuming has already started')
 
-    def publish(self, topic: str, meta: UniMessageMeta) -> None:
-        ql = self._get_ql(topic)
-        ql.add_msg(meta)
-        ql.process_all()
+        if self._consumers_count == 0:
+            logger.warning('%s has no consumers', self.definition.name)
+            return
+
+        self._consuming_started = True
+
+        logger.info('%s start consuming', self.definition.name)
+        for ql in self._queues_by_topic.values():
+            ql.process_all()
+
+    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
+        logger.info('%s->%s publish message:: %s', self.definition.name, topic, meta_list)
+        ql = self._queues_by_topic[topic]
+        for meta in meta_list:
+            ql.add_msg(meta)
+        if self._consuming_started:
+            ql.process_all()
