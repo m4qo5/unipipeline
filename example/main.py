@@ -15,12 +15,14 @@ u = Uni(f"{CWD}/dag.yml")
 
 u.check_load_all(create=True)
 
-u.get_worker("input_worker").send(dict())
+u.send_to_worker("input_worker", dict())
 
-u.get_worker("input_worker").consume()
+u.consume("input_worker")
 
-u.get_worker("my_super_cron_worker").consume()
+u.consume("my_super_cron_worker")
 
-print("it works!")
+u.initialize(create=True)
+
+u.start_consuming()
 
 u.start_cron()

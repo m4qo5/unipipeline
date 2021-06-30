@@ -1,18 +1,29 @@
 
-from typing import Callable
+from typing import Set, List
 
-from unipipeline import UniBroker, UniMessageMeta, UniBrokerMessageManager
+from unipipeline import UniBroker, UniMessageMeta
+from unipipeline.modules.uni_broker import UniBrokerConsumer
 
 
 class LogBroker(UniBroker):
+
     def connect(self) -> None:
-        raise NotImplementedError('method connect must be specified for class "LogBroker"')
+        pass
 
     def close(self) -> None:
-        raise NotImplementedError('method close must be specified for class "LogBroker"')
+        pass
 
-    def consume(self, topic: str, processor: Callable[[UniMessageMeta, UniBrokerMessageManager], None], consumer_tag: str, worker_name: str, prefetch: int = 1) -> None:
-        raise NotImplementedError('method consume must be specified for class "LogBroker"')
+    def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
+        pass
 
-    def publish(self, topic: str, meta: UniMessageMeta) -> None:
-        raise NotImplementedError('method publish must be specified for class "LogBroker"')
+    def start_consuming(self) -> None:
+        pass
+
+    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
+        pass
+
+    def get_topic_approximate_messages_count(self, topic: str) -> int:
+        pass
+
+    def initialize(self, topics: Set[str]) -> None:
+        pass
