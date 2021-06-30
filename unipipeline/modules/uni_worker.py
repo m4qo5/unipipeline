@@ -76,39 +76,16 @@ class UniWorker(Generic[TMessage]):
                 raise UniPayloadParsingError(e)
         return self._uni_payload_cache
 
-    def send(self, payload: Union[Dict[str, Any], TMessage], meta: Optional[UniMessageMeta] = None, alone: bool = False) -> None:
-        if isinstance(payload, self._uni_message_type):
-            payload_data = payload.dict()
-        elif isinstance(payload, dict):
-            payload_data = self._uni_message_type(**payload).dict()
-        else:
-            raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
-        meta = meta if meta is not None else UniMessageMeta.create_new(payload_data)
+    def send_to(self, worker: Union[Type['UniWorker[TMessage]'], str], data: Any, alone: bool = False) -> None:
+        if self._uni_current_meta is None:
+            raise ValueError(f'meta was not defined. incorrect usage of function "send_to"')
 
-        br = self._uni_mediator.get_broker(self._uni_definition.broker.name)
+        wd = self._uni_mediator.config.workers[worker] if isinstance(worker, str) else self._uni_mediator.config.workers_by_class[worker.__name__]
 
-        if alone:
-            size = br.get_topic_approximate_messages_count(self._uni_definition.topic)
-            if size != 0:
-                logger.info("worker %s skipped, because topic %s has %s messages", self._uni_definition.name, self._uni_definition.topic, size)
-                return
+        if wd.name not in self._uni_definition.output_workers:
+            raise ValueError(f'worker {wd.name} is not defined in workers->{self._uni_definition.name}->output_workers')
 
-        br.publish(self._uni_definition.topic, [meta])  # TODO: make it list by default
-        logger.info("worker %s sent message to topic '%s':: %s", self._uni_definition.name, self._uni_definition.topic, meta)
-
-    def send_to_worker(self, worker_type: Type['UniWorker[TMessage]'], data: Any) -> None:
-        if worker_type not in self._uni_worker_instances_for_sending:
-            if not issubclass(worker_type, UniWorker):
-                raise ValueError(f'worker_type {worker_type.__name__} is not subclass of UniWorker')
-            w_def = self._uni_mediator.config.workers_by_class[worker_type.__name__]
-            if w_def.name not in self._uni_definition.output_workers:
-                raise ValueError(f'worker {w_def.name} is not defined in workers->{self._uni_definition.name}->output_workers')
-            w = self._uni_mediator.get_worker(w_def.name)
-            self._uni_worker_instances_for_sending[worker_type] = w
-
-        assert self._uni_current_meta is not None
-        meta = self._uni_current_meta.create_child(data)
-        self._uni_worker_instances_for_sending[worker_type].send(data, meta=meta)
+        self._uni_mediator.send_to(wd.name, data, parent_meta=self._uni_current_meta, alone=alone)
 
     def process_message(self, meta: UniMessageMeta, manager: UniBrokerMessageManager) -> None:
         logger.debug("worker %s message %s received", self._uni_definition.name, meta)

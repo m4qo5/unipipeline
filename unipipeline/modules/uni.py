@@ -1,6 +1,6 @@
 import logging
 from time import sleep
-from typing import Dict, Any
+from typing import Dict, Any, Union
 
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_config import UniConfig, UniConfigError
@@ -15,22 +15,25 @@ logger = logging.getLogger(__name__)
 
 
 class Uni:
-    def __init__(self, config_file_path: str) -> None:
-        self._config = UniConfig(config_file_path)
-        self._mediator = UniMediator(self._config)
+    def __init__(self, config: Union[UniConfig, str]) -> None:
+        if isinstance(config, str):
+            config = UniConfig(config)
+        if not isinstance(config, UniConfig):
+            raise ValueError(f'invalid config type. {type(config).__name__} was given')
+        self._mediator = UniMediator(config)
 
-    def check_load_all(self, create: bool = False) -> None:
+    def check(self, create: bool = False) -> None:
         try:
-            for broker_def in self._config.brokers.values():
+            for broker_def in self._mediator.config.brokers.values():
                 broker_def.type.import_class(UniBroker, create, create_template_params=broker_def)
 
-            for message_def in self._config.messages.values():
+            for message_def in self._mediator.config.messages.values():
                 message_def.type.import_class(UniMessage, create, create_template_params=message_def)
 
-            for worker_def in self._config.workers.values():
+            for worker_def in self._mediator.config.workers.values():
                 worker_def.type.import_class(UniWorker, create, create_template_params=worker_def)
 
-            for waiting_def in self._config.waitings.values():
+            for waiting_def in self._mediator.config.waitings.values():
                 waiting_def.type.import_class(UniWaiting, create, create_template_params=waiting_def)
 
         except (ParseDefinitionError, UniConfigError) as e:
@@ -38,55 +41,43 @@ class Uni:
             exit(1)
 
     def start_cron(self) -> None:
-        cron_jobs = [UniCronJob.new(i, task, self.get_worker(task.worker.name)) for i, task in enumerate(self._config.cron_tasks.values())]
+        cron_jobs = UniCronJob.mk_jobs_list(self._mediator.config.cron_tasks.values(), self._mediator)
 
-        if len(cron_jobs) == 0:
-            return
-
-        logger.info(f'cron jobs defined: {", ".join(cj.name for cj in cron_jobs)}')
+        logger.debug(f'cron jobs defined: {", ".join(cj.task.name for cj in cron_jobs)}')
 
         while True:
-            delay, tasks = UniCronJob.search_next_tasks(cron_jobs)
+            delay, jobs = UniCronJob.search_next_tasks(cron_jobs)
 
             if delay is None:
                 return
 
-            logger.info("sleep %s seconds before running the tasks: %s", delay, [cj.name for cj in tasks])
+            logger.debug("sleep %s seconds before running the tasks: %s", delay, [cj.task.name for cj in jobs])
 
             if delay > 0:
                 sleep(delay)
 
-            logger.info("run the tasks: %s", [cj.name for cj in tasks])
+            logger.info("run the tasks: %s", [cj.task.name for cj in jobs])
 
-            for cj in tasks:
+            for cj in jobs:
                 cj.send()
 
             sleep(1.1)  # delay for correct next iteration
 
-    @property
-    def config(self) -> UniConfig:
-        return self._config
-
-    def get_worker(self, name: str, singleton: bool = True) -> UniWorker[UniMessage]:
-        return self._mediator.get_worker(name, singleton)
-
     def initialize(self, everything: bool = False, create: bool = True) -> None:
         if everything:
-            for wn in self._config.workers.keys():
+            for wn in self._mediator.config.workers.keys():
                 self._mediator.add_worker_to_init_list(wn, no_related=True)
-            self.initialize(everything=False, create=create)
-            return
         self._mediator.initialize(create=create)
 
-    def consume(self, name: str) -> None:
+    def init_producer_worker(self, name: str) -> None:
+        self._mediator.add_worker_to_init_list(name, no_related=True)
+
+    def init_consumer_worker(self, name: str) -> None:
         self._mediator.add_worker_to_init_list(name, no_related=False)
         self._mediator.add_worker_to_consume_list(name)
 
-    def send_to_worker(self, name, data: Dict[str, Any]) -> None:
-        self._mediator.add_worker_to_init_list(name, no_related=True)
-        self._mediator.initialize()
-        w = self._mediator.get_worker(name)
-        w.send(data)
+    def send_to(self, name: str, data: Union[Dict[str, Any], UniMessage], alone: bool = False) -> None:
+        self._mediator.send_to(name, data, alone=alone)
 
     def start_consuming(self) -> None:
         self._mediator.start_consuming()

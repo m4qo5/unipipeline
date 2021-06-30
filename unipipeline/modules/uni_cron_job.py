@@ -1,33 +1,31 @@
-from typing import NamedTuple, List, Tuple, Optional
+from typing import NamedTuple, List, Tuple, Optional, Iterable
 
 from crontab import CronTab  # type: ignore
 
 from unipipeline.messages.uni_cron_message import UniCronMessage
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
-from unipipeline.modules.uni_worker import UniWorker
-from unipipeline.modules.uni_message import UniMessage
+from unipipeline.modules.uni_mediator import UniMediator
 
 
 class UniCronJob(NamedTuple):
     id: int
-    name: str
-    alone: bool
+    task: UniCronTaskDefinition
     crontab: CronTab
-    worker: UniWorker[UniMessage]
+    mediator: UniMediator
     message: UniCronMessage
 
     @staticmethod
-    def new(id: int, task_def: UniCronTaskDefinition, worker: UniWorker[UniMessage]) -> 'UniCronJob':
-        return UniCronJob(
-            id=id,
-            name=task_def.name,
-            crontab=CronTab(task_def.when),
-            worker=worker,
-            alone=task_def.alone,
-            message=UniCronMessage(
-                task_name=task_def.name
-            )
-        )
+    def mk_jobs_list(tasks: Iterable[UniCronTaskDefinition], mediator: UniMediator) -> List['UniCronJob']:
+        res = list()
+        for i, task in enumerate(tasks):
+            res.append(UniCronJob(
+                id=i,
+                task=task,
+                crontab=CronTab(task.when),
+                mediator=mediator,
+                message=UniCronMessage(task_name=task.name)
+            ))
+        return res
 
     @staticmethod
     def search_next_tasks(all_tasks: List['UniCronJob']) -> Tuple[Optional[int], List['UniCronJob']]:
@@ -46,4 +44,4 @@ class UniCronJob(NamedTuple):
         return min_delay, notification_list
 
     def send(self) -> None:
-        self.worker.send(self.message)
+        self.mediator.send_to(self.task.worker.name, self.message, alone=self.task.alone)

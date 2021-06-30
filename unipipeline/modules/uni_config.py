@@ -1,16 +1,18 @@
-from typing import Dict, Any, List, Set
+from typing import Dict, Any, Set, Union, Type
 from uuid import uuid4
 
 import yaml  # type: ignore
 
+from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
+from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
+from unipipeline.modules.uni_message import UniMessage
+from unipipeline.modules.uni_message_codec import UniMessageCodec
+from unipipeline.modules.uni_message_definition import UniMessageDefinition
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 from unipipeline.modules.uni_service_definition import UniServiceDefinition
-from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
-from unipipeline.modules.uni_message_definition import UniMessageDefinition
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
-from unipipeline.modules.uni_broker_definition import  UniBrokerDefinition
-from unipipeline.modules.uni_message_codec import UniMessageCodec
-from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
+from unipipeline.modules.uni_worker import UniWorker
+from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.parse_definition import parse_definition
 from unipipeline.utils.serializer_registry import CONTENT_TYPE__APPLICATION_JSON
 from unipipeline.utils.template import template
@@ -65,6 +67,11 @@ class UniConfig:
     def messages(self) -> Dict[str, UniMessageDefinition]:
         self._parse()
         return self._messages_index
+
+    def get_worker_definition(self, worker: Union[Type['UniWorker[UniMessage]'], str]) -> UniWorkerDefinition:
+        if isinstance(worker, str):
+            return self.workers[worker]
+        return self.workers_by_class[worker.__name__]
 
     def _load_config(self) -> Dict[str, Any]:
         if self._config_loaded:

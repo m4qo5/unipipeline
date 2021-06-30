@@ -1,7 +1,8 @@
 import logging
 from time import sleep
-from typing import Dict, TypeVar, Any, Set
+from typing import Dict, TypeVar, Any, Set, List, Union, Optional, Type
 
+from unipipeline.modules.uni_message_meta import UniMessageMeta
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_config import UniConfig
 from unipipeline.modules.uni_message import UniMessage
@@ -24,6 +25,7 @@ class UniMediator:
         self._worker_instance_indexes: Dict[str, UniWorker] = dict()
         self._broker_instance_indexes: Dict[str, UniBroker] = dict()
         self._worker_init_list: Set[str] = set()
+        self._worker_initiialized_list: Set[str] = set()
         self._waiting_init_list: Set[str] = set()
         self._waiting_initialized_list: Set[str] = set()
 
@@ -31,6 +33,8 @@ class UniMediator:
         self._brokers_with_topics_to_init: Dict[str, Set[str]] = dict()
 
         self._brokers_with_topics_initialized: Dict[str, Set[str]] = dict()
+
+        self._message_types: Dict[str, Type[UniMessage]] = dict()
 
     def get_broker(self, name: str, singleton: bool = True) -> UniBroker:
         if not singleton:
@@ -45,6 +49,45 @@ class UniMediator:
     def add_worker_to_consume_list(self, name: str) -> None:
         self._consumers_list.add(name)
         logger.info('added consumer %s', name)
+
+    def get_message_type(self, name: str) -> Type[UniMessage]:
+        if name in self._message_types:
+            return self._message_types[name]
+
+        self._message_types[name] = self.config.messages[name].type.import_class(UniMessage)
+
+        return self._message_types[name]
+
+    def send_to(self, worker_name: str, payload: Union[Dict[str, Any], TMessage], parent_meta: Optional[UniMessageMeta] = None, alone: bool = False) -> None:
+        if worker_name not in self._worker_initiialized_list:
+            raise OverflowError(f'worker {worker_name} was not initialized')
+
+        wd = self._config.workers[worker_name]
+
+        message_type = self.get_message_type(wd.input_message.name)
+        if isinstance(payload, message_type):
+            payload_data = payload.dict()
+        elif isinstance(payload, dict):
+            payload_data = message_type(**payload).dict()
+        else:
+            raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
+
+        br = self.get_broker(wd.broker.name)
+
+        if alone:
+            size = br.get_topic_approximate_messages_count(wd.topic)
+            if size != 0:
+                logger.info("worker %s skipped, because topic %s has %s messages", wd.name, wd.topic, size)
+                return
+
+        if parent_meta is not None:
+            meta = parent_meta.create_child(payload_data)
+        else:
+            meta = UniMessageMeta.create_new(payload_data)
+
+        meta_list = [meta]
+        br.publish(wd.topic, meta_list)  # TODO: make it list by default
+        logger.info("worker %s sent message to topic '%s':: %s", wd.name, wd.topic, meta_list)
 
     def start_consuming(self) -> None:
         brokers = set()
@@ -84,6 +127,11 @@ class UniMediator:
         self._brokers_with_topics_to_init[name].add(topic)
 
     def initialize(self, create: bool = True) -> None:
+        for wn in self._worker_init_list:
+            logger.info('initialize :: worker "%s"', wn)
+            self._worker_initiialized_list.add(wn)
+        self._worker_init_list = set()
+
         for waiting_name in self._waiting_init_list:
             self._config.waitings[waiting_name].wait()
             logger.info('initialize :: waiting "%s"', waiting_name)
@@ -103,16 +151,16 @@ class UniMediator:
                     self._brokers_with_topics_initialized[bn].add(topic)
             self._brokers_with_topics_to_init = dict()
 
-    def get_worker(self, name: str, singleton: bool = True) -> UniWorker[UniMessage]:
-        if not singleton:
-            w_def = self._config.workers[name]
-            worker_type = w_def.type.import_class(UniWorker)
-            logger.info('get_worker :: initialized worker "%s"', name)
-            w = worker_type(definition=w_def, mediator=self)
-            return w
-        if name not in self._worker_instance_indexes:
-            self._worker_instance_indexes[name] = self.get_worker(name, singleton=False)
-        return self._worker_instance_indexes[name]
+    def get_worker(self, worker: Union[Type['UniWorker[TMessage]'], str], singleton: bool = True) -> UniWorker[UniMessage]:
+        wd = self._config.get_worker_definition(worker)
+        if not singleton or wd.name not in self._worker_instance_indexes:
+            worker_type = wd.type.import_class(UniWorker)
+            logger.info('get_worker :: initialized worker "%s"', wd.name)
+            w = worker_type(definition=wd, mediator=self)
+        else:
+            return self._worker_instance_indexes[wd.name]
+        self._worker_instance_indexes[wd.name] = w
+        return w
 
     @property
     def config(self) -> UniConfig:
