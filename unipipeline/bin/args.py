@@ -33,6 +33,7 @@ CMD_INIT = 'init'
 CMD_CHECK = 'check'
 CMD_CONSUME = 'consume'
 CMD_PRODUCE = 'produce'
+CMD_CRON = 'cron'
 
 
 parser = ArgumentParser(description='cli tool for unipipeline')
@@ -52,6 +53,8 @@ init_parser.add_argument('--create', type=str2bool, nargs='?', const=True, defau
 
 consume_parser = subparsers.add_parser(CMD_CONSUME)
 consume_parser.add_argument('--workers', '-w', type=str, nargs='+', required=True, dest='consume_workers', help='worker list for consuming')
+
+consume_parser = subparsers.add_parser(CMD_CRON)
 
 produce_parser = subparsers.add_parser(CMD_PRODUCE)
 produce_parser.add_argument('--alone', '-a', type=str2bool, nargs='?', const=True, default=False, dest='produce_alone')

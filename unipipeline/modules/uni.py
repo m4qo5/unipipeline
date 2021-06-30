@@ -69,6 +69,10 @@ class Uni:
                 self._mediator.add_worker_to_init_list(wn, no_related=True)
         self._mediator.initialize(create=create)
 
+    def init_cron(self) -> None:
+        for task in self._mediator.config.cron_tasks.values():
+            self._mediator.add_worker_to_init_list(task.worker.name, no_related=True)
+
     def init_producer_worker(self, name: str) -> None:
         self._mediator.add_worker_to_init_list(name, no_related=True)
 

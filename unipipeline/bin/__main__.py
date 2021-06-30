@@ -1,12 +1,19 @@
 import logging
 
-from .args import args, CMD_INIT, CMD_CHECK, CMD_PRODUCE, CMD_CONSUME
+from .args import args, CMD_INIT, CMD_CHECK, CMD_PRODUCE, CMD_CONSUME, CMD_CRON
 from .. import Uni
 
 
 def run_check(args) -> None:
     u = Uni(args.config_file)
     u.check(args.check_create)
+
+
+def run_cron(args) -> None:
+    u = Uni(args.config_file)
+    u.init_cron()
+    u.initialize()
+    u.start_cron()
 
 
 def run_init(args) -> None:
@@ -34,11 +41,16 @@ def run_produce(args) -> None:
 args_cmd_map = {
     CMD_INIT: run_init,
     CMD_CHECK: run_check,
+    CMD_CRON: run_cron,
     CMD_PRODUCE: run_produce,
     CMD_CONSUME: run_consume,
 }
 
 if args.verbose:
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s | %(name)s | %(levelname)s | %(message)s'
+    )
     logger = logging.getLogger('unipipeline')
     logger.setLevel(logging.DEBUG)
 
