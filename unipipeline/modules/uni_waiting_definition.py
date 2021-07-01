@@ -1,12 +1,12 @@
-import logging
 from time import sleep
 from uuid import UUID
 
 from unipipeline.modules.uni_definition import UniDefinition
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 from unipipeline.modules.uni_wating import UniWaiting
+from unipipeline.utils import log
 
-logger = logging.getLogger(__name__)
+logger = log.getChild(__name__)
 
 
 class UniWaitingDefinition(UniDefinition):

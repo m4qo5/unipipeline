@@ -1,4 +1,3 @@
-import logging
 from time import sleep
 from typing import Dict, Any, Union
 
@@ -9,9 +8,12 @@ from unipipeline.modules.uni_mediator import UniMediator
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_wating import UniWaiting
 from unipipeline.modules.uni_worker import UniWorker
+from unipipeline.utils import log
 from unipipeline.utils.parse_definition import ParseDefinitionError
 
-logger = logging.getLogger(__name__)
+logger = log.getChild(__name__)
+
+logger.debug('!!!debug')
 
 
 class Uni:

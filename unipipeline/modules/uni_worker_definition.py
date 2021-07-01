@@ -1,10 +1,8 @@
-from typing import List, Optional, Dict, Set, Any
+from typing import Dict, Set, Any
 from uuid import UUID
 
-from pydantic import validator
-
-from unipipeline.modules.uni_definition import UniDefinition
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
+from unipipeline.modules.uni_definition import UniDefinition
 from unipipeline.modules.uni_message_definition import UniMessageDefinition
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition

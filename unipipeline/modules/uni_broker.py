@@ -1,10 +1,10 @@
-import logging
 from typing import Callable, Any, Set, NamedTuple, List
 
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.utils import log
 
-logger = logging.getLogger(__name__)
+logger = log.getChild(__name__)
 
 
 class UniBrokerMessageManager:

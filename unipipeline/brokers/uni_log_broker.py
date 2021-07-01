@@ -6,6 +6,9 @@ from uuid import uuid4
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerConsumer
 from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.utils import log
+
+logger = log.getChild(__name__)
 
 
 class UniLogBroker(UniBroker):

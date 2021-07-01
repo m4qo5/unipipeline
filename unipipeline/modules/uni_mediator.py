@@ -1,17 +1,18 @@
-import logging
 from time import sleep
-from typing import Dict, TypeVar, Any, Set, List, Union, Optional, Type
+from time import sleep
+from typing import Dict, TypeVar, Any, Set, Union, Optional, Type
 
-from unipipeline.modules.uni_message_meta import UniMessageMeta
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_config import UniConfig
 from unipipeline.modules.uni_message import UniMessage
+from unipipeline.modules.uni_message_meta import UniMessageMeta
 from unipipeline.modules.uni_worker import UniWorker
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
+from unipipeline.utils import log
 
 TWorker = TypeVar('TWorker', bound=UniWorker)
 
-logger = logging.getLogger(__name__)
+logger = log.getChild(__name__)
 
 
 class UniMediator:

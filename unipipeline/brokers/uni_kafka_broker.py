@@ -1,5 +1,4 @@
 import json
-import logging
 from typing import Optional, Tuple, Any, Dict, List, NamedTuple, Set
 
 from kafka import KafkaProducer, KafkaConsumer  # type: ignore
@@ -9,8 +8,9 @@ from pydantic import BaseModel
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.utils import log
 
-logger = logging.getLogger(__name__)
+logger = log.getChild(__name__)
 
 
 class UniKafkaBrokerMessageManager(UniBrokerMessageManager):

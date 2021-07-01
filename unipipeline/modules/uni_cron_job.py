@@ -5,6 +5,9 @@ from crontab import CronTab  # type: ignore
 from unipipeline.messages.uni_cron_message import UniCronMessage
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.modules.uni_mediator import UniMediator
+from unipipeline.utils import log
+
+logger = log.getChild(__name__)
 
 
 class UniCronJob(NamedTuple):

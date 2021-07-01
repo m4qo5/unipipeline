@@ -1,11 +1,11 @@
-import logging
 from collections import deque
 from typing import Callable, Dict, TypeVar, Tuple, Optional, Deque, Set, List
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.utils import log
 
-logger = logging.getLogger(__name__)
+logger = log.getChild(__name__)
 
 
 class UniMemoryBrokerMessageManager(UniBrokerMessageManager):

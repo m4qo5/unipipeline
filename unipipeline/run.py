@@ -1,7 +1,9 @@
 import logging
+import sys
 
 from unipipeline import Uni
 from unipipeline.args import CMD_INIT, CMD_CHECK, CMD_CRON, CMD_PRODUCE, CMD_CONSUME, parse_args
+from unipipeline.utils.log import children_loggers
 
 
 def run_check(args) -> None:
@@ -51,11 +53,22 @@ def main():
     args = parse_args()
 
     if args.verbose:
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format='%(asctime)s | %(name)s | %(levelname)s | %(message)s'
-        )
-        logger = logging.getLogger('unipipeline')
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter('%(asctime)s | %(name)s | %(levelname)s | %(message)s'))
+
+        logging.basicConfig(format='%(asctime)s | %(name)s | %(levelname)s | %(message)s', level=logging.DEBUG, stream=sys.stdout)
+
+        logger = logging.getLogger()
+        logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
+        logger.disabled = False
+        logger.propagate = True
+
+        for ln in children_loggers:
+            logger = logging.getLogger(ln)
+            logger.addHandler(handler)
+            logger.setLevel(logging.DEBUG)
+            logger.disabled = False
+            logger.propagate = True
 
     args_cmd_map[args.cmd](args)

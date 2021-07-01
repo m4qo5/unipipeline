@@ -1,5 +1,4 @@
-import logging
-from typing import Callable, Optional, Any, Tuple, TypeVar, Set, List
+from typing import Optional, Any, Tuple, TypeVar, Set, List
 from urllib.parse import urlparse
 
 from pika import ConnectionParameters, PlainCredentials, BlockingConnection, BasicProperties, spec  # type: ignore
@@ -8,9 +7,10 @@ from pydantic import BaseModel
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
-from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_message import UniMessage
+from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.utils import log
 from unipipeline.utils.connection_pool import ConnectionObj, TConnectionObj, connection_pool
 
 BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
@@ -19,7 +19,7 @@ BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
 TMessage = TypeVar('TMessage', bound=UniMessage)
 
 
-logger = logging.getLogger(__name__)
+logger = log.getChild(__name__)
 
 
 class UniAmqpBrokerMessageManager(UniBrokerMessageManager):

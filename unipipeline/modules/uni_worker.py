@@ -1,4 +1,3 @@
-import logging
 from typing import Generic, Type, Any, TypeVar, Optional, Dict, Union
 from uuid import uuid4
 
@@ -6,9 +5,11 @@ from unipipeline.modules.uni_broker import UniBrokerMessageManager, UniBrokerCon
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
+from unipipeline.utils import log
 
 TMessage = TypeVar('TMessage', bound=UniMessage)
-logger = logging.getLogger(__name__)
+
+logger = log.getChild(__name__)
 
 
 class UniPayloadParsingError(Exception):

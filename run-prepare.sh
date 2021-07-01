@@ -20,7 +20,8 @@ export PYTHONPATH=$CWD
 
 mypy ./unipipeline ./example
 
-python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose yes check --create
+python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose=yes check --create
+python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose=yes init
 
 rm -rf ./build
 

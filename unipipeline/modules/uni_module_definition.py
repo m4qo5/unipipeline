@@ -1,12 +1,12 @@
-import logging
 import os.path
 from importlib import import_module, invalidate_caches
 from time import sleep
 from typing import NamedTuple, Generic, Type, TypeVar, Any
 
+from unipipeline.utils import log
 from unipipeline.utils.template import template
 
-logger = logging.getLogger(__name__)
+logger = log.getChild(__name__)
 
 T = TypeVar('T')
 
