@@ -28,6 +28,11 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Operating System :: OS Independent"
     ],
+    entry_points = {
+        "console_scripts": [
+            'unipipeline = unipipeline.main:main'
+        ]
+    },
     packages=find_packages(),
     include_package_data=True,
     install_requires=["jinja2", "pyyaml", "kafka-python", "pika", "pydantic", "crontab"]

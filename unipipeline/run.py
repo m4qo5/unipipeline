@@ -1,7 +1,7 @@
 import logging
 
-from .args import args, CMD_INIT, CMD_CHECK, CMD_PRODUCE, CMD_CONSUME, CMD_CRON
-from .. import Uni
+from unipipeline import Uni
+from unipipeline.args import CMD_INIT, CMD_CHECK, CMD_CRON, CMD_PRODUCE, CMD_CONSUME, parse_args
 
 
 def run_check(args) -> None:
@@ -46,14 +46,16 @@ args_cmd_map = {
     CMD_CONSUME: run_consume,
 }
 
-if args.verbose:
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s | %(name)s | %(levelname)s | %(message)s'
-    )
-    logger = logging.getLogger('unipipeline')
-    logger.setLevel(logging.DEBUG)
 
-args_cmd_map[args.cmd](args)
+def main():
+    args = parse_args()
 
-print('DONE')
+    if args.verbose:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s | %(name)s | %(levelname)s | %(message)s'
+        )
+        logger = logging.getLogger('unipipeline')
+        logger.setLevel(logging.DEBUG)
+
+    args_cmd_map[args.cmd](args)

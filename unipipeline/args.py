@@ -61,4 +61,6 @@ produce_parser.add_argument('--alone', '-a', type=str2bool, nargs='?', const=Tru
 produce_parser.add_argument('--worker', '-w', type=str, required=True, dest='produce_worker')
 produce_parser.add_argument('--data', '-d', type=json_data, required=True, dest='produce_data')
 
-args = parser.parse_args()
+
+def parse_args():
+    return parser.parse_args()
