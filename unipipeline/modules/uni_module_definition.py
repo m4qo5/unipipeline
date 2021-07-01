@@ -1,9 +1,12 @@
+import logging
 import os.path
 from importlib import import_module, invalidate_caches
 from time import sleep
 from typing import NamedTuple, Generic, Type, TypeVar, Any
 
 from unipipeline.utils.template import template
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
 
@@ -103,8 +106,12 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
                 if not os.path.isfile(path_init):
                     with open(path_init, "wt+") as fi:
                         fi.write("")
+                        logger.info('file %s was created', path_init)
                 with open(path, 'wt') as fm:
                     fm.writelines(template(tpl_map[class_type.__name__], data=create_template_params, name=self.class_name))
+                    logger.info('file %s was created', path)
+
+                invalidate_caches()
                 for i in range(10):  # because fs has cache time
                     try:
                         mdl = import_module(self.module)
