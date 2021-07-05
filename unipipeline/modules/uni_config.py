@@ -104,8 +104,11 @@ class UniConfig:
         self._messages_index = self._parse_messages(cfg, self._service)
         self._workers_by_name_index = self._parse_workers(cfg, self._service, self._brokers_index, self._messages_index, self._waitings_index, self._external)
 
-        for w in self._workers_by_class_index.values():
-            self._workers_by_class_index[w.type.class_name] = w
+        for wd in self._workers_by_class_index.values():
+            if wd.marked_as_external:
+                continue
+            assert wd.type is not None
+            self._workers_by_class_index[wd.type.class_name] = wd
 
         self._cron_tasks_index = self._parse_cron_tasks(cfg, self._service, self._workers_by_name_index)
 
@@ -216,7 +219,7 @@ class UniConfig:
 
         external_conf = config["external"]
 
-        defaults = dict()
+        defaults: Dict[str, Any] = dict()
 
         result = dict()
 
@@ -295,13 +298,13 @@ class UniConfig:
             error_topic_template = definition.pop('error_topic')
             error_payload_topic_template = definition.pop('error_payload_topic')
 
-            template_data = {**definition, "service": service}
+            template_data: Dict[str, Any] = {**definition, "service": service}
             topic = template(definition.pop('topic'), **template_data)
             template_data['topic'] = topic
 
             defn = UniWorkerDefinition(
                 **definition,
-                type=UniModuleDefinition.parse(template(definition["import_template"], **template_data)),
+                type=UniModuleDefinition.parse(template(definition["import_template"], **template_data)) if definition["external"] is None else None,
                 topic=topic,
                 error_topic=template(error_topic_template, **template_data),
                 error_payload_topic=template(error_payload_topic_template, **template_data),

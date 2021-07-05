@@ -12,7 +12,7 @@ class UniWorkerDefinition(UniDefinition):
     id: UUID
     name: str
     broker: UniBrokerDefinition[Any]
-    type: UniModuleDefinition
+    type: Optional[UniModuleDefinition]
     topic: str
     error_topic: str
     error_payload_topic: str
@@ -25,15 +25,3 @@ class UniWorkerDefinition(UniDefinition):
     @property
     def marked_as_external(self) -> bool:
         return self.external is not None
-
-    def get_related_broker_names(self, index_of_workers: Dict[str, 'UniWorkerDefinition']) -> Set[str]:
-        result = {self.broker.name,}
-        for w_name in self.output_workers:
-            result.add(index_of_workers[w_name].broker.name)
-        return result
-
-    def get_related_worker_names(self) -> Set[str]:
-        result = {self.name,}
-        for w_name in self.output_workers:
-            result.add(w_name)
-        return result

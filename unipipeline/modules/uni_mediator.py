@@ -155,7 +155,10 @@ class UniMediator:
 
     def get_worker(self, worker: Union[Type['UniWorker[UniMessage]'], str], singleton: bool = True) -> UniWorker[UniMessage]:
         wd = self._config.get_worker_definition(worker)
+        if wd.marked_as_external:
+            raise OverflowError(f'worker "{worker}" is external. you could not get it')
         if not singleton or wd.name not in self._worker_instance_indexes:
+            assert wd.type is not None
             worker_type = wd.type.import_class(UniWorker)
             logger.info('get_worker :: initialized worker "%s"', wd.name)
             w = worker_type(definition=wd, mediator=self)

@@ -33,6 +33,9 @@ class Uni:
                 message_def.type.import_class(UniMessage, create, create_template_params=message_def)
 
             for worker_def in self._mediator.config.workers.values():
+                if worker_def.marked_as_external:
+                    continue
+                assert worker_def.type is not None
                 worker_def.type.import_class(UniWorker, create, create_template_params=worker_def)
 
             for waiting_def in self._mediator.config.waitings.values():
