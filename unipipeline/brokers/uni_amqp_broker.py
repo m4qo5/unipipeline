@@ -6,7 +6,6 @@ from pika.adapters.blocking_connection import BlockingChannel  # type: ignore
 from pydantic import BaseModel
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
-from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_message_meta import UniMessageMeta
@@ -23,15 +22,15 @@ class UniAmqpBrokerMessageManager(UniBrokerMessageManager):
     def __init__(self, channel: BlockingChannel, method_frame: spec.Basic.Deliver) -> None:
         self._channel = channel
         self._method_frame = method_frame
-        self._acked = False
+        self._acknowledged = False
 
     def reject(self) -> None:
         self._channel.basic_reject(delivery_tag=self._method_frame.delivery_tag, requeue=True)
 
     def ack(self) -> None:
-        if self._acked:
+        if self._acknowledged:
             return
-        self._acked = True
+        self._acknowledged = True
         self._channel.basic_ack(delivery_tag=self._method_frame.delivery_tag)
 
 
@@ -77,6 +76,9 @@ class UniAmqpBrokerConfig(BaseModel):
 
 
 class UniAmqpBroker(UniBroker[bytes]):
+    def get_topic_approximate_messages_count(self, topic: str) -> int:
+        raise NotImplementedError(f"method get_topic_approximate_messages_count must be implemented for class '{type(self).__name__}'")  # TODO
+
     @classmethod
     def get_connection_uri(cls) -> str:
         raise NotImplementedError(f"cls method get_connection_uri must be implemented for class '{cls.__name__}'")

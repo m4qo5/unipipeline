@@ -1,4 +1,3 @@
-import logging
 from typing import Dict, Any, Set, Union, Type, Optional
 from uuid import uuid4
 
@@ -36,7 +35,7 @@ class UniConfig:
         self._config: Dict[str, Any] = dict()
         self._parsed = False
         self._config_loaded = False
-        self._waitings_index: Dict[str, UniWaitingDefinition] = dict()
+        self._waiting_index: Dict[str, UniWaitingDefinition] = dict()
         self._external: Dict[str, UniExternalDefinition] = dict()
         self._brokers_index: Dict[str, UniBrokerDefinition] = dict()
         self._messages_index: Dict[str, UniMessageDefinition] = dict()
@@ -82,7 +81,7 @@ class UniConfig:
     @property
     def waitings(self) -> Dict[str, UniWaitingDefinition]:
         self._parse()
-        return self._waitings_index
+        return self._waiting_index
 
     @property
     def messages(self) -> Dict[str, UniMessageDefinition]:
@@ -117,8 +116,8 @@ class UniConfig:
         self._external = self._parse_external_services(cfg)
         self.echo.log_info(f'parsed external: {",".join(self._external.keys())}')
 
-        self._waitings_index = self._parse_waitings(cfg, self._service)
-        self.echo.log_info(f'parsed waitings: {",".join(self._waitings_index.keys())}')
+        self._waiting_index = self._parse_waitings(cfg, self._service)
+        self.echo.log_info(f'parsed waitings: {",".join(self._waiting_index.keys())}')
 
         self._brokers_index = self._parse_brokers(cfg, self._service)
         self.echo.log_info(f'parsed brokers: {",".join(self._brokers_index.keys())}')
@@ -126,7 +125,7 @@ class UniConfig:
         self._messages_index = self._parse_messages(cfg, self._service)
         self.echo.log_info(f'parsed messages: {",".join(self._messages_index.keys())}')
 
-        self._workers_by_name_index = self._parse_workers(cfg, self._service, self._brokers_index, self._messages_index, self._waitings_index, self._external)
+        self._workers_by_name_index = self._parse_workers(cfg, self._service, self._brokers_index, self._messages_index, self._waiting_index, self._external)
         self.echo.log_info(f'parsed workers: {",".join(self._workers_by_name_index.keys())}')
 
         for wd in self._workers_by_class_index.values():
@@ -172,10 +171,10 @@ class UniConfig:
 
         for name, definition, other_props in parse_definition("messages", config["messages"], dict(), {"import_template", }):
             import_template = definition.pop("import_template")
-            id = definition.pop("id")
+            id_ = definition.pop("id")
             result[name] = UniMessageDefinition(
                 **definition,
-                type=UniModuleDefinition.parse(template(import_template, **definition, **{"service": service, "id": id})),
+                type=UniModuleDefinition.parse(template(import_template, **definition, **{"service": service, "id": id_})),
                 _dynamic_props_=other_props,
             )
 

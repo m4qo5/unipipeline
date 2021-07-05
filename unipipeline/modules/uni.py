@@ -49,7 +49,7 @@ class Uni:
     def start_cron(self) -> None:
         try:
             self._mediator.start_cron()
-        except KeyboardInterrupt as e:
+        except KeyboardInterrupt:
             self.echo.log_warning('interrupted')
             exit(0)
 
@@ -76,6 +76,6 @@ class Uni:
     def start_consuming(self) -> None:
         try:
             self._mediator.start_consuming()
-        except KeyboardInterrupt as e:
+        except KeyboardInterrupt:
             self.echo.log_warning('interrupted')
             exit(0)

@@ -39,6 +39,8 @@ class UniMessageCodec(BaseModel, Generic[TContent]):
                 data_bytes = bytes(data, encoding='utf-8')
             elif isinstance(data, bytes):
                 data_bytes = data
+            else:
+                raise TypeError('invalid type')
             return compressor_registry.dumps(data_bytes, self.compression).decode("utf-8")  # type: ignore
         return data
 

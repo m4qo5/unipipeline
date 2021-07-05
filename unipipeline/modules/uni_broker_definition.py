@@ -1,4 +1,4 @@
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, Dict, Any
 from uuid import UUID
 
 from unipipeline.modules.uni_definition import UniDefinition
@@ -16,3 +16,5 @@ class UniBrokerDefinition(UniDefinition, Generic[TContent]):
     retry_delay_s: int
 
     codec: UniMessageCodec[TContent]
+
+    _dynamic_props_: Dict[str, Any]

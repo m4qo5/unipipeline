@@ -22,6 +22,8 @@ class UniWorkerDefinition(UniDefinition):
     waitings: Set[UniWaitingDefinition]
     external: Optional[str]
 
+    _dynamic_props_: Dict[str, Any]
+
     @property
     def marked_as_external(self) -> bool:
         return self.external is not None

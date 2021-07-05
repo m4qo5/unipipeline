@@ -6,7 +6,6 @@ from kafka.consumer.fetcher import ConsumerRecord  # type: ignore
 from pydantic import BaseModel
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
-from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 
 
@@ -71,8 +70,8 @@ class UniKafkaBroker(UniBroker[bytes]):
         if self._producer is not None:
             self._producer.close()
             self._producer = None
-        for cnsmr in self._consumers:
-            cnsmr.kfk_consumer.close()
+        for consumer in self._consumers:
+            consumer.kfk_consumer.close()
 
     def _serialize_body(self, meta: UniMessageMeta) -> Tuple[bytes, bytes]:
         meta_dumps = self.definition.codec.dumps(meta.dict())

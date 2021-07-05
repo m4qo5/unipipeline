@@ -9,7 +9,13 @@ class ParseDefinitionError(Exception):
     pass
 
 
-def parse_definition(conf_name: str, definitions: Dict[str, Any], defaults: Dict[str, Any], required_keys: Set[str], sys_names: Set[str] = None) -> Iterator[Tuple[str, Dict[str, Any], Dict[str, Any]]]:
+def parse_definition(
+    conf_name: str,
+    definitions: Dict[str, Any],
+    defaults: Dict[str, Any],
+    required_keys: Set[str],
+    sys_names: Set[str] = None
+) -> Iterator[Tuple[str, Dict[str, Any], Dict[str, Any]]]:
     if sys_names is None:
         sys_names = set()
 

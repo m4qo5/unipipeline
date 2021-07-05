@@ -10,7 +10,7 @@ def template(definition: str, **kwargs: Any) -> str:
 
     env = Environment(loader=BaseLoader())
     env.filters['camel'] = camel_case
-    rtemplate = env.from_string(definition)
-    result = rtemplate.render(**kwargs)
+    template_ = env.from_string(definition)
+    result = template_.render(**kwargs)
 
     return result

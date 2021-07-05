@@ -21,7 +21,7 @@ class UniMediator:
         self._worker_instance_indexes: Dict[str, UniWorker] = dict()
         self._broker_instance_indexes: Dict[str, UniBroker] = dict()
         self._worker_init_list: Set[str] = set()
-        self._worker_initiialized_list: Set[str] = set()
+        self._worker_initialized_list: Set[str] = set()
         self._waiting_init_list: Set[str] = set()
         self._waiting_initialized_list: Set[str] = set()
 
@@ -64,7 +64,7 @@ class UniMediator:
         return self._message_types[name]
 
     def send_to(self, worker_name: str, payload: Union[Dict[str, Any], UniMessage], parent_meta: Optional[UniMessageMeta] = None, alone: bool = False) -> None:
-        if worker_name not in self._worker_initiialized_list:
+        if worker_name not in self._worker_initialized_list:
             raise OverflowError(f'worker {worker_name} was not initialized')
 
         wd = self._config.workers[worker_name]
@@ -149,7 +149,7 @@ class UniMediator:
     def initialize(self, create: bool = True) -> None:
         for wn in self._worker_init_list:
             self.echo.log_info(f'initialize :: worker "{wn}"', )
-            self._worker_initiialized_list.add(wn)
+            self._worker_initialized_list.add(wn)
         self._worker_init_list = set()
 
         for waiting_name in self._waiting_init_list:

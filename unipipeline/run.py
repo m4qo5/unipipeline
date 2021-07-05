@@ -50,7 +50,7 @@ def main():
     u = Uni(args.config_file, echo_level=logging.DEBUG if args.verbose else None)
     try:
         args_cmd_map[args.cmd](u, args)
-    except KeyboardInterrupt as e:
+    except KeyboardInterrupt:
         u.echo.log_warning('interrupted')
         exit(0)
     u.echo.success('done')

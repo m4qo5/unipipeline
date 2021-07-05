@@ -1,5 +1,4 @@
 import os.path
-import sys
 import importlib
 from time import sleep
 from typing import NamedTuple, Generic, Type, TypeVar, Any, Optional, Set
@@ -101,6 +100,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
         except ModuleNotFoundError:
             if not auto_create:
                 raise
+            mdl = None  # type: ignore
             echo = echo.mk_child(f'module[{self.module}::{self.class_name}]')
             hierarchy = self.module.split('.')
             path = os.path.abspath(f'{os.path.join("./", *hierarchy)}.py')
@@ -140,6 +140,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
             if not success:
                 echo.log_error(f'could not be loaded')
                 exit(1)
+        assert mdl is not None
         tp = getattr(mdl, self.class_name)
         if not issubclass(tp, class_type):
             ValueError(f'class {self.class_name} is not subclass of {class_type.__name__}')
