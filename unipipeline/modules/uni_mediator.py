@@ -3,23 +3,20 @@ from typing import Dict, TypeVar, Any, Set, Union, Optional, Type
 
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_config import UniConfig
+from unipipeline.modules.uni_cron_job import UniCronJob
+from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 from unipipeline.modules.uni_worker import UniWorker
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
-from unipipeline.utils import log
 
 TWorker = TypeVar('TWorker', bound=UniWorker)
 
-logger = log.getChild(__name__)
-
 
 class UniMediator:
-    def __init__(
-        self,
-        config: UniConfig,
-    ) -> None:
+    def __init__(self, config: UniConfig) -> None:
         self._config = config
+
         self._worker_definition_by_type: Dict[Any, UniWorkerDefinition] = dict()
         self._worker_instance_indexes: Dict[str, UniWorker] = dict()
         self._broker_instance_indexes: Dict[str, UniBroker] = dict()
@@ -30,16 +27,22 @@ class UniMediator:
 
         self._consumers_list: Set[str] = set()
         self._brokers_with_topics_to_init: Dict[str, Set[str]] = dict()
-
         self._brokers_with_topics_initialized: Dict[str, Set[str]] = dict()
 
         self._message_types: Dict[str, Type[UniMessage]] = dict()
 
+    @property
+    def echo(self) -> UniEcho:
+        return self._config.echo
+
+    def set_echo_level(self, level: int) -> None:
+        self.echo.level = level
+
     def get_broker(self, name: str, singleton: bool = True) -> UniBroker:
         if not singleton:
             broker_def = self.config.brokers[name]
-            broker_type = broker_def.type.import_class(UniBroker)
-            br = broker_type(definition=broker_def)
+            broker_type = broker_def.type.import_class(UniBroker, self.echo)
+            br = broker_type(mediator=self, definition=broker_def)
             return br
         if name not in self._broker_instance_indexes:
             self._broker_instance_indexes[name] = self.get_broker(name, singleton=False)
@@ -50,13 +53,13 @@ class UniMediator:
         if wd.marked_as_external:
             raise OverflowError(f'your could not use worker "{name}" as consumer. it marked as external "{wd.external}"')
         self._consumers_list.add(name)
-        logger.info('added consumer %s', name)
+        self.echo.log_info(f'added consumer {name}')
 
     def get_message_type(self, name: str) -> Type[UniMessage]:
         if name in self._message_types:
             return self._message_types[name]
 
-        self._message_types[name] = self.config.messages[name].type.import_class(UniMessage)
+        self._message_types[name] = self.config.messages[name].type.import_class(UniMessage, self.echo)
 
         return self._message_types[name]
 
@@ -79,7 +82,7 @@ class UniMediator:
         if alone:
             size = br.get_topic_approximate_messages_count(wd.topic)
             if size != 0:
-                logger.info("worker %s skipped, because topic %s has %s messages", wd.name, wd.topic, size)
+                self.echo.log_info(f"worker {wd.name} skipped, because topic {wd.topic} has {size} messages")
                 return
 
         if parent_meta is not None:
@@ -89,18 +92,33 @@ class UniMediator:
 
         meta_list = [meta]
         br.publish(wd.topic, meta_list)  # TODO: make it list by default
-        logger.info("worker %s sent message to topic '%s':: %s", wd.name, wd.topic, meta_list)
+        self.echo.log_info(f"worker {wd.name} sent message to topic '{wd.topic}':: {meta_list}")
+
+    def start_cron(self) -> None:
+        cron_jobs = UniCronJob.mk_jobs_list(self.config.cron_tasks.values(), self)
+        self.echo.log_debug(f'cron jobs defined: {", ".join(cj.task.name for cj in cron_jobs)}')
+        while True:
+            delay, jobs = UniCronJob.search_next_tasks(cron_jobs)
+            if delay is None:
+                return
+            self.echo.log_debug(f"sleep {delay} seconds before running the tasks: {[cj.task.name for cj in jobs]}")
+            if delay > 0:
+                sleep(delay)
+            self.echo.log_info(f"run the tasks: {[cj.task.name for cj in jobs]}")
+            for cj in jobs:
+                cj.send()
+            sleep(1.1)  # delay for correct next iteration
 
     def start_consuming(self) -> None:
         brokers = set()
         for wn in self._consumers_list:
             w = self.get_worker(wn)
             w.consume()
-            logger.info('consumer %s initialized', wn)
+            self.echo.log_info(f'consumer {wn} initialized')
             brokers.add(w.definition.broker.name)
         for bn in brokers:
             b = self.get_broker(bn)
-            logger.info('broker %s consuming start', bn)
+            self.echo.log_info(f'broker {bn} consuming start')
             b.start_consuming()
 
     def add_worker_to_init_list(self, name: str, no_related: bool) -> None:
@@ -130,13 +148,13 @@ class UniMediator:
 
     def initialize(self, create: bool = True) -> None:
         for wn in self._worker_init_list:
-            logger.info('initialize :: worker "%s"', wn)
+            self.echo.log_info(f'initialize :: worker "{wn}"', )
             self._worker_initiialized_list.add(wn)
         self._worker_init_list = set()
 
         for waiting_name in self._waiting_init_list:
-            self._config.waitings[waiting_name].wait()
-            logger.info('initialize :: waiting "%s"', waiting_name)
+            self._config.waitings[waiting_name].wait(self.echo)
+            self.echo.log_info(f'initialize :: waiting "{waiting_name}"')
             self._waiting_initialized_list.add(waiting_name)
         self._waiting_init_list = set()
 
@@ -145,7 +163,7 @@ class UniMediator:
                 b = self.wait_for_broker_connection(bn)
 
                 b.initialize(topics)
-                logger.info('initialize :: broker "%s" topics :: %s', b.definition.name, topics)
+                self.echo.log_info(f'initialize :: broker "{b.definition.name}" topics :: {topics}')
 
                 if bn not in self._brokers_with_topics_initialized:
                     self._brokers_with_topics_initialized[bn] = set()
@@ -159,8 +177,8 @@ class UniMediator:
             raise OverflowError(f'worker "{worker}" is external. you could not get it')
         if not singleton or wd.name not in self._worker_instance_indexes:
             assert wd.type is not None
-            worker_type = wd.type.import_class(UniWorker)
-            logger.info('get_worker :: initialized worker "%s"', wd.name)
+            worker_type = wd.type.import_class(UniWorker, self.echo)
+            self.echo.log_info(f'get_worker :: initialized worker "{wd.name}"')
             w = worker_type(definition=wd, mediator=self)
         else:
             return self._worker_instance_indexes[wd.name]
@@ -176,10 +194,10 @@ class UniMediator:
         for try_count in range(br.definition.retry_max_count):
             try:
                 br.connect()
-                logger.info('wait_for_broker_connection :: broker %s connected', br.definition.name)
+                self.echo.log_info(f'wait_for_broker_connection :: broker {br.definition.name} connected')
                 return br
             except ConnectionError as e:
-                logger.info('wait_for_broker_connection :: broker %s retry to connect [%s/%s] : %s', br.definition.name, try_count, br.definition.retry_max_count, str(e))
+                self.echo.log_info(f'wait_for_broker_connection :: broker {br.definition.name} retry to connect [{try_count}/{br.definition.retry_max_count}] : {e}')
                 sleep(br.definition.retry_delay_s)
                 continue
         raise ConnectionError(f'unavailable connection to {br.definition.name}')

@@ -8,9 +8,6 @@ from pydantic import BaseModel
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_message_meta import UniMessageMeta
-from unipipeline.utils import log
-
-logger = log.getChild(__name__)
 
 
 class UniKafkaBrokerMessageManager(UniBrokerMessageManager):
@@ -30,15 +27,15 @@ class UniKafkaBrokerConsumer(NamedTuple):
     consumer: UniBrokerConsumer
 
 
-class UniKafkaBroker(UniBroker):
+class UniKafkaBroker(UniBroker[bytes]):
     def get_topic_approximate_messages_count(self, topic: str) -> int:
         return 0  # TODO
 
     def initialize(self, topics: Set[str]) -> None:
         pass
 
-    def __init__(self, definition: UniBrokerDefinition[bytes]) -> None:
-        super().__init__(definition)
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
 
         self.conf = UniKafkaBrokerConf(**self.definition.configure_dynamic(dict(
            api_version=None
@@ -99,7 +96,7 @@ class UniKafkaBroker(UniBroker):
     def start_consuming(self) -> None:
         self.connect()
         if len(self._consumers) == 0:
-            logger.warning('no consumers to start')
+            self.echo.log_warning('no consumers to start')
             return
         if self._consuming_started:
             raise OverflowError('consuming was started')

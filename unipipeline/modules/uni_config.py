@@ -1,10 +1,12 @@
-from typing import Dict, Any, Set, Union, Type
+import logging
+from typing import Dict, Any, Set, Union, Type, Optional
 from uuid import uuid4
 
 import yaml  # type: ignore
 
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
+from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.modules.uni_external_definition import UniExternalDefinition
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_codec import UniMessageCodec
@@ -26,8 +28,10 @@ class UniConfigError(Exception):
 
 
 class UniConfig:
-    def __init__(self, file_path: str) -> None:
+    def __init__(self, file_path: str, echo_level: Optional[Union[str, int]] = None) -> None:
         self._file_path = file_path
+        self._echo_level = echo_level
+        self._echo = UniEcho('UNI', level=echo_level or 'error', colors=False)
 
         self._config: Dict[str, Any] = dict()
         self._parsed = False
@@ -39,11 +43,21 @@ class UniConfig:
         self._workers_by_name_index: Dict[str, UniWorkerDefinition] = dict()
         self._workers_by_class_index: Dict[str, UniWorkerDefinition] = dict()
         self._cron_tasks_index: Dict[str, UniCronTaskDefinition] = dict()
+        self._service: UniServiceDefinition = None  # type: ignore
+
+    @property
+    def echo(self) -> UniEcho:
+        return self._echo
 
     @property
     def brokers(self) -> Dict[str, UniBrokerDefinition[Any]]:
         self._parse()
         return self._brokers_index
+
+    @property
+    def service(self) -> UniServiceDefinition:
+        self._parse()
+        return self._service
 
     @property
     def cron_tasks(self) -> Dict[str, UniCronTaskDefinition]:
@@ -98,11 +112,22 @@ class UniConfig:
         cfg = self._load_config()
 
         self._service = self._parse_service(cfg)
+        self.echo.log_info(f'parsed service: {self._service.name}')
+
         self._external = self._parse_external_services(cfg)
+        self.echo.log_info(f'parsed external: {",".join(self._external.keys())}')
+
         self._waitings_index = self._parse_waitings(cfg, self._service)
+        self.echo.log_info(f'parsed waitings: {",".join(self._waitings_index.keys())}')
+
         self._brokers_index = self._parse_brokers(cfg, self._service)
+        self.echo.log_info(f'parsed brokers: {",".join(self._brokers_index.keys())}')
+
         self._messages_index = self._parse_messages(cfg, self._service)
+        self.echo.log_info(f'parsed messages: {",".join(self._messages_index.keys())}')
+
         self._workers_by_name_index = self._parse_workers(cfg, self._service, self._brokers_index, self._messages_index, self._waitings_index, self._external)
+        self.echo.log_info(f'parsed workers: {",".join(self._workers_by_name_index.keys())}')
 
         for wd in self._workers_by_class_index.values():
             if wd.marked_as_external:
@@ -208,9 +233,16 @@ class UniConfig:
         if "name" not in service_conf:
             raise UniConfigError(f'service->name is not defined')
 
+        clrs = service_conf.get('echo_colors', True)
+        lvl = service_conf.get('echo_level', 'warning')
+
+        self._echo = UniEcho('UNI', level=self._echo_level or lvl, colors=clrs)
+
         return UniServiceDefinition(
             name=service_conf["name"],
             id=uuid4(),
+            colors=clrs,
+            echo_level=lvl,
         )
 
     def _parse_external_services(self, config: Dict[str, Any]) -> Dict[str, UniExternalDefinition]:

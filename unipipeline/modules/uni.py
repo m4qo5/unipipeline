@@ -1,72 +1,57 @@
-from time import sleep
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Optional
 
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_config import UniConfig, UniConfigError
-from unipipeline.modules.uni_cron_job import UniCronJob
+from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.modules.uni_mediator import UniMediator
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_wating import UniWaiting
 from unipipeline.modules.uni_worker import UniWorker
-from unipipeline.utils import log
 from unipipeline.utils.parse_definition import ParseDefinitionError
-
-logger = log.getChild(__name__)
-
-logger.debug('!!!debug')
 
 
 class Uni:
-    def __init__(self, config: Union[UniConfig, str]) -> None:
+    def __init__(self, config: Union[UniConfig, str], echo_level: Optional[Union[str, int]] = None) -> None:
         if isinstance(config, str):
-            config = UniConfig(config)
+            config = UniConfig(config, echo_level)
         if not isinstance(config, UniConfig):
             raise ValueError(f'invalid config type. {type(config).__name__} was given')
         self._mediator = UniMediator(config)
 
+    @property
+    def echo(self) -> UniEcho:
+        return self._mediator.echo
+
+    def set_echo_level(self, level: int):
+        self._mediator.set_echo_level(level)
+
     def check(self, create: bool = False) -> None:
         try:
+            for waiting_def in self._mediator.config.waitings.values():
+                waiting_def.type.import_class(UniWaiting, self.echo, create, create_template_params=waiting_def)
+
             for broker_def in self._mediator.config.brokers.values():
-                broker_def.type.import_class(UniBroker, create, create_template_params=broker_def)
+                broker_def.type.import_class(UniBroker, self.echo, create, create_template_params=broker_def)
 
             for message_def in self._mediator.config.messages.values():
-                message_def.type.import_class(UniMessage, create, create_template_params=message_def)
+                message_def.type.import_class(UniMessage, self.echo, create, create_template_params=message_def)
 
             for worker_def in self._mediator.config.workers.values():
                 if worker_def.marked_as_external:
                     continue
                 assert worker_def.type is not None
-                worker_def.type.import_class(UniWorker, create, create_template_params=worker_def)
-
-            for waiting_def in self._mediator.config.waitings.values():
-                waiting_def.type.import_class(UniWaiting, create, create_template_params=waiting_def)
+                worker_def.type.import_class(UniWorker, self.echo, create, create_template_params=worker_def)
 
         except (ParseDefinitionError, UniConfigError) as e:
             print(f"ERROR: {e}")
             exit(1)
 
     def start_cron(self) -> None:
-        cron_jobs = UniCronJob.mk_jobs_list(self._mediator.config.cron_tasks.values(), self._mediator)
-
-        logger.debug(f'cron jobs defined: {", ".join(cj.task.name for cj in cron_jobs)}')
-
-        while True:
-            delay, jobs = UniCronJob.search_next_tasks(cron_jobs)
-
-            if delay is None:
-                return
-
-            logger.debug("sleep %s seconds before running the tasks: %s", delay, [cj.task.name for cj in jobs])
-
-            if delay > 0:
-                sleep(delay)
-
-            logger.info("run the tasks: %s", [cj.task.name for cj in jobs])
-
-            for cj in jobs:
-                cj.send()
-
-            sleep(1.1)  # delay for correct next iteration
+        try:
+            self._mediator.start_cron()
+        except KeyboardInterrupt as e:
+            self.echo.log_warning('interrupted')
+            exit(0)
 
     def initialize(self, everything: bool = False, create: bool = True) -> None:
         if everything:
@@ -89,4 +74,8 @@ class Uni:
         self._mediator.send_to(name, data, alone=alone)
 
     def start_consuming(self) -> None:
-        self._mediator.start_consuming()
+        try:
+            self._mediator.start_consuming()
+        except KeyboardInterrupt as e:
+            self.echo.log_warning('interrupted')
+            exit(0)

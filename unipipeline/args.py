@@ -3,6 +3,9 @@ import os.path
 from argparse import ArgumentParser, ArgumentTypeError
 
 
+CWD = os.getcwdb()
+
+
 def str2bool(v):
     if isinstance(v, bool):
         return v
@@ -16,7 +19,7 @@ def str2bool(v):
 def file(v):
     if os.path.isfile(v):
         return v
-    rel = os.path.join(os.getcwdb(), os.path.normpath(v))
+    rel = os.path.join(CWD, os.path.normpath(v))
     if os.path.isfile(rel):
         return rel
     raise ArgumentTypeError(f'file {v} is not exists')

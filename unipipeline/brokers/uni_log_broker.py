@@ -6,9 +6,6 @@ from uuid import uuid4
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerConsumer
 from unipipeline.modules.uni_message_meta import UniMessageMeta
-from unipipeline.utils import log
-
-logger = log.getChild(__name__)
 
 
 class UniLogBroker(UniBroker):
@@ -25,7 +22,7 @@ class UniLogBroker(UniBroker):
         return logging.getLogger(__name__)
 
     def mk_log_prefix(self) -> str:
-        return f'{type(self).__name__} {self._definition.name}::{uuid4()} :'
+        return f'{type(self).__name__} {self._uni_definition.name}::{uuid4()} :'
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)

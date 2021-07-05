@@ -1,10 +1,11 @@
-from typing import Callable, Any, Set, NamedTuple, List
+from typing import Callable, Any, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar
 
+from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_message_meta import UniMessageMeta
-from unipipeline.utils import log
 
-logger = log.getChild(__name__)
+if TYPE_CHECKING:
+    from unipipeline.modules.uni_mediator import UniMediator
 
 
 class UniBrokerMessageManager:
@@ -21,9 +22,14 @@ class UniBrokerConsumer(NamedTuple):
     message_handler: Callable[[UniMessageMeta, UniBrokerMessageManager], None]
 
 
-class UniBroker:
-    def __init__(self, definition: UniBrokerDefinition[Any]) -> None:
-        self._definition = definition
+TContent = TypeVar('TContent')
+
+
+class UniBroker(Generic[TContent]):
+    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition[TContent]) -> None:
+        self._uni_definition = definition
+        self._uni_mediator = mediator
+        self._uni_echo = self._uni_mediator.echo.mk_child(f'broker[{self._uni_definition.name}]')
 
     def connect(self) -> None:
         raise NotImplementedError(f'method connect must be implemented for {type(self).__name__}')
@@ -48,4 +54,8 @@ class UniBroker:
 
     @property
     def definition(self) -> UniBrokerDefinition[Any]:
-        return self._definition
+        return self._uni_definition
+
+    @property
+    def echo(self) -> UniEcho:
+        return self._uni_echo

@@ -1,40 +1,35 @@
 import logging
+import os
 import sys
 
 from unipipeline import Uni
 from unipipeline.args import CMD_INIT, CMD_CHECK, CMD_CRON, CMD_PRODUCE, CMD_CONSUME, parse_args
-from unipipeline.utils.log import children_loggers
 
 
-def run_check(args) -> None:
-    u = Uni(args.config_file)
+def run_check(u: Uni, args) -> None:
     u.check(args.check_create)
 
 
-def run_cron(args) -> None:
-    u = Uni(args.config_file)
+def run_cron(u: Uni, args) -> None:
     u.init_cron()
     u.initialize()
     u.start_cron()
 
 
-def run_init(args) -> None:
-    u = Uni(args.config_file)
+def run_init(u: Uni, args) -> None:
     for wn in args.init_workers:
         u.init_producer_worker(wn)
     u.initialize(everything=args.init_everything, create=args.init_create)
 
 
-def run_consume(args) -> None:
-    u = Uni(args.config_file)
+def run_consume(u: Uni, args) -> None:
     for wn in args.consume_workers:
         u.init_consumer_worker(wn)
     u.initialize()
     u.start_consuming()
 
 
-def run_produce(args) -> None:
-    u = Uni(args.config_file)
+def run_produce(u: Uni, args) -> None:
     u.init_producer_worker(args.produce_worker)
     u.initialize()
     u.send_to(args.produce_worker, args.produce_data, alone=args.produce_alone)
@@ -50,25 +45,13 @@ args_cmd_map = {
 
 
 def main():
+    sys.path.insert(0, os.getcwdb().decode('utf-8'))
     args = parse_args()
+    u = Uni(args.config_file, echo_level=logging.DEBUG if args.verbose else None)
+    try:
+        args_cmd_map[args.cmd](u, args)
+    except KeyboardInterrupt as e:
+        u.echo.log_warning('interrupted')
+        exit(0)
+    u.echo.success('done')
 
-    if args.verbose:
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter('%(asctime)s | %(name)s | %(levelname)s | %(message)s'))
-
-        logging.basicConfig(format='%(asctime)s | %(name)s | %(levelname)s | %(message)s', level=logging.DEBUG, stream=sys.stdout)
-
-        logger = logging.getLogger()
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.disabled = False
-        logger.propagate = True
-
-        for ln in children_loggers:
-            logger = logging.getLogger(ln)
-            logger.addHandler(handler)
-            logger.setLevel(logging.DEBUG)
-            logger.disabled = False
-            logger.propagate = True
-
-    args_cmd_map[args.cmd](args)

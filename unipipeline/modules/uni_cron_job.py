@@ -1,24 +1,23 @@
-from typing import NamedTuple, List, Tuple, Optional, Iterable
+from typing import NamedTuple, List, Tuple, Optional, Iterable, TYPE_CHECKING
 
 from crontab import CronTab  # type: ignore
 
 from unipipeline.messages.uni_cron_message import UniCronMessage
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
-from unipipeline.modules.uni_mediator import UniMediator
-from unipipeline.utils import log
 
-logger = log.getChild(__name__)
+if TYPE_CHECKING:
+    from unipipeline.modules.uni_mediator import UniMediator
 
 
 class UniCronJob(NamedTuple):
     id: int
     task: UniCronTaskDefinition
     crontab: CronTab
-    mediator: UniMediator
+    mediator: 'UniMediator'
     message: UniCronMessage
 
     @staticmethod
-    def mk_jobs_list(tasks: Iterable[UniCronTaskDefinition], mediator: UniMediator) -> List['UniCronJob']:
+    def mk_jobs_list(tasks: Iterable[UniCronTaskDefinition], mediator: 'UniMediator') -> List['UniCronJob']:
         res = list()
         for i, task in enumerate(tasks):
             res.append(UniCronJob(

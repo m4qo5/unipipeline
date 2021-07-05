@@ -1,12 +1,11 @@
 import os.path
-from importlib import import_module, invalidate_caches
+import sys
+import importlib
 from time import sleep
-from typing import NamedTuple, Generic, Type, TypeVar, Any
+from typing import NamedTuple, Generic, Type, TypeVar, Any, Optional, Set
 
-from unipipeline.utils import log
+from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.utils.template import template
-
-logger = log.getChild(__name__)
 
 T = TypeVar('T')
 
@@ -79,6 +78,9 @@ tpl_map = {
 }
 
 
+CWD = str(os.getcwdb().decode('utf-8'))
+
+
 class UniModuleDefinition(NamedTuple, Generic[T]):
     module: str
     class_name: str
@@ -93,34 +95,51 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
             class_name=spec[1],
         )
 
-    def import_class(self, class_type: Type[T], auto_create: bool = False, create_template_params: Any = None) -> Type[T]:
+    def import_class(self, class_type: Type[T], echo: UniEcho, auto_create: bool = False, create_template_params: Any = None) -> Type[T]:
         try:
-            mdl = import_module(self.module)
+            mdl = importlib.import_module(self.module)
         except ModuleNotFoundError:
-            if auto_create:
-                hierarchy = self.module.split('.')
-                path = f'{os.path.join("./", *hierarchy)}.py'
-                path_dir = os.path.dirname(path)
-                path_init = os.path.join(path_dir, "__init__.py")
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                if not os.path.isfile(path_init):
-                    with open(path_init, "wt+") as fi:
-                        fi.write("")
-                        logger.info('file %s was created', path_init)
-                with open(path, 'wt') as fm:
-                    fm.writelines(template(tpl_map[class_type.__name__], data=create_template_params, name=self.class_name))
-                    logger.info('file %s was created', path)
-
-                invalidate_caches()
-                for i in range(10):  # because fs has cache time
-                    try:
-                        mdl = import_module(self.module)
-                        break
-                    except ModuleNotFoundError:
-                        invalidate_caches()
-                        sleep(i)
-            else:
+            if not auto_create:
                 raise
+            echo = echo.mk_child(f'module[{self.module}::{self.class_name}]')
+            hierarchy = self.module.split('.')
+            path = os.path.abspath(f'{os.path.join("./", *hierarchy)}.py')
+            path_dir = os.path.dirname(path)
+            os.makedirs(path_dir, exist_ok=True)
+
+            path_inits: Set[str] = {os.path.join(path_dir, "__init__.py"), }
+
+            if path_dir.startswith(CWD):
+                current_dir: Optional[str] = None
+                for pi_dir in path_dir[len(CWD):].strip('/').split('/'):
+                    if current_dir is not None:
+                        pi_dir = os.path.join(current_dir, pi_dir)
+                    current_dir = pi_dir
+                    path_inits.add(os.path.join(CWD, pi_dir, "__init__.py"))
+
+            for pi in path_inits:
+                if not os.path.isfile(pi):
+                    with open(pi, "wt+") as fi:
+                        fi.write("")
+                    echo.log_debug(f'file {pi} was created')
+
+            with open(path, 'wt') as fm:
+                fm.writelines(template(tpl_map[class_type.__name__], data=create_template_params, name=self.class_name))
+                echo.log_info(f'file {path} was created')
+
+            success = False
+            for i in range(10):  # because fs has cache time
+                try:
+                    importlib.invalidate_caches()
+                    mdl = importlib.import_module(self.module)
+                    success = True
+                    break
+                except ModuleNotFoundError:
+                    echo.log_debug(f'still not found. try to waiting for {i}s before invalidating the cache')
+                    sleep(i)
+            if not success:
+                echo.log_error(f'could not be loaded')
+                exit(1)
         tp = getattr(mdl, self.class_name)
         if not issubclass(tp, class_type):
             ValueError(f'class {self.class_name} is not subclass of {class_type.__name__}')

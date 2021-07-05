@@ -10,16 +10,12 @@ from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_message_meta import UniMessageMeta
-from unipipeline.utils import log
 from unipipeline.utils.connection_pool import ConnectionObj, TConnectionObj, connection_pool
 
 BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
 
 
 TMessage = TypeVar('TMessage', bound=UniMessage)
-
-
-logger = log.getChild(__name__)
 
 
 class UniAmqpBrokerMessageManager(UniBrokerMessageManager):
@@ -80,13 +76,13 @@ class UniAmqpBrokerConfig(BaseModel):
     is_persistent: bool
 
 
-class UniAmqpBroker(UniBroker):
+class UniAmqpBroker(UniBroker[bytes]):
     @classmethod
     def get_connection_uri(cls) -> str:
         raise NotImplementedError(f"cls method get_connection_uri must be implemented for class '{cls.__name__}'")
 
-    def __init__(self, definition: UniBrokerDefinition[bytes]) -> None:
-        super().__init__(definition)
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
 
         self.conf = UniAmqpBrokerConfig(**self.definition.configure_dynamic(dict(
             exchange_name="communication",
@@ -172,17 +168,17 @@ class UniAmqpBroker(UniBroker):
             on_message_callback=consumer_wrapper,
             consumer_tag=consumer.id,
         )
-        logger.info('%s added consumer for topic "%s" with consumer_tag "%s', self.definition.name, topic, consumer.id)
+        self.echo.log_info(f'added consumer for topic "{topic}" with consumer_tag "{consumer.id}')
 
     def start_consuming(self) -> None:
         if self._consumers_count == 0:
-            logger.warning('has no consumers to start consuming')
+            self.echo.log_warning('has no consumers to start consuming')
             return
         if self._consuming_started:
             raise OverflowError('you cannot consume twice!')
         self._consuming_started = True
 
-        logger.info('%s start consuming:: has %s workers', self.definition.name, self._consumers_count)
+        self.echo.log_info(f'start consuming:: has {self._consumers_count} workers')
         self._get_channel().start_consuming()  # blocking operation
 
     def serialize_body(self, meta: UniMessageMeta) -> Tuple[bytes, BasicProperties]:
