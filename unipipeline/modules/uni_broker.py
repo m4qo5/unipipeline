@@ -40,6 +40,9 @@ class UniBroker(Generic[TContent]):
     def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
         raise NotImplementedError(f'method consume must be implemented for {type(self).__name__}')
 
+    def end_consuming(self) -> None:
+        raise NotImplementedError(f'method end_consuming must be implemented for {type(self).__name__}')
+
     def start_consuming(self) -> None:
         raise NotImplementedError(f'method start_consuming must be implemented for {type(self).__name__}')
 

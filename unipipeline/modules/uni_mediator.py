@@ -1,5 +1,5 @@
 from time import sleep
-from typing import Dict, TypeVar, Any, Set, Union, Optional, Type
+from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List
 
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_config import UniConfig
@@ -9,6 +9,7 @@ from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 from unipipeline.modules.uni_worker import UniWorker
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
+from unipipeline.utils.sig import soft_interruption
 
 TWorker = TypeVar('TWorker', bound=UniWorker)
 
@@ -19,7 +20,7 @@ class UniMediator:
 
         self._worker_definition_by_type: Dict[Any, UniWorkerDefinition] = dict()
         self._worker_instance_indexes: Dict[str, UniWorker] = dict()
-        self._broker_instance_indexes: Dict[str, UniBroker] = dict()
+        self._broker_instance_indexes: Dict[str, UniBroker[Any]] = dict()
         self._worker_init_list: Set[str] = set()
         self._worker_initialized_list: Set[str] = set()
         self._waiting_init_list: Set[str] = set()
@@ -30,6 +31,8 @@ class UniMediator:
         self._brokers_with_topics_initialized: Dict[str, Set[str]] = dict()
 
         self._message_types: Dict[str, Type[UniMessage]] = dict()
+
+        self._brokers_with_active_consumption: List[UniBroker[Any]] = list()
 
     @property
     def echo(self) -> UniEcho:
@@ -116,10 +119,28 @@ class UniMediator:
             w.consume()
             self.echo.log_info(f'consumer {wn} initialized')
             brokers.add(w.definition.broker.name)
-        for bn in brokers:
-            b = self.get_broker(bn)
-            self.echo.log_info(f'broker {bn} consuming start')
-            b.start_consuming()
+
+        with soft_interruption(self._handle_interruption, self._handle_force_interruption, self._interruption_err):
+            for bn in brokers:
+                b = self.get_broker(bn)
+                self._brokers_with_active_consumption.append(b)
+                self.echo.log_info(f'broker {bn} consuming start')
+                b.start_consuming()
+
+    def _interruption_err(self, err: Exception) -> None:
+        self.echo.log_error(str(err))
+        raise err
+
+    def _handle_force_interruption(self) -> None:
+        self.echo.log_warning('force interruption detected')
+
+    def _handle_interruption(self) -> None:
+        self.echo.log_warning('interruption detected')
+        for b in self._brokers_with_active_consumption:
+            self.echo.log_debug(f'broker "{b.definition.name}" was notified about interruption')
+            b.end_consuming()
+        self._brokers_with_active_consumption = list()
+        self.echo.log_info(f'all brokers was notified about interruption')
 
     def add_worker_to_init_list(self, name: str, no_related: bool) -> None:
         wd = self._config.workers[name]

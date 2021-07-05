@@ -42,8 +42,7 @@ class UniEcho:
         return color_it(color, msg) if self._colors else msg
 
     def mk_child(self, name: str) -> 'UniEcho':
-        e = UniEcho(name, prefix=self._prefix, colors=self._colors)
-        e._level = self._level
+        e = UniEcho(name, prefix=self._prefix, level=self._level, colors=self._colors)
         return e
 
     @property

@@ -48,10 +48,5 @@ def main():
     sys.path.insert(0, os.getcwdb().decode('utf-8'))
     args = parse_args()
     u = Uni(args.config_file, echo_level=logging.DEBUG if args.verbose else None)
-    try:
-        args_cmd_map[args.cmd](u, args)
-    except KeyboardInterrupt:
-        u.echo.log_warning('interrupted')
-        exit(0)
+    args_cmd_map[args.cmd](u, args)
     u.echo.success('done')
-

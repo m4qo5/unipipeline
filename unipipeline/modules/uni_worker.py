@@ -89,6 +89,7 @@ class UniWorker(Generic[TMessage]):
     def process_message(self, meta: UniMessageMeta, manager: UniBrokerMessageManager) -> None:
         self._uni_echo.log_debug(f"worker {self._uni_definition.name} message {meta} received")
         self._uni_moved = False
+        self._uni_payload_cache = None
         self._uni_current_meta = meta
         self._uni_current_manager = manager
 
