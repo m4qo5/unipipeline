@@ -1,4 +1,4 @@
-from typing import Dict, Set, Any
+from typing import Dict, Set, Any, Optional
 from uuid import UUID
 
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
@@ -20,6 +20,11 @@ class UniWorkerDefinition(UniDefinition):
     output_workers: Set[str]
     ack_after_success: bool
     waitings: Set[UniWaitingDefinition]
+    external: Optional[str]
+
+    @property
+    def marked_as_external(self) -> bool:
+        return self.external is not None
 
     def get_related_broker_names(self, index_of_workers: Dict[str, 'UniWorkerDefinition']) -> Set[str]:
         result = {self.broker.name,}

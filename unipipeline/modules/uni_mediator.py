@@ -47,6 +47,9 @@ class UniMediator:
         return self._broker_instance_indexes[name]
 
     def add_worker_to_consume_list(self, name: str) -> None:
+        wd = self._config.workers[name]
+        if wd.marked_as_external:
+            raise OverflowError(f'your could not use worker "{name}" as consumer. it marked as external "{wd.external}"')
         self._consumers_list.add(name)
         logger.info('added consumer %s', name)
 

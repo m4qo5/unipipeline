@@ -5,6 +5,7 @@ import yaml  # type: ignore
 
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
+from unipipeline.modules.uni_external_definition import UniExternalDefinition
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_message_definition import UniMessageDefinition
@@ -32,6 +33,7 @@ class UniConfig:
         self._parsed = False
         self._config_loaded = False
         self._waitings_index: Dict[str, UniWaitingDefinition] = dict()
+        self._external: Dict[str, UniExternalDefinition] = dict()
         self._brokers_index: Dict[str, UniBrokerDefinition] = dict()
         self._messages_index: Dict[str, UniMessageDefinition] = dict()
         self._workers_by_name_index: Dict[str, UniWorkerDefinition] = dict()
@@ -47,6 +49,11 @@ class UniConfig:
     def cron_tasks(self) -> Dict[str, UniCronTaskDefinition]:
         self._parse()
         return self._cron_tasks_index
+
+    @property
+    def external(self) -> Dict[str, UniExternalDefinition]:
+        self._parse()
+        return self._external
 
     @property
     def workers(self) -> Dict[str, UniWorkerDefinition]:
@@ -88,16 +95,19 @@ class UniConfig:
             return
         self._parsed = True
 
-        self._service = self._parse_service(self._load_config())
-        self._waitings_index = self._parse_waitings(self._load_config(), self._service)
-        self._brokers_index = self._parse_brokers(self._load_config(), self._service)
-        self._messages_index = self._parse_messages(self._load_config(), self._service)
-        self._workers_by_name_index = self._parse_workers(self._load_config(), self._service, self._brokers_index, self._messages_index, self._waitings_index)
+        cfg = self._load_config()
+
+        self._service = self._parse_service(cfg)
+        self._external = self._parse_external_services(cfg)
+        self._waitings_index = self._parse_waitings(cfg, self._service)
+        self._brokers_index = self._parse_brokers(cfg, self._service)
+        self._messages_index = self._parse_messages(cfg, self._service)
+        self._workers_by_name_index = self._parse_workers(cfg, self._service, self._brokers_index, self._messages_index, self._waitings_index, self._external)
 
         for w in self._workers_by_class_index.values():
             self._workers_by_class_index[w.type.class_name] = w
 
-        self._cron_tasks_index = self._parse_cron_tasks(self._load_config(), self._service, self._workers_by_name_index)
+        self._cron_tasks_index = self._parse_cron_tasks(cfg, self._service, self._workers_by_name_index)
 
     def _parse_cron_tasks(self, config: Dict[str, Any], service: UniServiceDefinition, workers: Dict[str, UniWorkerDefinition]) -> Dict[str, UniCronTaskDefinition]:
         result = dict()
@@ -200,13 +210,36 @@ class UniConfig:
             id=uuid4(),
         )
 
+    def _parse_external_services(self, config: Dict[str, Any]) -> Dict[str, UniExternalDefinition]:
+        if "external" not in config:
+            return dict()
+
+        external_conf = config["external"]
+
+        defaults = dict()
+
+        result = dict()
+
+        for name, definition, other_props in parse_definition('external', external_conf, defaults, set()):
+            if other_props:
+                raise UniConfigError(f'external->{name} has invalid props: {set(other_props.keys())}')
+
+            dfn = UniExternalDefinition(
+                **definition,
+                _dynamic_props_=dict(),
+            )
+            result[name] = dfn
+
+        return result
+
     def _parse_workers(
         self,
         config: Dict[str, Any],
         service: UniServiceDefinition,
         brokers: Dict[str, UniBrokerDefinition],
         messages: Dict[str, UniMessageDefinition],
-        waitings: Dict[str, UniWaitingDefinition]
+        waitings: Dict[str, UniWaitingDefinition],
+        external: Dict[str, UniExternalDefinition],
     ) -> Dict[str, UniWorkerDefinition]:
         result = dict()
 
@@ -223,6 +256,7 @@ class UniConfig:
             error_topic="{{name}}__error",
             broker="default_broker",
             prefetch=1,
+            external=None,
 
             # notification_file="/var/unipipeline/{{service.name}}/{{service.id}}/worker_{{name}}_{{id}}/metrics",
 
@@ -247,6 +281,10 @@ class UniConfig:
             if im not in messages:
                 raise UniConfigError(f'definition workers->{name} has invalid input_message: {im}')
             definition["input_message"] = messages[im]
+
+            ext = definition["external"]
+            if ext is not None and ext not in external:
+                raise UniConfigError(f'definition workers->{name} has invalid external: "{ext}"')
 
             waitings_: Set[UniWaitingDefinition] = set()
             for w in definition["waiting_for"]:

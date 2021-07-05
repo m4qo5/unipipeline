@@ -7,6 +7,7 @@ from unipipeline.modules.uni import Uni
 from unipipeline.modules.uni_broker import UniBrokerMessageManager, UniBroker, UniBrokerConsumer
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_definition import UniDefinition
+from unipipeline.modules.uni_external_definition import UniExternalDefinition
 from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_config import UniConfig, UniConfigError
 from unipipeline.modules.uni_cron_job import UniCronJob
@@ -33,6 +34,7 @@ __all__ = (
     "UniDefinition",
     "UniModuleDefinition",
     "UniServiceDefinition",
+    "UniExternalDefinition",
 
     "SerializersRegistry",
     "serializer_registry",
