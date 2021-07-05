@@ -152,6 +152,84 @@ u.initialize()
 u.send_to(f'input_worker', dict(some='prop'))
 ```
 
+## Definition
+
+### Service
+```yaml
+service:
+  name: some_name       # need for health-check file name
+  echo_level: warning   # level of uni console logs (debug, info, warning, error)
+  echo_colors: true     # show colors in console
+```
+
+### External
+```yml
+external:
+  some_name_of_external_service: {}
+```
+- no props
+
+- it needs for declarative grouping the external workers with service
+
+### Worker
+```yaml
+workers:
+  __default__:                                        # each worker get this default props if defined
+    retry_max_count: 10
+    
+  some_worker_name:
+    retry_max_count: 3                                # just counter. message move to /dev/null if limit has reached 
+    retry_delay_s: 1                                  # delay before retry
+    topic: "{{name}}"                                 # template string
+    error_payload_topic: "{{topic}}__error__payload"  # template string
+    error_topic: "{{topic}}__error"                   # template string
+    broker: "default_broker"                          # broker name. reference to message transport 
+    external: null                                    # name of external service. reference in this config file 
+    ack_after_success: true                           # automatic ack after process message
+    waiting_for:                                      # list of references
+      - some_waiting_name                             # name of block. this worker must wait for connection of this external service if need
+    output_workers:                                   # list of references
+      - some_other_worker_name                        # allow worker sending messages to this worker
+    
+    inport_template: "some.module.hierarchy.to.worker.{{name}}:{{name|camel}}OfClass"   # required module and classname for import
+
+    input_message: "name_of_message"                  # required reference of input message type 
+```
+
+### Waiting
+```yaml
+waitings:
+  some_blocked_service_name:
+    retry_max_count: 3                         # the same semantic as worker.retry_max_count
+    retry_delay_s: 10                          # the same semantic as worker.retry_delay_s
+    import_template: "some.module:SomeClass"   # required. the same semantic as worker.import_template
+```
+
+### Broker
+```yaml
+brokers:
+  some_name_of_broker:
+    retry_max_count: 3                         # the same semantic as worker.retry_max_count
+    retry_delay_s: 10                          # the same semantic as worker.retry_delay_s
+    content_type: application/json             # content type
+    compression: null                          # compression (null, application/x-gzip, application/x-bz2, application/x-lzma)
+    import_template: "some.module:SomeClass"   # required. the same semantic as worker.import_template
+```
+
+### Message
+```yaml
+messages:
+  name_of_message:
+    import_template: "some.module:SomeClass"   # required. the same semantic as worker.import_template
+```
+
+build in messages:
+```yaml
+messages:
+  uni_cron_message:
+    import_template: unipipeline.messages.uni_cron_message:UniCronMessage
+```
+
 ## CLI
 
 ### unipipeline
