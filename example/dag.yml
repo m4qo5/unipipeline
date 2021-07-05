@@ -2,6 +2,8 @@
 
 service:
   name: "example"
+  echo_colors: true
+  echo_level: error
 
 
 external:

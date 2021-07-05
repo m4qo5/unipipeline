@@ -5,5 +5,5 @@ from example.messages.input_message import InputMessage
 
 class InputWorker(UniWorker):
     def handle_message(self, message: InputMessage) -> None:
-        print("!!!")
-        raise NotImplementedError('method handle_message must be specified for class "InputWorker"')
+        print("!!! InputWorker.handle_message ", message)
+        raise NotImplementedError('some error in InputWorker.handle_message')

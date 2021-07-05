@@ -1,8 +1,7 @@
 
 from typing import Set, List
 
-from unipipeline import UniBroker, UniMessageMeta
-from unipipeline.modules.uni_broker import UniBrokerConsumer
+from unipipeline import UniBroker, UniMessageMeta, UniBrokerConsumer
 
 
 class LogBroker(UniBroker):
