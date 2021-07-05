@@ -252,8 +252,8 @@ class UniConfig:
             retry_max_count=3,
             retry_delay_s=1,
             topic="{{name}}",
-            error_payload_topic="{{name}}__error__payload",
-            error_topic="{{name}}__error",
+            error_payload_topic="{{topic}}__error__payload",
+            error_topic="{{topic}}__error",
             broker="default_broker",
             prefetch=1,
             external=None,
@@ -292,16 +292,17 @@ class UniConfig:
                     raise UniConfigError(f'definition workers->{name} has invalid waiting_for: {w}')
                 waitings_.add(waitings[w])
 
-            topic_template = definition.pop('topic')
             error_topic_template = definition.pop('error_topic')
             error_payload_topic_template = definition.pop('error_payload_topic')
 
             template_data = {**definition, "service": service}
+            topic = template(definition.pop('topic'), **template_data)
+            template_data['topic'] = topic
 
             defn = UniWorkerDefinition(
                 **definition,
                 type=UniModuleDefinition.parse(template(definition["import_template"], **template_data)),
-                topic=template(topic_template, **template_data),
+                topic=topic,
                 error_topic=template(error_topic_template, **template_data),
                 error_payload_topic=template(error_payload_topic_template, **template_data),
                 waitings=waitings_,
