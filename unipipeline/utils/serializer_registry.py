@@ -5,7 +5,7 @@ import zlib
 from typing import Dict, Any, Callable, Set, Type, TypeVar, Generic
 
 CONTENT_TYPE__APPLICATION_JSON = 'application/json'
-CONTENT_TYPE__APPLICATION_DATA = 'application/data'
+# CONTENT_TYPE__APPLICATION_DATA = 'application/data'
 
 COMPRESSION__GZIP = 'application/x-gzip'
 COMPRESSION__BZ2 = 'application/x-bz2'

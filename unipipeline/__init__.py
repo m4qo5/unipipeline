@@ -23,7 +23,7 @@ from unipipeline.modules.uni_wating import UniWaiting
 from unipipeline.modules.uni_worker import UniWorker, UniPayloadParsingError
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.connection_pool import ConnectionObj, ConnectionRC, ConnectionManager, ConnectionPool, connection_pool
-from unipipeline.utils.serializer_registry import SerializersRegistry, serializer_registry, compressor_registry, CONTENT_TYPE__APPLICATION_JSON, CONTENT_TYPE__APPLICATION_DATA, COMPRESSION__GZIP, \
+from unipipeline.utils.serializer_registry import SerializersRegistry, serializer_registry, compressor_registry, CONTENT_TYPE__APPLICATION_JSON, COMPRESSION__GZIP, \
     COMPRESSION__BZ2, COMPRESSION__LZMA
 
 __all__ = (
@@ -40,7 +40,6 @@ __all__ = (
     "serializer_registry",
     "compressor_registry",
     "CONTENT_TYPE__APPLICATION_JSON",
-    "CONTENT_TYPE__APPLICATION_DATA",
     "COMPRESSION__GZIP",
     "COMPRESSION__BZ2",
     "COMPRESSION__LZMA",

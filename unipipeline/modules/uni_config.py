@@ -208,8 +208,6 @@ class UniConfig:
 
             content_type=CONTENT_TYPE__APPLICATION_JSON,
             compression=None,
-
-            api_version=[0, 10],
         )
 
         if "brokers" not in config:
@@ -293,7 +291,6 @@ class UniConfig:
             error_payload_topic="{{topic}}__error__payload",
             error_topic="{{topic}}__error",
             broker="default_broker",
-            prefetch=1,
             external=None,
 
             # notification_file="/var/unipipeline/{{service.name}}/{{service.id}}/worker_{{name}}_{{id}}/metrics",
