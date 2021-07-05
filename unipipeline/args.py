@@ -52,7 +52,6 @@ subparsers = parser.add_subparsers(help='sub-commands', required=True, dest='cmd
 check_help = 'check loading of all modules'
 check_parser = subparsers.add_parser(CMD_CHECK, help=check_help)
 check_parser.description = check_help
-check_parser.help = check_help
 check_parser.usage = f'''
     unipipeline -f {DEFAULT_CONFIG_FILE} {CMD_CHECK}
     unipipeline -f {DEFAULT_CONFIG_FILE} --verbose=yes {CMD_CHECK}
@@ -61,7 +60,6 @@ check_parser.usage = f'''
 scaffold_help = 'create all modules and classes if it is absent. no args'
 scaffold_parser = subparsers.add_parser(CMD_SCAFFOLD, help=scaffold_help)
 scaffold_parser.description = scaffold_help
-scaffold_parser.help = scaffold_help
 scaffold_parser.usage = f'''
     unipipeline -f {DEFAULT_CONFIG_FILE} {CMD_SCAFFOLD}
     unipipeline -f {DEFAULT_CONFIG_FILE} --verbose=yes {CMD_SCAFFOLD}
@@ -71,7 +69,6 @@ init_help = 'initialize broker topics for workers'
 init_parser = subparsers.add_parser(CMD_INIT, help=init_help)
 init_parser.add_argument('--workers', '-w', type=str, nargs='+', default=[], required=False, dest='init_workers', help='workers list for initialization (default: [])')
 init_parser.description = init_help
-init_parser.help = init_help
 init_parser.usage = f'''
     unipipeline -f {DEFAULT_CONFIG_FILE} {CMD_INIT}
     unipipeline -f {DEFAULT_CONFIG_FILE} --verbose=yes {CMD_INIT}
@@ -82,7 +79,6 @@ consume_help = 'start consuming workers. connect to brokers and waiting for mess
 consume_parser = subparsers.add_parser(CMD_CONSUME, help=consume_help)
 consume_parser.add_argument('--workers', '-w', type=str, nargs='+', required=True, dest='consume_workers', help='worker list for consuming')
 consume_parser.description = consume_help
-consume_parser.help = consume_help
 consume_parser.usage = f'''
     unipipeline -f {DEFAULT_CONFIG_FILE} {CMD_CONSUME}
     unipipeline -f {DEFAULT_CONFIG_FILE} --verbose=yes {CMD_CONSUME}
@@ -93,7 +89,6 @@ consume_parser.usage = f'''
 cron_help = 'start cron jobs, That defined in config file'
 cron_parser = subparsers.add_parser(CMD_CRON, help=cron_help)
 cron_parser.description = cron_help
-cron_parser.help = cron_help
 cron_parser.usage = f'''
     unipipeline -f {DEFAULT_CONFIG_FILE} {CMD_CRON}
     unipipeline -f {DEFAULT_CONFIG_FILE} --verbose=yes {CMD_CRON}
@@ -105,7 +100,6 @@ produce_parser.add_argument('--alone', '-a', type=str2bool, nargs='?', const=Tru
 produce_parser.add_argument('--worker', '-w', type=str, required=True, dest='produce_worker', help='worker recipient')
 produce_parser.add_argument('--data', '-d', type=json_data, required=True, dest='produce_data', help='data for sending')
 produce_parser.description = produce_help
-produce_parser.help = produce_help
 produce_parser.usage = f'''
     unipipeline -f {DEFAULT_CONFIG_FILE} {CMD_PRODUCE} --worker some_worker_name_01 --data {{"some": "json", "value": "for worker"}}
     unipipeline -f {DEFAULT_CONFIG_FILE} --verbose=yes {CMD_PRODUCE} --worker some_worker_name_01 --data {{"some": "json", "value": "for worker"}}
