@@ -1,6 +1,8 @@
 from time import sleep
 from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List
 
+from pydantic import ValidationError
+
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_config import UniConfig
 from unipipeline.modules.uni_cron_job import UniCronJob
@@ -12,6 +14,12 @@ from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.sig import soft_interruption
 
 TWorker = TypeVar('TWorker', bound=UniWorker)
+
+
+class PayloadError(Exception):
+    def __init__(self, e: ValidationError) -> None:
+        super(PayloadError, self).__init__(f'invalid props: {e}')
+        self.validation_error = e
 
 
 class UniMediator:
@@ -73,19 +81,22 @@ class UniMediator:
         wd = self._config.workers[worker_name]
 
         message_type = self.get_message_type(wd.input_message.name)
-        if isinstance(payload, message_type):
-            payload_data = payload.dict()
-        elif isinstance(payload, dict):
-            payload_data = message_type(**payload).dict()
-        else:
-            raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
+        try:
+            if isinstance(payload, message_type):
+                payload_data = payload.dict()
+            elif isinstance(payload, dict):
+                payload_data = message_type(**payload).dict()
+            else:
+                raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
+        except ValidationError as e:
+            raise PayloadError(e)
 
         br = self.get_broker(wd.broker.name)
 
         if alone:
             size = br.get_topic_approximate_messages_count(wd.topic)
             if size != 0:
-                self.echo.log_info(f"worker {wd.name} skipped, because topic {wd.topic} has {size} messages")
+                self.echo.log_info(f'sending to worker "{wd.name}" was skipped, because topic {wd.topic} has messages: {size}>0')
                 return
 
         if parent_meta is not None:
@@ -143,6 +154,8 @@ class UniMediator:
         self.echo.log_info(f'all brokers was notified about interruption')
 
     def add_worker_to_init_list(self, name: str, no_related: bool) -> None:
+        if name not in self._config.workers:
+            self.echo.exit_with_error(f'worker "{name}" is not found in config "{self.config.file}"')
         wd = self._config.workers[name]
         self._worker_init_list.add(name)
         for waiting in wd.waitings:

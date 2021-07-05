@@ -49,6 +49,10 @@ class UniConfig:
         return self._echo
 
     @property
+    def file(self) -> str:
+        return self._file_path
+
+    @property
     def brokers(self) -> Dict[str, UniBrokerDefinition[Any]]:
         self._parse()
         return self._brokers_index

@@ -30,10 +30,10 @@ class UniEcho:
         self._colors = colors
 
         prefix = f'{f"{prefix} | " if prefix else ""}{self._name}'
-        self._debug_prefix = self._color_it(COLOR_GRAY, f'{prefix} | DEBUG :: ')
-        self._info_prefix = self._color_it(COLOR_CYAN, f'{prefix} | INFO :: ')
+        self._debug_prefix = self._color_it(COLOR_GRAY, f'{prefix} | DEBUG   :: ')
+        self._info_prefix = self._color_it(COLOR_CYAN, f'{prefix} | INFO    :: ')
         self._warn_prefix = self._color_it(COLOR_YELLOW, f'{prefix} | WARNING :: ')
-        self._err_prefix = self._color_it(COLOR_RED, f'{prefix} | ERROR :: ')
+        self._err_prefix = self._color_it(COLOR_RED, f'{prefix} | ERROR   :: ')
         self._success_prefix = self._color_it(COLOR_GREEN, f'{prefix} :: ')
 
         self._prefix = prefix
@@ -71,6 +71,10 @@ class UniEcho:
     def log_error(self, msg: str) -> None:
         if logging.ERROR >= self._level:
             self.echo(f'{self._err_prefix}{msg}', stream=sys.stderr)
+
+    def exit_with_error(self, msg: str) -> None:
+        self.echo(self._color_it(COLOR_RED, f'UNI ERROR :: {msg}'))
+        exit(1)
 
     def success(self, msg: str) -> None:
         self.echo(f'{self._success_prefix}{color_it(COLOR_GREEN, msg)}')

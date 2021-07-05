@@ -3,11 +3,15 @@ import os
 import sys
 
 from unipipeline import Uni
-from unipipeline.args import CMD_INIT, CMD_CHECK, CMD_CRON, CMD_PRODUCE, CMD_CONSUME, parse_args
+from unipipeline.args import CMD_INIT, CMD_CHECK, CMD_CRON, CMD_PRODUCE, CMD_CONSUME, parse_args, CMD_SCAFFOLD
 
 
 def run_check(u: Uni, args) -> None:
-    u.check(args.check_create)
+    u.check(create=False)
+
+
+def run_scaffold(u: Uni, args) -> None:
+    u.check(create=True)
 
 
 def run_cron(u: Uni, args) -> None:
@@ -19,7 +23,7 @@ def run_cron(u: Uni, args) -> None:
 def run_init(u: Uni, args) -> None:
     for wn in args.init_workers:
         u.init_producer_worker(wn)
-    u.initialize(everything=args.init_everything, create=args.init_create)
+    u.initialize(everything=len(args.init_workers) == 0, create=True)
 
 
 def run_consume(u: Uni, args) -> None:
@@ -38,6 +42,7 @@ def run_produce(u: Uni, args) -> None:
 args_cmd_map = {
     CMD_INIT: run_init,
     CMD_CHECK: run_check,
+    CMD_SCAFFOLD: run_scaffold,
     CMD_CRON: run_cron,
     CMD_PRODUCE: run_produce,
     CMD_CONSUME: run_consume,
@@ -47,6 +52,7 @@ args_cmd_map = {
 def main():
     sys.path.insert(0, os.getcwdb().decode('utf-8'))
     args = parse_args()
+    print(args)
     u = Uni(args.config_file, echo_level=logging.DEBUG if args.verbose else None)
     args_cmd_map[args.cmd](u, args)
     u.echo.success('done')

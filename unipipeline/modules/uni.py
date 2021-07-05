@@ -3,7 +3,7 @@ from typing import Dict, Any, Union, Optional
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_config import UniConfig, UniConfigError
 from unipipeline.modules.uni_echo import UniEcho
-from unipipeline.modules.uni_mediator import UniMediator
+from unipipeline.modules.uni_mediator import UniMediator, PayloadError
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_wating import UniWaiting
 from unipipeline.modules.uni_worker import UniWorker
@@ -71,7 +71,10 @@ class Uni:
         self._mediator.add_worker_to_consume_list(name)
 
     def send_to(self, name: str, data: Union[Dict[str, Any], UniMessage], alone: bool = False) -> None:
-        self._mediator.send_to(name, data, alone=alone)
+        try:
+            self._mediator.send_to(name, data, alone=alone)
+        except PayloadError as e:
+            self.echo.exit_with_error(f'invalid props in message: {e.validation_error}')
 
     def start_consuming(self) -> None:
         try:
