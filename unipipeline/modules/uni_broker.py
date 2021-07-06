@@ -1,5 +1,7 @@
 from typing import Callable, Any, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar, Type
 
+from pydantic import ValidationError
+
 from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_echo import UniEcho
@@ -35,7 +37,11 @@ class UniBroker(Generic[TContent, TConf]):
         self._uni_definition = definition
         self._uni_mediator = mediator
         self._uni_echo = self._uni_mediator.echo.mk_child(f'broker[{self._uni_definition.name}]')
-        self._uni_conf = self._uni_definition.configure_dynamic(self.config_type)  # type: ignore
+
+        try:
+            self._uni_conf = self._uni_definition.configure_dynamic(self.config_type)  # type: ignore
+        except ValidationError as e:
+            self._uni_echo.exit_with_error(str(e))
 
     @property
     def config(self) -> TConf:
