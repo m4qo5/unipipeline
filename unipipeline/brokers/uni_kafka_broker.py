@@ -27,12 +27,6 @@ class UniKafkaBrokerConsumer(NamedTuple):
 
 
 class UniKafkaBroker(UniBroker[bytes]):
-    def get_topic_approximate_messages_count(self, topic: str) -> int:
-        return 0  # TODO
-
-    def initialize(self, topics: Set[str]) -> None:
-        pass
-
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
@@ -49,6 +43,23 @@ class UniKafkaBroker(UniBroker[bytes]):
         self._consumers: List[UniKafkaBrokerConsumer] = list()
 
         self._consuming_started = False
+        self._interrupted = False
+        self._in_processing = False
+
+    def end_consuming(self) -> None:    # TODO
+        self._end_consuming()
+
+    def _end_consuming(self) -> None:
+        self._interrupted = True
+        if not self._in_processing:
+            for consumer in self._consumers:
+                consumer.kfk_consumer.close()
+
+    def get_topic_approximate_messages_count(self, topic: str) -> int:
+        return 0  # TODO
+
+    def initialize(self, topics: Set[str]) -> None:
+        pass  # TODO
 
     def get_boostrap_servers(self) -> List[str]:
         raise NotImplementedError(f'method get_boostrap_server must be implemented for {type(self).__name__}')
@@ -100,12 +111,19 @@ class UniKafkaBroker(UniBroker[bytes]):
         if self._consuming_started:
             raise OverflowError('consuming was started')
         self._consuming_started = True
-
+        self._interrupted = False
+        self._in_processing = False
         for cnsmr in self._consumers:  # TODO: make it asynchronously
             msg = next(cnsmr.kfk_consumer)
+            self._in_processing = True
+
             meta = self._parse_body(msg)
             manager = UniKafkaBrokerMessageManager()
             cnsmr.consumer.message_handler(meta, manager)
+            self._in_processing = False
+            if self._interrupted:
+                self._end_consuming()
+                break
 
     def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
         self.connect()

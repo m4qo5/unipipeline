@@ -119,6 +119,9 @@ class UniAmqpBroker(UniBroker[bytes]):
         self._channel: Optional[BlockingChannel] = None
         self._consuming_started = False
 
+        self._in_processing = False
+        self._interrupted = False
+
     def initialize(self, topics: Set[str]) -> None:
         ch = self._get_channel()
         ch.exchange_declare(
@@ -139,6 +142,14 @@ class UniAmqpBroker(UniBroker[bytes]):
             )
 
             ch.queue_bind(queue=topic, exchange=self.conf.exchange_name, routing_key=topic)
+
+    def end_consuming(self) -> None:
+        self._end_consuming()
+
+    def _end_consuming(self):
+        self._interrupted = True
+        if not self._in_processing:
+            self._get_channel().stop_consuming()
 
     def connect(self) -> None:
         self._connector.connect()
@@ -161,9 +172,13 @@ class UniAmqpBroker(UniBroker[bytes]):
         self._consumers_count += 1
 
         def consumer_wrapper(channel: BlockingChannel, method_frame: spec.Basic.Deliver, properties: BasicProperties, body: bytes) -> None:
+            self._in_processing = True
             manager = UniAmqpBrokerMessageManager(channel, method_frame)
             meta = self.parse_body(body, properties)
             consumer.message_handler(meta, manager)
+            self._in_processing = False
+            if self._interrupted:
+                self._end_consuming()
 
         self._get_channel().basic_consume(
             queue=topic,
@@ -179,6 +194,8 @@ class UniAmqpBroker(UniBroker[bytes]):
         if self._consuming_started:
             raise OverflowError('you cannot consume twice!')
         self._consuming_started = True
+        self._interrupted = False
+        self._in_processing = False
 
         self.echo.log_info(f'start consuming:: has {self._consumers_count} workers')
         self._get_channel().start_consuming()  # blocking operation
