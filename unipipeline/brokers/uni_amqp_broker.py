@@ -147,9 +147,12 @@ class UniAmqpBroker(UniBroker[bytes]):
         self._end_consuming()
 
     def _end_consuming(self):
+        if not self._consuming_started:
+            return
         self._interrupted = True
         if not self._in_processing:
             self._get_channel().stop_consuming()
+            self._consuming_started = False
 
     def connect(self) -> None:
         self._connector.connect()

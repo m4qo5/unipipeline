@@ -50,10 +50,13 @@ class UniKafkaBroker(UniBroker[bytes]):
         self._end_consuming()
 
     def _end_consuming(self) -> None:
+        if not self._consuming_started:
+            return
         self._interrupted = True
         if not self._in_processing:
             for consumer in self._consumers:
                 consumer.kfk_consumer.close()
+            self._consuming_started = False
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:
         return 0  # TODO
