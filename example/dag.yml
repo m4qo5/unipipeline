@@ -3,7 +3,7 @@
 service:
   name: "example"
   echo_colors: true
-  echo_level: error
+  echo_level: debug
 
 
 external:
@@ -12,10 +12,13 @@ external:
 
 brokers:
   default_broker:
-    import_template: "unipipeline.brokers.uni_memory_broker:UniMemoryBroker"
+    import_template: "example.brokers.rmq_broker:RmqBroker"
 
   ender_broker:
     import_template: "example.brokers.uni_log_broker:LogBroker"
+
+  mem_broker:
+    import_template: "unipipeline.brokers.uni_memory_broker:UniMemoryBroker"
 
 
 messages:

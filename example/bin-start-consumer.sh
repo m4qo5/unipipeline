@@ -18,4 +18,4 @@ CWD="$(pwd)"
 
 export PYTHONPATH=$CWD
 
-python3 ./example/main.py
+python3 ./example/example_consumer.py
