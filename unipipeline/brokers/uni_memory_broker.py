@@ -123,6 +123,10 @@ class UniMemoryBroker(UniBroker):
         self._queues_by_topic: Dict[str, QL] = dict()
         self._consumers_count = 0
 
+        self._extra_test_params = self.definition.configure_dynamic(dict(
+            extra="some"
+        ))
+
     def get_topic_approximate_messages_count(self, topic: str) -> int:
         return self._queues_by_topic[topic].messages_to_process_count()
 

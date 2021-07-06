@@ -1,4 +1,3 @@
-from typing import Dict, Any
 from uuid import UUID
 
 from unipipeline.modules.uni_definition import UniDefinition
@@ -11,5 +10,3 @@ class UniCronTaskDefinition(UniDefinition):
     worker: UniWorkerDefinition
     when: str
     alone: bool
-
-    _dynamic_props_: Dict[str, Any]

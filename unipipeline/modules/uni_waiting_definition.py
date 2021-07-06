@@ -1,5 +1,4 @@
 from time import sleep
-from typing import Dict, Any
 from uuid import UUID
 
 from unipipeline.modules.uni_definition import UniDefinition
@@ -14,8 +13,6 @@ class UniWaitingDefinition(UniDefinition):
     retry_max_count: int
     retry_delay_s: int
     type: UniModuleDefinition
-
-    _dynamic_props_: Dict[str, Any]
 
     def __hash__(self) -> int:
         return hash(self.id)

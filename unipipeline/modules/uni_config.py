@@ -155,7 +155,7 @@ class UniConfig:
                 worker=worker_def,
                 when=definition["when"],
                 alone=definition["alone"],
-                _dynamic_props_=other_props,
+                dynamic_props_=other_props,
             )
         return result
 
@@ -167,6 +167,7 @@ class UniConfig:
                     module="unipipeline.messages.uni_cron_message",
                     class_name="UniCronMessage",
                 ),
+                dynamic_props_=dict(),
             )
         }
 
@@ -179,7 +180,7 @@ class UniConfig:
             result[name] = UniMessageDefinition(
                 **definition,
                 type=UniModuleDefinition.parse(template(import_template, **definition, **{"service": service, "id": id_})),
-                _dynamic_props_=other_props,
+                dynamic_props_=other_props,
             )
 
         return result
@@ -195,13 +196,13 @@ class UniConfig:
             result[name] = UniWaitingDefinition(
                 **definition,
                 type=UniModuleDefinition.parse(template(definition["import_template"], **definition, **{"service": service})),
-                _dynamic_props_=other_props
+                dynamic_props_=other_props
             )
 
         return result
 
     def _parse_brokers(self, config: Dict[str, Any], service: UniServiceDefinition) -> Dict[str, UniBrokerDefinition[Any]]:
-        result: Dict[str, UniBrokerDefinition] = dict()
+        result: Dict[str, UniBrokerDefinition[Any]] = dict()
         defaults = dict(
             retry_max_count=3,
             retry_delay_s=10,
@@ -221,7 +222,7 @@ class UniConfig:
                     content_type=definition["content_type"],
                     compression=definition["compression"],
                 ),
-                _dynamic_props_=other_def,
+                dynamic_props_=other_def,
             )
         return result
 
@@ -262,7 +263,7 @@ class UniConfig:
 
             dfn = UniExternalDefinition(
                 **definition,
-                _dynamic_props_=dict(),
+                dynamic_props_=dict(),
             )
             result[name] = dfn
 
@@ -341,7 +342,7 @@ class UniConfig:
                 error_topic=template(error_topic_template, **template_data),
                 error_payload_topic=template(error_payload_topic_template, **template_data),
                 waitings=waitings_,
-                _dynamic_props_=other_props,
+                dynamic_props_=other_props,
             )
 
             result[name] = defn

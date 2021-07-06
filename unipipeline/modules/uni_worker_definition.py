@@ -1,4 +1,4 @@
-from typing import Dict, Set, Any, Optional
+from typing import Set, Any, Optional
 from uuid import UUID
 
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
@@ -21,8 +21,6 @@ class UniWorkerDefinition(UniDefinition):
     ack_after_success: bool
     waitings: Set[UniWaitingDefinition]
     external: Optional[str]
-
-    _dynamic_props_: Dict[str, Any]
 
     @property
     def marked_as_external(self) -> bool:
