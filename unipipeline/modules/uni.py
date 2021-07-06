@@ -25,26 +25,45 @@ class Uni:
     def set_echo_level(self, level: int):
         self._mediator.set_echo_level(level)
 
-    def check(self, create: bool = False) -> None:
+    def scaffold(self) -> None:
         try:
             for waiting_def in self._mediator.config.waitings.values():
-                waiting_def.type.import_class(UniWaiting, self.echo, create, create_template_params=waiting_def)
+                waiting_def.type.import_class(UniWaiting, self.echo, auto_create=True, create_template_params=waiting_def)
 
             for broker_def in self._mediator.config.brokers.values():
-                broker_def.type.import_class(UniBroker, self.echo, create, create_template_params=broker_def)
+                broker_def.type.import_class(UniBroker, self.echo, auto_create=True, create_template_params=broker_def)
 
             for message_def in self._mediator.config.messages.values():
-                message_def.type.import_class(UniMessage, self.echo, create, create_template_params=message_def)
+                message_def.type.import_class(UniMessage, self.echo, auto_create=True, create_template_params=message_def)
 
             for worker_def in self._mediator.config.workers.values():
                 if worker_def.marked_as_external:
                     continue
                 assert worker_def.type is not None
-                worker_def.type.import_class(UniWorker, self.echo, create, create_template_params=worker_def)
+                worker_def.type.import_class(UniWorker, self.echo, auto_create=True, create_template_params=worker_def)
 
         except (ParseDefinitionError, UniConfigError) as e:
-            print(f"ERROR: {e}")
-            exit(1)
+            self.echo.exit_with_error(str(e))
+
+    def check(self) -> None:
+        try:
+            for waiting_def in self._mediator.config.waitings.values():
+                waiting_def.type.import_class(UniWaiting, self.echo)
+
+            for broker_def in self._mediator.config.brokers.values():
+                broker_def.type.import_class(UniBroker, self.echo)
+
+            for message_def in self._mediator.config.messages.values():
+                message_def.type.import_class(UniMessage, self.echo)
+
+            for worker_def in self._mediator.config.workers.values():
+                if worker_def.marked_as_external:
+                    continue
+                assert worker_def.type is not None
+                worker_def.type.import_class(UniWorker, self.echo)
+
+        except (ParseDefinitionError, UniConfigError) as e:
+            self.echo.exit_with_error(str(e))
 
     def start_cron(self) -> None:
         try:
@@ -53,11 +72,15 @@ class Uni:
             self.echo.log_warning('interrupted')
             exit(0)
 
-    def initialize(self, everything: bool = False, create: bool = True) -> None:
+    def initialize_cron_workers(self) -> None:
+        for t in self._mediator.config.cron_tasks.values():
+            self.init_producer_worker(t.worker.name)
+
+    def initialize(self, everything: bool = False) -> None:
         if everything:
             for wn in self._mediator.config.workers.keys():
                 self._mediator.add_worker_to_init_list(wn, no_related=True)
-        self._mediator.initialize(create=create)
+        self._mediator.initialize(create=True)
 
     def init_cron(self) -> None:
         for task in self._mediator.config.cron_tasks.values():

@@ -16,6 +16,9 @@ from unipipeline import UniBroker, UniMessageMeta, UniBrokerConsumer
 
 class {{name}}(UniBroker):
 
+    def stop_consuming(self) -> None:
+        raise NotImplementedError('method stop_consuming must be specified for class "{{name}}"')
+
     def connect(self) -> None:
         raise NotImplementedError('method connect must be specified for class "{{name}}"')
 

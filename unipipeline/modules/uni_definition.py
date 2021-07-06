@@ -1,8 +1,13 @@
-from typing import Any, Dict
+from typing import Any, Dict, TypeVar, Type
 
 from pydantic import BaseModel
 
-from unipipeline.utils.parse_definition import ParseDefinitionError
+
+class UniDynamicDefinition(BaseModel):
+    pass
+
+
+T = TypeVar('T', bound=UniDynamicDefinition)
 
 
 class UniDefinition(BaseModel):
@@ -10,13 +15,7 @@ class UniDefinition(BaseModel):
 
     dynamic_props_: Dict[str, Any]
 
-    def configure_dynamic(self, defaults: Dict[str, Any]) -> Dict[str, Any]:
-        res = dict()
-        for k, v in defaults.items():
-            if k in self.dynamic_props_:
-                res[k] = self.dynamic_props_[k]
-                if v is not None and not isinstance(res[k], type(v)):
-                    raise ParseDefinitionError(f'configure broker {self.name}->{k} has invalid property type. must be {type(v)}')
-            else:
-                res[k] = v
-        return res
+    def configure_dynamic(self, dynamic_type: Type[T]) -> T:
+        if not issubclass(dynamic_type, UniDynamicDefinition):
+            raise TypeError(f'dynamic prop has invalid type "{dynamic_type.__name__}". must be subclass UniDynamicDefinition')
+        return dynamic_type(**self.dynamic_props_)

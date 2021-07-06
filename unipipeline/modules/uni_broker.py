@@ -1,5 +1,7 @@
-from typing import Callable, Any, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar
+from typing import Callable, Any, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar, Type
 
+from unipipeline.modules.uni_message_codec import UniMessageCodec
+from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_message_meta import UniMessageMeta
@@ -23,13 +25,31 @@ class UniBrokerConsumer(NamedTuple):
 
 
 TContent = TypeVar('TContent')
+TConf = TypeVar('TConf')
 
 
-class UniBroker(Generic[TContent]):
+class UniBroker(Generic[TContent, TConf]):
+    config_type: Type[TConf] = UniDynamicDefinition  # type: ignore
+
     def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition[TContent]) -> None:
         self._uni_definition = definition
         self._uni_mediator = mediator
         self._uni_echo = self._uni_mediator.echo.mk_child(f'broker[{self._uni_definition.name}]')
+        self._uni_conf = self._uni_definition.configure_dynamic(self.config_type)  # type: ignore
+
+    @property
+    def config(self) -> TConf:
+        return self._uni_conf
+
+    def codec_serialize(self, meta: UniMessageMeta) -> TContent:
+        meta_dumps = self.definition.codec.dumps(meta.dict())
+        meta_compressed = self.definition.codec.compress(meta_dumps)
+        return meta_compressed
+
+    def codec_parse(self, content: TContent, codec: UniMessageCodec[TContent]) -> UniMessageMeta:
+        body_uncompressed = codec.decompress(content)
+        body_json = codec.loads(body_uncompressed)
+        return UniMessageMeta(**body_json)
 
     def connect(self) -> None:
         raise NotImplementedError(f'method connect must be implemented for {type(self).__name__}')
@@ -40,8 +60,8 @@ class UniBroker(Generic[TContent]):
     def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
         raise NotImplementedError(f'method consume must be implemented for {type(self).__name__}')
 
-    def end_consuming(self) -> None:
-        raise NotImplementedError(f'method end_consuming must be implemented for {type(self).__name__}')
+    def stop_consuming(self) -> None:
+        raise NotImplementedError(f'method stop_consuming must be implemented for {type(self).__name__}')
 
     def start_consuming(self) -> None:
         raise NotImplementedError(f'method start_consuming must be implemented for {type(self).__name__}')

@@ -28,7 +28,7 @@ class UniMediator:
 
         self._worker_definition_by_type: Dict[Any, UniWorkerDefinition] = dict()
         self._worker_instance_indexes: Dict[str, UniWorker] = dict()
-        self._broker_instance_indexes: Dict[str, UniBroker[Any]] = dict()
+        self._broker_instance_indexes: Dict[str, UniBroker[Any, Any]] = dict()
         self._worker_init_list: Set[str] = set()
         self._worker_initialized_list: Set[str] = set()
         self._waiting_init_list: Set[str] = set()
@@ -40,7 +40,7 @@ class UniMediator:
 
         self._message_types: Dict[str, Type[UniMessage]] = dict()
 
-        self._brokers_with_active_consumption: List[UniBroker[Any]] = list()
+        self._brokers_with_active_consumption: List[UniBroker[Any, Any]] = list()
 
     @property
     def echo(self) -> UniEcho:
@@ -149,7 +149,7 @@ class UniMediator:
         self.echo.log_warning('interruption detected')
         for b in self._brokers_with_active_consumption:
             self.echo.log_debug(f'broker "{b.definition.name}" was notified about interruption')
-            b.end_consuming()
+            b.stop_consuming()
         self._brokers_with_active_consumption = list()
         self.echo.log_info(f'all brokers was notified about interruption')
 
@@ -181,23 +181,30 @@ class UniMediator:
         self._brokers_with_topics_to_init[name].add(topic)
 
     def initialize(self, create: bool = True) -> None:
+        echo = self.echo.mk_child('initialize')
         for wn in self._worker_init_list:
-            self.echo.log_info(f'initialize :: worker "{wn}"', )
+            echo.log_info(f'worker "{wn}"', )
             self._worker_initialized_list.add(wn)
         self._worker_init_list = set()
 
         for waiting_name in self._waiting_init_list:
-            self._config.waitings[waiting_name].wait(self.echo)
-            self.echo.log_info(f'initialize :: waiting "{waiting_name}"')
+            self._config.waitings[waiting_name].wait(echo)
+            echo.log_info(f'waiting "{waiting_name}"')
             self._waiting_initialized_list.add(waiting_name)
         self._waiting_init_list = set()
 
         if create:
             for bn, topics in self._brokers_with_topics_to_init.items():
+                bd = self._config.brokers[bn]
+
+                if bd.marked_as_external:
+                    echo.log_debug(f'broker "{bn}" skipped because it external')
+                    continue
+
                 b = self.wait_for_broker_connection(bn)
 
                 b.initialize(topics)
-                self.echo.log_info(f'initialize :: broker "{b.definition.name}" topics :: {topics}')
+                echo.log_info(f'broker "{b.definition.name}" topics :: {topics}')
 
                 if bn not in self._brokers_with_topics_initialized:
                     self._brokers_with_topics_initialized[bn] = set()

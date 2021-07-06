@@ -1,4 +1,4 @@
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, Optional
 from uuid import UUID
 
 from unipipeline.modules.uni_definition import UniDefinition
@@ -15,4 +15,10 @@ class UniBrokerDefinition(UniDefinition, Generic[TContent]):
     retry_max_count: int
     retry_delay_s: int
 
+    external: Optional[str]
+
     codec: UniMessageCodec[TContent]
+
+    @property
+    def marked_as_external(self) -> bool:
+        return self.external is not None

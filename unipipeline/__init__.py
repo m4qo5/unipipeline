@@ -1,4 +1,4 @@
-from unipipeline.brokers.uni_amqp_broker import UniAmqpBroker, UniAmqpBrokerMessageManager, UniAmqpBrokerConnectionObj, UniAmqpBrokerConfig
+from unipipeline.brokers.uni_amqp_broker import UniAmqpBroker, UniAmqpBrokerMessageManager, UniAmqpBrokerConfig
 from unipipeline.brokers.uni_kafka_broker import UniKafkaBroker, UniKafkaBrokerMessageManager, UniKafkaBrokerConf
 from unipipeline.brokers.uni_log_broker import UniLogBroker
 from unipipeline.brokers.uni_memory_broker import UniMemoryBroker, UniMemoryBrokerMessageManager
@@ -62,7 +62,6 @@ __all__ = (
 
     "UniAmqpBroker",
     "UniAmqpBrokerConfig",
-    "UniAmqpBrokerConnectionObj",
     "UniAmqpBrokerMessageManager",
 
     "UniLogBroker",

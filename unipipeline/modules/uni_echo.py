@@ -73,7 +73,7 @@ class UniEcho:
             self.echo(f'{self._err_prefix}{msg}', stream=sys.stderr)
 
     def exit_with_error(self, msg: str) -> None:
-        self.echo(self._color_it(COLOR_RED, f'UNI ERROR :: {msg}'))
+        self.echo(f'{self._err_prefix}{msg}', stream=sys.stderr)
         exit(1)
 
     def success(self, msg: str) -> None:

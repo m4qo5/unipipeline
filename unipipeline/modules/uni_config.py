@@ -123,7 +123,7 @@ class UniConfig:
         self._waiting_index = self._parse_waitings(cfg, self._service)
         self.echo.log_info(f'parsed waitings: {",".join(self._waiting_index.keys())}')
 
-        self._brokers_index = self._parse_brokers(cfg, self._service)
+        self._brokers_index = self._parse_brokers(cfg, self._service, self._external)
         self.echo.log_info(f'parsed brokers: {",".join(self._brokers_index.keys())}')
 
         self._messages_index = self._parse_messages(cfg, self._service)
@@ -201,7 +201,7 @@ class UniConfig:
 
         return result
 
-    def _parse_brokers(self, config: Dict[str, Any], service: UniServiceDefinition) -> Dict[str, UniBrokerDefinition[Any]]:
+    def _parse_brokers(self, config: Dict[str, Any], service: UniServiceDefinition, external: Dict[str, UniExternalDefinition]) -> Dict[str, UniBrokerDefinition[Any]]:
         result: Dict[str, UniBrokerDefinition[Any]] = dict()
         defaults = dict(
             retry_max_count=3,
@@ -209,12 +209,17 @@ class UniConfig:
 
             content_type=CONTENT_TYPE__APPLICATION_JSON,
             compression=None,
+            external=None,
         )
 
         if "brokers" not in config:
             raise UniConfigError(f'brokers is not defined in config')
 
         for name, definition, other_def in parse_definition("brokers", config["brokers"], defaults, {"import_template", }):
+            ext = definition["external"]
+            if ext is not None and ext not in external:
+                raise UniConfigError(f'definition brokers->{name} has invalid external: "{ext}"')
+
             result[name] = UniBrokerDefinition(
                 **definition,
                 type=UniModuleDefinition.parse(template(definition["import_template"], **definition, **{"service": service})),

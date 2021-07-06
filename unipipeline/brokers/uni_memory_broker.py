@@ -2,6 +2,7 @@ from collections import deque
 from typing import Callable, Dict, TypeVar, Tuple, Optional, Deque, Set, List
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
+from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 
@@ -116,16 +117,15 @@ class QL:
                     self._echo.log_debug(f'process_all len_listeners={len(self._listeners)} :: messages={self.messages_to_process_count()}')
 
 
-class UniMemoryBroker(UniBroker):
+class UniMemoryBroker(UniBroker[bytes, UniDynamicDefinition]):
+    def stop_consuming(self) -> None:
+        pass
+
     def __init__(self, *args, **kwargs) -> None:
         super(UniMemoryBroker, self).__init__(*args, **kwargs)
         self._consuming_started = False
         self._queues_by_topic: Dict[str, QL] = dict()
         self._consumers_count = 0
-
-        self._extra_test_params = self.definition.configure_dynamic(dict(
-            extra="some"
-        ))
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:
         return self._queues_by_topic[topic].messages_to_process_count()

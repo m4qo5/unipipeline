@@ -3,9 +3,9 @@ from typing import Optional, Tuple, Any, Dict, List, NamedTuple, Set
 
 from kafka import KafkaProducer, KafkaConsumer  # type: ignore
 from kafka.consumer.fetcher import ConsumerRecord  # type: ignore
-from pydantic import BaseModel
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
+from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 
 
@@ -17,7 +17,7 @@ class UniKafkaBrokerMessageManager(UniBrokerMessageManager):
         pass
 
 
-class UniKafkaBrokerConf(BaseModel):
+class UniKafkaBrokerConf(UniDynamicDefinition):
     api_version: List[int]
 
 
@@ -26,13 +26,9 @@ class UniKafkaBrokerConsumer(NamedTuple):
     consumer: UniBrokerConsumer
 
 
-class UniKafkaBroker(UniBroker[bytes]):
+class UniKafkaBroker(UniBroker[bytes, UniKafkaBrokerConf]):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-
-        self.conf = UniKafkaBrokerConf(**self.definition.configure_dynamic(dict(
-           api_version=None
-        )))
 
         self._bootstrap_servers = self.get_boostrap_servers()
 
@@ -46,7 +42,7 @@ class UniKafkaBroker(UniBroker[bytes]):
         self._interrupted = False
         self._in_processing = False
 
-    def end_consuming(self) -> None:    # TODO
+    def stop_consuming(self) -> None:    # TODO
         self._end_consuming()
 
     def _end_consuming(self) -> None:
@@ -76,7 +72,7 @@ class UniKafkaBroker(UniBroker[bytes]):
 
         self._producer = KafkaProducer(
             bootstrap_servers=self._bootstrap_servers,
-            api_version=self.conf.api_version,
+            api_version=self.config.api_version,
             **self._security_conf,
         )
 
@@ -99,7 +95,7 @@ class UniKafkaBroker(UniBroker[bytes]):
     def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
         kfk_consumer = KafkaConsumer(
             topic,
-            api_version=self.conf.api_version,
+            api_version=self.config.api_version,
             bootstrap_servers=self._bootstrap_servers,
             value_deserializer=lambda m: json.loads(m.decode('utf-8')),
             group_id=consumer.group_id,

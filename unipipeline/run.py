@@ -7,11 +7,11 @@ from unipipeline.args import CMD_INIT, CMD_CHECK, CMD_CRON, CMD_PRODUCE, CMD_CON
 
 
 def run_check(u: Uni, args) -> None:
-    u.check(create=False)
+    u.check()
 
 
 def run_scaffold(u: Uni, args) -> None:
-    u.check(create=True)
+    u.scaffold()
 
 
 def run_cron(u: Uni, args) -> None:
@@ -23,7 +23,7 @@ def run_cron(u: Uni, args) -> None:
 def run_init(u: Uni, args) -> None:
     for wn in args.init_workers:
         u.init_producer_worker(wn)
-    u.initialize(everything=len(args.init_workers) == 0, create=True)
+    u.initialize(everything=len(args.init_workers) == 0)
 
 
 def run_consume(u: Uni, args) -> None:
@@ -52,7 +52,6 @@ args_cmd_map = {
 def main():
     sys.path.insert(0, os.getcwdb().decode('utf-8'))
     args = parse_args()
-    print(args)
     u = Uni(args.config_file, echo_level=logging.DEBUG if args.verbose else None)
     args_cmd_map[args.cmd](u, args)
     u.echo.success('done')

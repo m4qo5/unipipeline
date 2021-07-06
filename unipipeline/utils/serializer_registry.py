@@ -2,7 +2,10 @@ import bz2
 import json
 import lzma
 import zlib
+from datetime import datetime
+from enum import Enum
 from typing import Dict, Any, Callable, Set, Type, TypeVar, Generic
+from uuid import UUID
 
 CONTENT_TYPE__APPLICATION_JSON = 'application/json'
 # CONTENT_TYPE__APPLICATION_DATA = 'application/data'
@@ -66,8 +69,25 @@ class SerializersRegistry(Generic[TParsedData, TSerializedData]):
         return decoder(data)
 
 
+class ComplexEncoder(json.JSONEncoder):
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, UUID):
+            return str(obj)
+        if isinstance(obj, bytes):
+            return obj.hex()
+        if isinstance(obj, Enum):
+            return obj.value
+        return json.JSONEncoder.default(self, obj)
+
+
+def json_dumps(data: Any) -> str:
+    return ComplexEncoder().encode(data)
+
+
 serializer_registry = SerializersRegistry[Any, str]()
-serializer_registry.register(CONTENT_TYPE__APPLICATION_JSON, json.dumps, json.loads)
+serializer_registry.register(CONTENT_TYPE__APPLICATION_JSON, json_dumps, json.loads)
 
 compressor_registry = SerializersRegistry[bytes, bytes]()
 compressor_registry.register(COMPRESSION__GZIP, zlib.compress, zlib.decompress)

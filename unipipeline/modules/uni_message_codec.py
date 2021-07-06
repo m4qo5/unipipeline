@@ -24,9 +24,9 @@ class UniMessageCodec(BaseModel, Generic[TContent]):
         compressor_registry.assert_supports(v)
         return v
 
-    def decompress(self, data: bytes) -> bytes:
+    def decompress(self, data: TContent) -> TContent:
         if self.compression is not None:
-            return compressor_registry.loads(data, self.compression)
+            return compressor_registry.loads(data, self.compression)  # type: ignore
         return data
 
     def loads(self, data: TContent) -> Dict[str, Any]:
