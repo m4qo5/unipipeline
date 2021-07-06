@@ -88,15 +88,15 @@ class UniAmqpBroker(UniBroker[bytes]):
 
         self.conf = UniAmqpBrokerConfig(**self.definition.configure_dynamic(dict(
             exchange_name="communication",
-            exchange_type="direct",
             heartbeat=600,
             blocked_connection_timeout=300,
+            prefetch=1,
             socket_timeout=300,
             stack_timeout=300,
+            exchange_type="direct",
             durable=True,
-            passive=False,
-            retry_delay_s=3,
             auto_delete=False,
+            passive=False,
             is_persistent=True,
         )))
 
