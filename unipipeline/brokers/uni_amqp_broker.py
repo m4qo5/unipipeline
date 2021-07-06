@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from pika import ConnectionParameters, PlainCredentials, BlockingConnection, BasicProperties, spec  # type: ignore
 from pika.adapters.blocking_connection import BlockingChannel  # type: ignore
-from pika.exceptions import AMQPConnectionError, AMQPError, ConnectionClosedByBroker
+from pika.exceptions import AMQPConnectionError, AMQPError, ConnectionClosedByBroker  # type: ignore
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_definition import UniDynamicDefinition
