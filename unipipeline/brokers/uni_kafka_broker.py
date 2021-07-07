@@ -81,6 +81,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
             else:
                 return
 
+        # TODO: change default connection as producer yo abstract connection to kafka server
         self._producer = KafkaProducer(
             bootstrap_servers=self._bootstrap_servers,
             api_version=self.config.api_version,
