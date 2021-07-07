@@ -12,7 +12,7 @@ class LogBroker(UniBroker):
     def close(self) -> None:
         pass
 
-    def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
+    def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         pass
 
     def start_consuming(self) -> None:

@@ -19,7 +19,7 @@ u.check()
 
 u.init_producer_worker('input_worker')
 
-u.init_consumer_worker("input_worker")
+# u.init_consumer_worker("input_worker")
 
 u.init_consumer_worker("my_super_cron_worker")
 

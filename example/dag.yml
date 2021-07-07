@@ -12,13 +12,20 @@ external:
 
 brokers:
   default_broker:
-    import_template: "example.brokers.rmq_broker:RmqBroker"
+    import_template: "example.brokers.kafka_broker:KafkaBroker"
+    api_version: [ 0, 10 ]
 
   ender_broker:
     import_template: "example.brokers.uni_log_broker:LogBroker"
 
   mem_broker:
     import_template: "unipipeline.brokers.uni_memory_broker:UniMemoryBroker"
+
+  rmq_broker:
+    import_template: "example.brokers.rmq_broker:RmqBroker"
+
+  kafka_broker:
+    import_template: "example.brokers.kafka_broker:KafkaBroker"
 
 
 messages:
