@@ -58,7 +58,7 @@ class UniAmqpBrokerConsumer(NamedTuple):
     consumer_tag: str
 
 
-class UniAmqpBroker(UniBroker[bytes, UniAmqpBrokerConfig]):
+class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
     config_type = UniAmqpBrokerConfig
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:
@@ -133,6 +133,7 @@ class UniAmqpBroker(UniBroker[bytes, UniAmqpBrokerConfig]):
             self._get_channel().stop_consuming()
             self.close()
             self._consuming_started = False
+            self.echo.log_info('consumption stopped')
 
     def connect(self) -> None:
         if self._connection is not None:
@@ -140,16 +141,20 @@ class UniAmqpBroker(UniBroker[bytes, UniAmqpBrokerConfig]):
                 self._connection = None
             else:
                 return
+
         if self._channel is not None:
             if self._channel.is_closed:
                 self._channel = None
             else:
                 return
+
         try:
             self._connection = BlockingConnection(self._params)
             self._channel = self._connection.channel()
         except (AMQPError, AMQPConnectionError) as e:
             raise ConnectionError(str(e))
+
+        self.echo.log_info('connected')
 
     def close(self) -> None:
         try:
@@ -172,13 +177,11 @@ class UniAmqpBroker(UniBroker[bytes, UniAmqpBrokerConfig]):
         assert self._channel is not None
         return self._channel
 
-    def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
-        echo = self.echo.mk_child(f'topic[{topic}]')
+    def add_consumer(self, consumer: UniBrokerConsumer) -> None:
+        echo = self.echo.mk_child(f'topic[{consumer.topic}]')
         if self._consuming_started:
             echo.log_error(f'you cannot add consumer dynamically :: tag="{consumer.id}" group_id={consumer.group_id}')
             exit(1)
-
-        self.get_topic_approximate_messages_count(topic)
 
         def consumer_wrapper(channel: BlockingChannel, method_frame: spec.Basic.Deliver, properties: BasicProperties, body: bytes) -> None:
             self._in_processing = True
@@ -193,7 +196,7 @@ class UniAmqpBroker(UniBroker[bytes, UniAmqpBrokerConfig]):
                 self._end_consuming()
 
         self._consumers.append(UniAmqpBrokerConsumer(
-            queue=topic,
+            queue=consumer.topic,
             on_message_callback=consumer_wrapper,
             consumer_tag=consumer.id,
         ))
@@ -233,7 +236,8 @@ class UniAmqpBroker(UniBroker[bytes, UniAmqpBrokerConfig]):
                 sleep(self.config.retry_delay_s)
 
     def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
-        for meta in meta_list:
+        for meta in meta_list: # TODO: package sending
+            # TODO: retry
             self._get_channel().basic_publish(
                 exchange=self.config.exchange_name,
                 routing_key=topic,

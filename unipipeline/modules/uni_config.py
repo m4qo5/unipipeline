@@ -53,7 +53,7 @@ class UniConfig:
         return self._file_path
 
     @property
-    def brokers(self) -> Dict[str, UniBrokerDefinition[Any]]:
+    def brokers(self) -> Dict[str, UniBrokerDefinition]:
         self._parse()
         return self._brokers_index
 
@@ -201,8 +201,8 @@ class UniConfig:
 
         return result
 
-    def _parse_brokers(self, config: Dict[str, Any], service: UniServiceDefinition, external: Dict[str, UniExternalDefinition]) -> Dict[str, UniBrokerDefinition[Any]]:
-        result: Dict[str, UniBrokerDefinition[Any]] = dict()
+    def _parse_brokers(self, config: Dict[str, Any], service: UniServiceDefinition, external: Dict[str, UniExternalDefinition]) -> Dict[str, UniBrokerDefinition]:
+        result: Dict[str, UniBrokerDefinition] = dict()
         defaults = dict(
             retry_max_count=3,
             retry_delay_s=10,

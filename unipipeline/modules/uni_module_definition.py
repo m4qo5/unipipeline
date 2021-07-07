@@ -25,7 +25,7 @@ class {{name}}(UniBroker):
     def close(self) -> None:
         raise NotImplementedError('method close must be specified for class "{{name}}"')
 
-    def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
+    def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         raise NotImplementedError('method add_topic_consumer must be specified for class "{{name}}"')
 
     def start_consuming(self) -> None:

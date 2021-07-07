@@ -21,19 +21,19 @@ class UniBrokerMessageManager:
 
 
 class UniBrokerConsumer(NamedTuple):
+    topic: str
     id: str
     group_id: str
     message_handler: Callable[[UniMessageMeta, UniBrokerMessageManager], None]
 
 
-TContent = TypeVar('TContent')
 TConf = TypeVar('TConf')
 
 
-class UniBroker(Generic[TContent, TConf]):
+class UniBroker(Generic[TConf]):
     config_type: Type[TConf] = UniDynamicDefinition  # type: ignore
 
-    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition[TContent]) -> None:
+    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition) -> None:
         self._uni_definition = definition
         self._uni_mediator = mediator
         self._uni_echo = self._uni_mediator.echo.mk_child(f'broker[{self._uni_definition.name}]')
@@ -47,12 +47,14 @@ class UniBroker(Generic[TContent, TConf]):
     def config(self) -> TConf:
         return self._uni_conf
 
-    def codec_serialize(self, meta: UniMessageMeta) -> TContent:
+    def codec_serialize(self, meta: UniMessageMeta) -> bytes:
         meta_dumps = self.definition.codec.dumps(meta.dict())
         meta_compressed = self.definition.codec.compress(meta_dumps)
         return meta_compressed
 
-    def codec_parse(self, content: TContent, codec: UniMessageCodec[TContent]) -> UniMessageMeta:
+    def codec_parse(self, content: bytes, codec: UniMessageCodec = None) -> UniMessageMeta:
+        if codec is None:
+            codec = self.definition.codec
         body_uncompressed = codec.decompress(content)
         body_json = codec.loads(body_uncompressed)
         return UniMessageMeta(**body_json)
@@ -63,7 +65,7 @@ class UniBroker(Generic[TContent, TConf]):
     def close(self) -> None:
         raise NotImplementedError(f'method close must be implemented for {type(self).__name__}')
 
-    def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
+    def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         raise NotImplementedError(f'method consume must be implemented for {type(self).__name__}')
 
     def stop_consuming(self) -> None:
@@ -82,7 +84,7 @@ class UniBroker(Generic[TContent, TConf]):
         raise NotImplementedError(f'method initialize_topic must be implemented for {type(self).__name__}')
 
     @property
-    def definition(self) -> UniBrokerDefinition[Any]:
+    def definition(self) -> UniBrokerDefinition:
         return self._uni_definition
 
     @property

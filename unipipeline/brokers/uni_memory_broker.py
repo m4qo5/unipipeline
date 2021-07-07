@@ -117,7 +117,7 @@ class QL:
                     self._echo.log_debug(f'process_all len_listeners={len(self._listeners)} :: messages={self.messages_to_process_count()}')
 
 
-class UniMemoryBroker(UniBroker[bytes, UniDynamicDefinition]):
+class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
     def stop_consuming(self) -> None:
         pass
 
@@ -140,10 +140,10 @@ class UniMemoryBroker(UniBroker[bytes, UniDynamicDefinition]):
     def close(self) -> None:
         pass
 
-    def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
+    def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         self._consumers_count += 1
-        self._queues_by_topic[topic].add_listener(consumer.message_handler, 1)
-        self.echo.log_info(f'consumer for topic "{topic}" added with consumer_tag "{consumer.id}"')
+        self._queues_by_topic[consumer.topic].add_listener(consumer.message_handler, 1)
+        self.echo.log_info(f'consumer for topic "{consumer.topic}" added with consumer_tag "{consumer.id}"')
 
     def start_consuming(self) -> None:
         if self._consuming_started:

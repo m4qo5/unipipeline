@@ -35,8 +35,8 @@ class UniLogBroker(UniBroker):
     def close(self) -> None:
         self._logger.info(f'{self._logging_prefix} close')
 
-    def add_topic_consumer(self, topic: str, consumer: UniBrokerConsumer) -> None:
-        self._logger.info(f'{self._logging_prefix} consume {consumer.id} :: {consumer.group_id}')
+    def add_consumer(self, consumer: UniBrokerConsumer) -> None:
+        self._logger.info(f'{self._logging_prefix} add consumer "{consumer.id}" to topic "{consumer.topic}" :: {consumer.group_id}')
 
     def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
         for meta in meta_list:

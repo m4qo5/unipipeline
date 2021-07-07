@@ -28,7 +28,7 @@ class UniMediator:
 
         self._worker_definition_by_type: Dict[Any, UniWorkerDefinition] = dict()
         self._worker_instance_indexes: Dict[str, UniWorker] = dict()
-        self._broker_instance_indexes: Dict[str, UniBroker[Any, Any]] = dict()
+        self._broker_instance_indexes: Dict[str, UniBroker[Any]] = dict()
         self._worker_init_list: Set[str] = set()
         self._worker_initialized_list: Set[str] = set()
         self._waiting_init_list: Set[str] = set()
@@ -40,7 +40,7 @@ class UniMediator:
 
         self._message_types: Dict[str, Type[UniMessage]] = dict()
 
-        self._brokers_with_active_consumption: List[UniBroker[Any, Any]] = list()
+        self._brokers_with_active_consumption: List[UniBroker[Any]] = list()
 
     @property
     def echo(self) -> UniEcho:

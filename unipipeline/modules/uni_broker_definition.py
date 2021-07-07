@@ -1,4 +1,4 @@
-from typing import Generic, TypeVar, Optional
+from typing import TypeVar, Optional
 from uuid import UUID
 
 from unipipeline.modules.uni_definition import UniDefinition
@@ -8,7 +8,7 @@ from unipipeline.modules.uni_module_definition import UniModuleDefinition
 TContent = TypeVar('TContent')
 
 
-class UniBrokerDefinition(UniDefinition, Generic[TContent]):
+class UniBrokerDefinition(UniDefinition):
     id: UUID
     type: UniModuleDefinition
 
@@ -17,7 +17,7 @@ class UniBrokerDefinition(UniDefinition, Generic[TContent]):
 
     external: Optional[str]
 
-    codec: UniMessageCodec[TContent]
+    codec: UniMessageCodec
 
     @property
     def marked_as_external(self) -> bool:

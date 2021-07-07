@@ -11,7 +11,7 @@ from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 class UniWorkerDefinition(UniDefinition):
     id: UUID
     name: str
-    broker: UniBrokerDefinition[Any]
+    broker: UniBrokerDefinition
     type: Optional[UniModuleDefinition]
     topic: str
     error_topic: str
