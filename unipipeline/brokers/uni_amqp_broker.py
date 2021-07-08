@@ -1,12 +1,15 @@
 import time
+from datetime import timedelta
 from time import sleep
-from typing import Optional, TypeVar, Set, List, NamedTuple, Callable
+from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, Tuple
 from urllib.parse import urlparse
+from uuid import UUID
 
 from pika import ConnectionParameters, PlainCredentials, BlockingConnection, BasicProperties, spec  # type: ignore
 from pika.adapters.blocking_connection import BlockingChannel  # type: ignore
 from pika.exceptions import AMQPConnectionError, AMQPError, ConnectionClosedByBroker  # type: ignore
 
+from unipipeline.errors import UniAnswerDelayError
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_message import UniMessage
@@ -38,6 +41,7 @@ class UniAmqpBrokerMessageManager(UniBrokerMessageManager):
 
 class UniAmqpBrokerConfig(UniDynamicDefinition):
     exchange_name: str = "communication"
+    answer_exchange_name: str = "communication_answer"
     heartbeat: int = 600
     blocked_connection_timeout: int = 300
     prefetch: int = 1
@@ -100,10 +104,17 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
         self._in_processing = False
         self._interrupted = False
 
-    def initialize(self, topics: Set[str]) -> None:
+    def initialize(self, topics: Set[str], answer_topic: Set[str]) -> None:
         ch = self._get_channel()
         ch.exchange_declare(
             exchange=self.config.exchange_name,
+            exchange_type=self.config.exchange_type,
+            passive=self.config.passive,
+            durable=self.config.durable,
+            auto_delete=self.config.auto_delete,
+        )
+        ch.exchange_declare(
+            exchange=self.config.answer_exchange_name,
             exchange_type=self.config.exchange_type,
             passive=self.config.passive,
             durable=self.config.durable,
@@ -251,3 +262,52 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                     }
                 )
             )
+
+    def get_answer(self, answer_topic: str, answer_id: UUID, max_delay_s: int) -> UniMessageMeta:
+        topic = f'{answer_topic}.{answer_id}' if answer_topic else str(answer_id)
+        ch = self._get_channel()
+
+        ch.queue_declare(
+            queue=topic,
+            durable=False,
+            auto_delete=True,
+            passive=False,
+        )
+
+        started = time.time()
+        while True:
+            (method, properties, body) = ch.basic_get(topic, auto_ack=True)
+
+            if method is None:
+                if (time.time() - started) > max_delay_s:
+                    raise UniAnswerDelayError(f'answer for {topic} reached limit')
+                sleep(1)
+                continue
+
+            return self.codec_parse(body, UniMessageCodec(
+                compression=properties.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
+                content_type=properties.content_type
+            ))
+
+    def publish_answer(self, answer_topic: str, answer_id: UUID, meta: UniMessageMeta) -> None:
+        ch = self._get_channel()
+        topic = f'{answer_topic}.{answer_id}' if answer_topic else str(answer_id)
+        ch.queue_declare(
+            queue=topic,
+            durable=False,
+            auto_delete=True,
+            passive=False,
+        )
+        ch.basic_publish(
+            exchange=self.config.answer_exchange_name,
+            routing_key=topic,
+            body=self.codec_serialize(meta),
+            properties=BasicProperties(
+                content_type=self.definition.codec.content_type,
+                content_encoding='utf-8',
+                delivery_mode=0,
+                headers={
+                    BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.codec.compression
+                }
+            )
+        )

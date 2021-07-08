@@ -1,5 +1,7 @@
 from collections import deque
+from datetime import timedelta
 from typing import Callable, Dict, TypeVar, Tuple, Optional, Deque, Set, List
+from uuid import UUID
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_definition import UniDynamicDefinition
@@ -36,14 +38,19 @@ class QL:
         self._listeners: Dict[int, Tuple[TConsumer, int]] = dict()
 
     def add(self, msg: UniMessageMeta) -> int:
-        self._echo.log_info(str(msg))
         self._msg_counter += 1
         msg_id = self._msg_counter
         self._waiting_for_process.append((msg_id, msg))
+        self._echo.log_info(f'added msg_id={msg_id} :: {msg}')
         return msg_id
 
+    def get_next(self) -> UniMessageMeta:
+        id, answ = self.reserve_next()
+        self.mark_as_processed(id)
+        return answ
+
     def move_back_from_reserved(self, msg_id: int) -> None:
-        self._echo.log_debug('move_back_from_reserved')
+        self._echo.log_debug(f'move_back_from_reserved msg_id={msg_id}')
         if self._in_process is None:
             return
 
@@ -118,6 +125,7 @@ class QL:
 
 
 class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
+
     def stop_consuming(self) -> None:
         pass
 
@@ -130,9 +138,17 @@ class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
     def get_topic_approximate_messages_count(self, topic: str) -> int:
         return self._queues_by_topic[topic].messages_to_process_count()
 
-    def initialize(self, topics: Set[str]) -> None:
+    def initialize(self, topics: Set[str], answer_topic: Set[str]) -> None:
         for topic in topics:
-            self._queues_by_topic[topic] = QL(self.echo.mk_child(f'topic[{topic}]'))
+            self._init_queue(topic)
+
+    def _init_queue(self, topic: str) -> None:
+        if topic in self._queues_by_topic:
+            return
+        self._queues_by_topic[topic] = QL(self.echo.mk_child(f'topic[{topic}]'))
+
+    def _get_answer_topic_name(self, topic: str, answ_id: UUID) -> str:
+        return f'answer@{topic}@{answ_id}'
 
     def connect(self) -> None:
         pass
@@ -165,3 +181,16 @@ class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
             ql.add(meta)
         if self._consuming_started:
             ql.process_all()
+
+    def get_answer(self, answer_topic: str, answer_id: UUID, delay: timedelta) -> UniMessageMeta:
+        topic = self._get_answer_topic_name(answer_topic, answer_id)
+        self._init_queue(topic)
+
+        answ = self._queues_by_topic[topic].get_next()
+
+        return answ
+
+    def publish_answer(self, answer_topic: str, answer_id: UUID, meta: UniMessageMeta) -> None:
+        topic = self._get_answer_topic_name(answer_topic, answer_id)
+        self._init_queue(topic)
+        self._queues_by_topic[topic].add(meta)

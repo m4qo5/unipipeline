@@ -96,8 +96,6 @@ class UniConfig:
             else:
                 raise UniDefinitionNotFoundError(f'worker {worker} is not defined in workers')
         elif issubclass(worker, UniWorker):
-            print(worker.__name__)
-            print(self.workers_by_class.keys())
             if worker.__name__ in self.workers_by_class:
                 return self.workers_by_class[worker.__name__]
             else:
@@ -303,8 +301,10 @@ class UniConfig:
             topic="{{name}}",
             error_payload_topic="{{topic}}__error__payload",
             error_topic="{{topic}}__error",
+            answer_topic="{{name}}__answer",
             broker="default_broker",
             external=None,
+            output_message=None,
 
             # notification_file="/var/unipipeline/{{service.name}}/{{service.id}}/worker_{{name}}_{{id}}/metrics",
 
@@ -330,6 +330,12 @@ class UniConfig:
                 raise UniConfigError(f'definition workers->{name} has invalid input_message: {im}')
             definition["input_message"] = messages[im]
 
+            om = definition['output_message']
+            if om is not None:
+                if om not in messages:
+                    raise UniConfigError(f'definition workers->{name} has invalid output_message: {om}')
+                definition["output_message"] = messages[om]
+
             ext = definition["external"]
             if ext is not None and ext not in external:
                 raise UniConfigError(f'definition workers->{name} has invalid external: "{ext}"')
@@ -340,11 +346,17 @@ class UniConfig:
                     raise UniConfigError(f'definition workers->{name} has invalid waiting_for: {w}')
                 waitings_.add(waitings[w])
 
+            topic_template = definition.pop('topic')
             error_topic_template = definition.pop('error_topic')
             error_payload_topic_template = definition.pop('error_payload_topic')
+            answer_topic_template = definition.pop('answer_topic')
+
+            topic_templates = {topic_template, error_topic_template, error_payload_topic_template, answer_topic_template}
+            if len(topic_templates) != 4:
+                raise UniConfigError(f'definition workers->{name} has duplicate topic templates: {", ".join(topic_templates)}')
 
             template_data: Dict[str, Any] = {**definition, "service": service}
-            topic = template(definition.pop('topic'), **template_data)
+            topic = template(topic_template, **template_data)
             template_data['topic'] = topic
 
             defn = UniWorkerDefinition(
@@ -353,6 +365,7 @@ class UniConfig:
                 topic=topic,
                 error_topic=template(error_topic_template, **template_data),
                 error_payload_topic=template(error_payload_topic_template, **template_data),
+                answer_topic=template(answer_topic_template, **template_data),
                 waitings=waitings_,
                 dynamic_props_=other_props,
             )

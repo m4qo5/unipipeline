@@ -15,7 +15,7 @@ class UniLogBroker(UniBroker):
     def get_topic_approximate_messages_count(self, topic: str) -> int:
         return 0
 
-    def initialize(self, topics: Set[str]) -> None:
+    def initialize(self, topics: Set[str], answer_topic: Set[str]) -> None:
         self._logger.info(f'{self._logging_prefix} initialized')
 
     def mk_logger(self) -> Logger:

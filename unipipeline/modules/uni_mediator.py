@@ -1,5 +1,5 @@
 from time import sleep
-from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List
+from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List, NamedTuple, Tuple
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -18,6 +18,11 @@ from unipipeline.utils.sig import soft_interruption
 TWorker = TypeVar('TWorker', bound=UniWorker)
 
 
+class UniBrokerInitRecipe(NamedTuple):
+    topics: Set[str]
+    answer_topics: Set[str]
+
+
 class UniMediator:
     def __init__(self, config: UniConfig) -> None:
         self._config = config
@@ -31,8 +36,8 @@ class UniMediator:
         self._waiting_initialized_list: Set[str] = set()
 
         self._consumers_list: Set[str] = set()
-        self._brokers_with_topics_to_init: Dict[str, Set[str]] = dict()
-        self._brokers_with_topics_initialized: Dict[str, Set[str]] = dict()
+        self._brokers_with_topics_to_init: Dict[str, UniBrokerInitRecipe] = dict()
+        self._brokers_with_topics_initialized: Dict[str, UniBrokerInitRecipe] = dict()
 
         self._message_types: Dict[str, Type[UniMessage]] = dict()
 
@@ -70,7 +75,38 @@ class UniMediator:
 
         return self._message_types[name]
 
-    def send_to(self, worker_name: str, payload: Union[Dict[str, Any], UniMessage], parent_meta: Optional[UniMessageMeta] = None, alone: bool = False) -> None:
+    def answer_to(self, worker_name: str, meta: UniMessageMeta, payload: Optional[Union[Dict[str, Any], UniMessageMeta, UniMessage]]) -> None:
+        wd = self._config.workers[worker_name]
+        if not wd.need_answer:
+            if payload is not None:
+                raise UniPayloadError(f'output message must be None because worker {wd.name} has no possibility to send output messages')
+            return
+
+        if payload is None:
+            raise UniPayloadError('output message must be not empty')
+
+        answ_meta: UniMessageMeta
+        if isinstance(payload, UniMessageMeta):
+            answ_meta = payload
+        else:
+            assert wd.output_message is not None
+            output_message_type = self.get_message_type(wd.output_message.name)
+            payload_msg: UniMessage
+            if isinstance(payload, output_message_type):
+                payload_msg = payload
+            elif isinstance(payload, dict):
+                payload_msg = output_message_type(**payload)
+            else:
+                raise UniPayloadError(f'output message has invalid type. {type(payload).__name__} was given')
+
+            answ_meta = meta.create_child(payload_msg.dict())
+
+        b = self.get_broker(wd.broker.name)
+
+        b.publish_answer(wd.answer_topic, meta.id, answ_meta)
+        self.echo.log_info(f'worker {worker_name} answers to {wd.answer_topic}->{meta.id} :: {answ_meta}')
+
+    def send_to(self, worker_name: str, payload: Union[Dict[str, Any], UniMessage], parent_meta: Optional[UniMessageMeta] = None, alone: bool = False) -> Optional[Tuple[UniMessage, UniMessageMeta]]:
         if worker_name not in self._worker_initialized_list:
             raise OverflowError(f'worker {worker_name} was not initialized')
 
@@ -103,6 +139,14 @@ class UniMediator:
         meta_list = [meta]
         br.publish(wd.topic, meta_list)  # TODO: make it list by default
         self.echo.log_info(f"worker {wd.name} sent message to topic '{wd.topic}':: {meta_list}")
+
+        if wd.need_answer:
+            assert wd.output_message is not None
+            answ_meta = br.get_answer(wd.answer_topic, meta.id, 1)
+            answ_message_type = self.get_message_type(wd.output_message.name)
+            answ_msg = answ_message_type(**answ_meta.payload)
+            return answ_msg, answ_meta
+        return None
 
     def start_cron(self) -> None:
         cron_jobs = UniCronJob.mk_jobs_list(self.config.cron_tasks.values(), self)
@@ -168,24 +212,33 @@ class UniMediator:
         for waiting in wd.waitings:
             if waiting.name not in self._waiting_initialized_list:
                 self._waiting_init_list.add(waiting.name)
-        self.add_broker_topic_to_init(wd.broker.name, wd.topic)
-        self.add_broker_topic_to_init(wd.broker.name, wd.error_topic)
-        self.add_broker_topic_to_init(wd.broker.name, wd.error_payload_topic)
+        self.add_broker_topic_to_init(wd.broker.name, wd.topic, False)
+        self.add_broker_topic_to_init(wd.broker.name, wd.error_topic, False)
+        self.add_broker_topic_to_init(wd.broker.name, wd.error_payload_topic, False)
+        if wd.need_answer:
+            self.add_broker_topic_to_init(wd.broker.name, wd.answer_topic, True)
         if not no_related:
             for wn in wd.output_workers:
                 self._worker_init_list.add(wn)
                 owd = self._config.workers[wn]
-                self.add_broker_topic_to_init(owd.broker.name, owd.topic)
+                self.add_broker_topic_to_init(owd.broker.name, owd.topic, False)
 
-    def add_broker_topic_to_init(self, name: str, topic: str) -> None:
+    def add_broker_topic_to_init(self, name: str, topic: str, is_answer: bool) -> None:
         if name in self._brokers_with_topics_initialized:
-            if topic in self._brokers_with_topics_initialized[name]:
-                return
+            if is_answer:
+                if topic in self._brokers_with_topics_initialized[name].answer_topics:
+                    return
+            else:
+                if topic in self._brokers_with_topics_initialized[name].topics:
+                    return
 
         if name not in self._brokers_with_topics_to_init:
-            self._brokers_with_topics_to_init[name] = set()
+            self._brokers_with_topics_to_init[name] = UniBrokerInitRecipe(set(), set())
 
-        self._brokers_with_topics_to_init[name].add(topic)
+        if is_answer:
+            self._brokers_with_topics_to_init[name].answer_topics.add(topic)
+        else:
+            self._brokers_with_topics_to_init[name].topics.add(topic)
 
     def initialize(self, create: bool = True) -> None:
         echo = self.echo.mk_child('initialize')
@@ -201,7 +254,7 @@ class UniMediator:
         self._waiting_init_list = set()
 
         if create:
-            for bn, topics in self._brokers_with_topics_to_init.items():
+            for bn, collection in self._brokers_with_topics_to_init.items():
                 bd = self._config.brokers[bn]
 
                 if bd.marked_as_external:
@@ -210,16 +263,20 @@ class UniMediator:
 
                 b = self.wait_for_broker_connection(bn)
 
-                b.initialize(topics)
-                echo.log_info(f'broker "{b.definition.name}" topics :: {topics}')
+                b.initialize(collection.topics, collection.answer_topics)
+                echo.log_info(f'broker "{b.definition.name}" topics :: {collection.topics}')
+                if len(collection.answer_topics) > 0:
+                    echo.log_info(f'broker "{b.definition.name}" answer topics :: {collection.answer_topics}')
 
                 if bn not in self._brokers_with_topics_initialized:
-                    self._brokers_with_topics_initialized[bn] = set()
-                for topic in topics:
-                    self._brokers_with_topics_initialized[bn].add(topic)
+                    self._brokers_with_topics_initialized[bn] = UniBrokerInitRecipe(set(), set())
+                for topic in collection.topics:
+                    self._brokers_with_topics_initialized[bn].topics.add(topic)
+                for topic in collection.answer_topics:
+                    self._brokers_with_topics_initialized[bn].answer_topics.add(topic)
             self._brokers_with_topics_to_init = dict()
 
-    def get_worker(self, worker: Union[Type['UniWorker[UniMessage]'], str], singleton: bool = True) -> UniWorker[UniMessage]:
+    def get_worker(self, worker: Union[Type['UniWorker'], str], singleton: bool = True) -> UniWorker:
         wd = self._config.get_worker_definition(worker)
         if wd.marked_as_external:
             raise OverflowError(f'worker "{worker}" is external. you could not get it')

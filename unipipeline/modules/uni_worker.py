@@ -1,4 +1,4 @@
-from typing import Generic, Type, Any, TypeVar, Optional, Dict, Union
+from typing import Generic, Type, Any, TypeVar, Optional, Dict, Union, Tuple
 
 from unipipeline.errors import UniSendingToWorkerError
 from unipipeline.modules.uni_broker import UniBrokerMessageManager
@@ -6,7 +6,8 @@ from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 
-TMessage = TypeVar('TMessage', bound=UniMessage)
+TInputMessage = TypeVar('TInputMessage', bound=UniMessage)
+TOutputMessage = TypeVar('TOutputMessage', bound=UniMessage)
 
 
 class UniPayloadParsingError(Exception):
@@ -14,7 +15,7 @@ class UniPayloadParsingError(Exception):
         self.parent_exception = exception
 
 
-class UniWorker(Generic[TMessage]):
+class UniWorker(Generic[TInputMessage, TOutputMessage]):
     def __init__(
         self,
         definition: UniWorkerDefinition,
@@ -23,20 +24,25 @@ class UniWorker(Generic[TMessage]):
         from unipipeline.modules.uni_mediator import UniMediator
         self._uni_moved = False
         self._uni_consume_initialized = False
-        self._uni_payload_cache: Optional[TMessage] = None
+        self._uni_payload_cache: Optional[TInputMessage] = None
         self._uni_current_meta: Optional[UniMessageMeta] = None
         self._uni_current_manager: Optional[UniBrokerMessageManager] = None
         self._uni_definition = definition
         self._uni_mediator: UniMediator = mediator
         self._uni_worker_instances_for_sending: Dict[Type[UniWorker], UniWorker] = dict()
         self._uni_echo = self._uni_mediator.echo.mk_child(f'worker[{self._uni_definition.name}]')
-        self._uni_message_type: Type[TMessage] = self._uni_definition.input_message.type.import_class(UniMessage, self._uni_echo)  # type: ignore
+        self._uni_input_message_type: Type[TInputMessage] = self._uni_mediator.get_message_type(self._uni_definition.input_message.name)  # type: ignore
+        self._uni_output_message_type: Optional[Type[TOutputMessage]] = self._uni_mediator.get_message_type(self._uni_definition.output_message.name) if self._uni_definition.output_message is not None else None  # type: ignore
         self._uni_echo_consumer = self._uni_echo.mk_child('consuming')
         self._uni_echo_consumer_sending = self._uni_echo_consumer.mk_child('sending')
 
     @property
-    def message_type(self) -> Type[TMessage]:
-        return self._uni_message_type
+    def input_message_type(self) -> Type[TInputMessage]:
+        return self._uni_input_message_type
+
+    @property
+    def output_message_type(self) -> Optional[Type[TOutputMessage]]:
+        return self._uni_output_message_type
 
     @property
     def definition(self) -> UniWorkerDefinition:
@@ -53,13 +59,13 @@ class UniWorker(Generic[TMessage]):
         return self._uni_current_manager
 
     @property
-    def payload(self) -> TMessage:
+    def payload(self) -> TInputMessage:
         return self._uni_payload_cache  # type: ignore
 
-    def handle_message(self, message: TMessage) -> None:
+    def handle_message(self, message: TInputMessage) -> Optional[Union[TOutputMessage, Dict[str, Any]]]:
         raise NotImplementedError(f'method handle_message not implemented for {type(self).__name__}')
 
-    def send_to(self, worker: Union[Type['UniWorker[TMessage]'], str], data: Any, alone: bool = False) -> None:
+    def send_to(self, worker: Union[Type['UniWorker'], str], data: Any, alone: bool = False) -> Optional[Tuple[UniMessage, UniMessageMeta]]:
         if self._uni_current_meta is None:
             raise UniSendingToWorkerError(f'meta was not defined. incorrect usage of function "send_to"')
         wd = self._uni_mediator.config.get_worker_definition(worker)
@@ -67,7 +73,7 @@ class UniWorker(Generic[TMessage]):
         if wd.name not in self._uni_definition.output_workers:
             raise UniSendingToWorkerError(f'worker {wd.name} is not defined in workers->{self._uni_definition.name}->output_workers')
 
-        self._uni_mediator.send_to(wd.name, data, parent_meta=self._uni_current_meta, alone=alone)
+        return self._uni_mediator.send_to(wd.name, data, parent_meta=self._uni_current_meta, alone=alone)
 
     def uni_process_message(self, meta: UniMessageMeta, manager: UniBrokerMessageManager) -> None:
         self._uni_echo_consumer.log_debug(f"message {meta.id} received :: {meta}")
@@ -75,10 +81,10 @@ class UniWorker(Generic[TMessage]):
 
         err_topic = UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR
         try:
-            self._uni_payload_cache = self._uni_message_type(**self.meta.payload)
+            self._uni_payload_cache = self._uni_input_message_type(**self.meta.payload)
             err_topic = UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR
-            self.handle_message(self._uni_payload_cache)
-            err_topic = None
+            result = self.handle_message(self._uni_payload_cache)
+            self._uni_mediator.answer_to(self._uni_definition.name, meta, result)
         except Exception as e:
             self._uni_move_to_error_topic(err_topic, e)
         # else:

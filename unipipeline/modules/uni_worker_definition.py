@@ -16,7 +16,9 @@ class UniWorkerDefinition(UniDefinition):
     topic: str
     error_topic: str
     error_payload_topic: str
+    answer_topic: str
     input_message: UniMessageDefinition
+    output_message: Optional[UniMessageDefinition]
     output_workers: Set[str]
     ack_after_success: bool
     waitings: Set[UniWaitingDefinition]
@@ -25,3 +27,7 @@ class UniWorkerDefinition(UniDefinition):
     @property
     def marked_as_external(self) -> bool:
         return self.external is not None
+
+    @property
+    def need_answer(self) -> bool:
+        return self.output_message is not None

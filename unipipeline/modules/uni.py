@@ -101,7 +101,7 @@ class Uni:
         try:
             self._mediator.send_to(name, data, alone=alone)
         except UniPayloadError as e:
-            self.echo.exit_with_error(f'invalid props in message: {e.validation_error}')
+            self.echo.exit_with_error(f'invalid props in message: {e}')
 
     def start_consuming(self) -> None:
         try:

@@ -23,3 +23,7 @@ class UniSendingToWorkerError(UniError):
 
 class UniWorkFlowError(UniError):
     pass
+
+
+class UniAnswerDelayError(UniError):
+    pass
