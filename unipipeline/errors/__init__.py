@@ -1,3 +1,6 @@
+from pydantic import ValidationError
+
+
 class UniError(Exception):
     pass
 
@@ -7,4 +10,16 @@ class UniDefinitionNotFoundError(UniError):
 
 
 class UniConfigError(UniError):
+    pass
+
+
+class UniPayloadError(UniError):
+    pass
+
+
+class UniSendingToWorkerError(UniError):
+    pass
+
+
+class UniWorkFlowError(UniError):
     pass

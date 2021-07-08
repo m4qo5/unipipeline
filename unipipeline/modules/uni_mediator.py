@@ -1,9 +1,11 @@
 from time import sleep
 from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List
+from uuid import uuid4
 
 from pydantic import ValidationError
 
-from unipipeline.modules.uni_broker import UniBroker
+from unipipeline.errors import UniPayloadError
+from unipipeline.modules.uni_broker import UniBroker, UniBrokerConsumer
 from unipipeline.modules.uni_config import UniConfig
 from unipipeline.modules.uni_cron_job import UniCronJob
 from unipipeline.modules.uni_echo import UniEcho
@@ -14,12 +16,6 @@ from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.sig import soft_interruption
 
 TWorker = TypeVar('TWorker', bound=UniWorker)
-
-
-class PayloadError(Exception):
-    def __init__(self, e: ValidationError) -> None:
-        super(PayloadError, self).__init__(f'invalid props: {e}')
-        self.validation_error = e
 
 
 class UniMediator:
@@ -89,7 +85,7 @@ class UniMediator:
             else:
                 raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
         except ValidationError as e:
-            raise PayloadError(e)
+            raise UniPayloadError(e)
 
         br = self.get_broker(wd.broker.name)
 
@@ -126,8 +122,19 @@ class UniMediator:
     def start_consuming(self) -> None:
         brokers = set()
         for wn in self._consumers_list:
+            wd = self._config.workers[wn]
             w = self.get_worker(wn)
-            w.consume()
+
+            br = self.get_broker(wd.broker.name)
+
+            self.echo.log_info(f"worker {wn} start consuming")
+            br.add_consumer(UniBrokerConsumer(
+                topic=wd.topic,
+                id=f'{wn}__{uuid4()}',
+                group_id=wn,
+                message_handler=w.uni_process_message
+            ))
+
             self.echo.log_info(f'consumer {wn} initialized')
             brokers.add(w.definition.broker.name)
 

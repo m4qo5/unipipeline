@@ -96,6 +96,8 @@ class UniConfig:
             else:
                 raise UniDefinitionNotFoundError(f'worker {worker} is not defined in workers')
         elif issubclass(worker, UniWorker):
+            print(worker.__name__)
+            print(self.workers_by_class.keys())
             if worker.__name__ in self.workers_by_class:
                 return self.workers_by_class[worker.__name__]
             else:
@@ -137,7 +139,7 @@ class UniConfig:
         self._workers_by_name_index = self._parse_workers(cfg, self._service, self._brokers_index, self._messages_index, self._waiting_index, self._external)
         self.echo.log_info(f'parsed workers: {",".join(self._workers_by_name_index.keys())}')
 
-        for wd in self._workers_by_class_index.values():
+        for wd in self._workers_by_name_index.values():
             if wd.marked_as_external:
                 continue
             assert wd.type is not None
