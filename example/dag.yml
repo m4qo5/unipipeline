@@ -26,6 +26,7 @@ brokers:
 
   kafka_broker:
     import_template: "example.brokers.kafka_broker:KafkaBroker"
+    api_version: [ 0, 10 ]
 
 
 messages:
@@ -62,12 +63,15 @@ waitings:
 
 workers:
   __default__:
+    broker: mem_broker
     import_template: "example.workers.{{name}}:{{name|camel}}"
 
   my_super_cron_worker:
+    broker: kafka_broker
     input_message: uni_cron_message
 
   input_worker:
+    broker: rmq_broker
     input_message: input_message
     waiting_for:
       - common_db
