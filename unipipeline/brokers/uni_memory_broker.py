@@ -182,7 +182,7 @@ class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
         if self._consuming_started:
             ql.process_all()
 
-    def get_answer(self, answer_topic: str, answer_id: UUID, delay: timedelta) -> UniMessageMeta:
+    def get_answer(self, answer_topic: str, answer_id: UUID, max_delay_s: int) -> UniMessageMeta:
         topic = self._get_answer_topic_name(answer_topic, answer_id)
         self._init_queue(topic)
 

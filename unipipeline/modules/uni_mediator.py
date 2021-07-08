@@ -129,7 +129,7 @@ class UniMediator:
             size = br.get_topic_approximate_messages_count(wd.topic)
             if size != 0:
                 self.echo.log_info(f'sending to worker "{wd.name}" was skipped, because topic {wd.topic} has messages: {size}>0')
-                return
+                return None
 
         if parent_meta is not None:
             meta = parent_meta.create_child(payload_data)
