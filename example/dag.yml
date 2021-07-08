@@ -67,11 +67,13 @@ workers:
     import_template: "example.workers.{{name}}:{{name|camel}}"
 
   my_super_cron_worker:
-    broker: kafka_broker
+    broker: mem_broker
     input_message: uni_cron_message
+    output_workers:
+      - ender_second_worker
 
   input_worker:
-    broker: rmq_broker
+    broker: mem_broker
     input_message: input_message
     waiting_for:
       - common_db
@@ -94,6 +96,7 @@ workers:
 
   ender_second_worker:
     input_message: ender_message
-    broker: ender_broker
+    output_message: ender_message
+    broker: mem_broker
     waiting_for:
       - common_db

@@ -2,4 +2,4 @@ from unipipeline import UniMessage
 
 
 class EnderMessage(UniMessage):
-    pass
+    some_prop: str

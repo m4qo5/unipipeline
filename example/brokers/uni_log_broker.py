@@ -24,5 +24,5 @@ class LogBroker(UniBroker):
     def get_topic_approximate_messages_count(self, topic: str) -> int:
         pass
 
-    def initialize(self, topics: Set[str]) -> None:
+    def initialize(self, topics: Set[str], answer_topic: Set[str]) -> None:
         pass
