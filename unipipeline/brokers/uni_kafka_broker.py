@@ -85,7 +85,6 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
         self._producer = KafkaProducer(
             bootstrap_servers=self._bootstrap_servers,
             api_version=self.config.api_version,
-            value_serializer=lambda x: self.codec_serialize(x),
             retries=self.config.retry_max_count,
             acks=1,
             **self._security_conf,
@@ -127,7 +126,6 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
             api_version=self.config.api_version,
             bootstrap_servers=self._bootstrap_servers,
             enable_auto_commit=False,
-            value_deserializer=lambda x: self.codec_parse(x),
             group_id=consumer.group_id,
         )
 
@@ -140,7 +138,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
         for consumer_record in kfk_consumer:
             self._in_processing = True
 
-            meta = consumer_record.value
+            meta = self.codec_parse(consumer_record.value)
 
             manager = UniKafkaBrokerMessageManager(commit)
             consumer.message_handler(meta, manager)
@@ -167,7 +165,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
             # TODO: retry
             p.send(
                 topic=topic,
-                value=meta,
+                value=self.codec_serialize(meta),
                 key=str(meta.id).encode('utf8')
             )
         p.flush()

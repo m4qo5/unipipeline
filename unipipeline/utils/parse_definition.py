@@ -18,11 +18,10 @@ def parse_definition(
     if not isinstance(definitions, dict):
         raise ParseDefinitionError(f'definition of {conf_name} has invalid type. must be dict')
 
-    defaults_keys = set(defaults.keys())
+    common = definitions.get(COMMON_PROP, dict())
 
     for name, raw_definition in definitions.items():
         other_props: Dict[str, Any] = dict()
-        definition = dict(defaults)
 
         name = str(name)
         if name.startswith("_"):
@@ -34,25 +33,26 @@ def parse_definition(
         if not isinstance(raw_definition, dict):
             raise ParseDefinitionError(f'definition of {conf_name}->{name} has invalid type. must be dict')
 
-        combined_definition = dict(definitions.get(COMMON_PROP, dict()))
+        result_definition = dict(defaults)
+        combined_definition = dict(common)
         combined_definition.update(raw_definition)
 
         for k, v in combined_definition.items():
-            if k in defaults_keys:
-                definition[k] = v
+            if k in defaults:
+                result_definition[k] = v
                 vd = defaults.get(k, None)
                 if vd is not None and type(vd) != type(v):
                     raise ParseDefinitionError(f'definition of {conf_name}->{name} has invalid key "{k}" type')
             elif k in required_keys:
-                definition[k] = v
+                result_definition[k] = v
             else:
                 other_props[k] = v
 
         for rk in required_keys:
-            if rk not in definition:
+            if rk not in result_definition:
                 raise ParseDefinitionError(f'definition of {conf_name}->{name} has no required prop "{rk}"')
 
-        definition["name"] = name
-        definition["id"] = uuid4()
+        result_definition["name"] = name
+        result_definition["id"] = uuid4()
 
-        yield name, definition, other_props
+        yield name, result_definition, other_props
