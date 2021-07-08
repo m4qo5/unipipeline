@@ -1,6 +1,7 @@
 from typing import Generic, Type, Any, TypeVar, Optional, Dict, Union
 from uuid import uuid4
 
+from unipipeline.errors import UniDefinitionNotFoundError
 from unipipeline.modules.uni_broker import UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic
@@ -32,6 +33,7 @@ class UniWorker(Generic[TMessage]):
         self._uni_echo = self._uni_mediator.echo.mk_child(f'worker[{self._uni_definition.name}]')
         self._uni_message_type: Type[TMessage] = self._uni_definition.input_message.type.import_class(UniMessage, self._uni_echo)  # type: ignore
         self._uni_echo_consumer = self._uni_echo.mk_child('consuming')
+        self._uni_echo_consumer_sending = self._uni_echo_consumer.mk_child('sending')
 
     @property
     def message_type(self) -> Type[TMessage]:
@@ -67,18 +69,12 @@ class UniWorker(Generic[TMessage]):
 
     @property
     def payload(self) -> TMessage:
-        if self._uni_payload_cache is None:
-            try:
-                self._uni_payload_cache = self._uni_message_type(**self.meta.payload)
-            except Exception as e:
-                raise UniPayloadParsingError(e)
-        return self._uni_payload_cache
+        return self._uni_payload_cache  # type: ignore
 
     def send_to(self, worker: Union[Type['UniWorker[TMessage]'], str], data: Any, alone: bool = False) -> None:
         if self._uni_current_meta is None:
             raise ValueError(f'meta was not defined. incorrect usage of function "send_to"')
-
-        wd = self._uni_mediator.config.workers[worker] if isinstance(worker, str) else self._uni_mediator.config.workers_by_class[worker.__name__]
+        wd = self._uni_mediator.config.get_worker_definition(worker)
 
         if wd.name not in self._uni_definition.output_workers:
             raise ValueError(f'worker {wd.name} is not defined in workers->{self._uni_definition.name}->output_workers')
@@ -88,39 +84,39 @@ class UniWorker(Generic[TMessage]):
     def process_message(self, meta: UniMessageMeta, manager: UniBrokerMessageManager) -> None:
         self._uni_echo_consumer.log_debug(f"message {meta.id} received :: {meta}")
         self._uni_moved = False
-        self._uni_payload_cache = None
         self._uni_current_meta = meta
         self._uni_current_manager = manager
 
-        unsupported_err_topic = False
-        if not meta.has_error:
+        try:
+            self._uni_payload_cache = self._uni_message_type(**self.meta.payload)
+        except Exception as e:
+            self._uni_echo_consumer.log_error(str(e))
+            self.move_to_error_topic(UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR, e)
+        else:
             try:
-                self.handle_message(self.payload)
-            except UniPayloadParsingError as e:
-                self.move_to_error_topic(UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR, e)
+                self.handle_message(self._uni_payload_cache)
             except Exception as e:
                 self._uni_echo_consumer.log_error(str(e))
                 self.move_to_error_topic(UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
-        else:
-            try:
-                assert meta.error is not None  # for mypy needs
-                if meta.error.error_topic is UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR:
-                    self.handle_error_message_handling(self.payload)
-                elif meta.error.error_topic is UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR:
-                    self.handle_error_message_payload(self.meta, self.manager)
-                elif meta.error.error_topic is UniMessageMetaErrTopic.ERROR_HANDLING_ERR:
-                    self.handle_error_handling(self.meta, self.manager)
-                else:
-                    unsupported_err_topic = True
-            except Exception as e:
-                self._uni_echo_consumer.log_error(str(e))
-                self.move_to_error_topic(UniMessageMetaErrTopic.ERROR_HANDLING_ERR, e)
-
-        if unsupported_err_topic:
-            assert meta.error is not None  # for mypy needs
-            err = NotImplementedError(f'{meta.error.error_topic} is not implemented in process_message')
-            self._uni_echo_consumer.log_error(str(err))
-            self.move_to_error_topic(UniMessageMetaErrTopic.SYSTEM_ERR, err)
+        # else:
+        #     try:
+        #         assert meta.error is not None  # for mypy needs
+        #         if meta.error.error_topic is UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR:
+        #             self.handle_error_message_handling(self.payload)
+        #         elif meta.error.error_topic is UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR:
+        #             self.handle_error_message_payload(self.meta, self.manager)
+        #         elif meta.error.error_topic is UniMessageMetaErrTopic.ERROR_HANDLING_ERR:
+        #             self.handle_error_handling(self.meta, self.manager)
+        #         else:
+        #             unsupported_err_topic = True
+        #     except Exception as e:
+        #         self._uni_echo_consumer.log_error(str(e))
+        #         self.move_to_error_topic(UniMessageMetaErrTopic.ERROR_HANDLING_ERR, e)
+        # if unsupported_err_topic:
+        #     assert meta.error is not None  # for mypy needs
+        #     err = NotImplementedError(f'{meta.error.error_topic} is not implemented in process_message')
+        #     self._uni_echo_consumer.log_error(str(err))
+        #     self.move_to_error_topic(UniMessageMetaErrTopic.SYSTEM_ERR, err)
 
         if not self._uni_moved and self._uni_definition.ack_after_success:
             manager.ack()
@@ -129,6 +125,7 @@ class UniWorker(Generic[TMessage]):
         self._uni_moved = False
         self._uni_current_meta = None
         self._uni_current_manager = None
+        self._uni_payload_cache = None
 
     def handle_message(self, message: TMessage) -> None:
         raise NotImplementedError(f'method handle_message not implemented for {type(self).__name__}')

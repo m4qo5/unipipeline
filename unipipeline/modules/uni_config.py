@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import yaml  # type: ignore
 
+from unipipeline.errors import UniDefinitionNotFoundError, UniConfigError
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.modules.uni_echo import UniEcho
@@ -20,10 +21,6 @@ from unipipeline.utils.serializer_registry import CONTENT_TYPE__APPLICATION_JSON
 from unipipeline.utils.template import template
 
 UNI_CRON_MESSAGE = "uni_cron_message"
-
-
-class UniConfigError(Exception):
-    pass
 
 
 class UniConfig:
@@ -92,10 +89,18 @@ class UniConfig:
         self._parse()
         return self._messages_index
 
-    def get_worker_definition(self, worker: Union[Type['UniWorker[UniMessage]'], str]) -> UniWorkerDefinition:
+    def get_worker_definition(self, worker: Union[Type['UniWorker'], str]) -> UniWorkerDefinition:
         if isinstance(worker, str):
-            return self.workers[worker]
-        return self.workers_by_class[worker.__name__]
+            if worker in self.workers:
+                return self.workers[worker]
+            else:
+                raise UniDefinitionNotFoundError(f'worker {worker} is not defined in workers')
+        elif issubclass(worker, UniWorker):
+            if worker.__name__ in self.workers_by_class:
+                return self.workers_by_class[worker.__name__]
+            else:
+                raise UniDefinitionNotFoundError(f'worker {worker.__name__} is not defined in workers')
+        raise UniDefinitionNotFoundError(f'invalid type of worker. must be subclass of UniWorker OR str name. "{type(worker).__name__}" was given')
 
     def _load_config(self) -> Dict[str, Any]:
         if self._config_loaded:
