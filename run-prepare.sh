@@ -22,7 +22,6 @@ mypy ./unipipeline ./example
 
 python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose=yes scaffold
 python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose=yes check
-python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose=yes init
 
 rm -rf ./build
 
