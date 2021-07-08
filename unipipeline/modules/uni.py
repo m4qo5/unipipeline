@@ -22,6 +22,10 @@ class Uni:
     def echo(self) -> UniEcho:
         return self._mediator.echo
 
+    @property
+    def config(self) -> UniConfig:
+        return self._mediator.config
+
     def set_echo_level(self, level: int):
         self._mediator.set_echo_level(level)
 
