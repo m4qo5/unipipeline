@@ -13,17 +13,18 @@ set -o nounset
 cd "$(dirname "${BASH_SOURCE[0]}")"
 CWD="$(pwd)"
 
+
 export PYTHONPATH=$CWD
 
-./run-check.sh
+pytest ./unipipeline --strict-markers
 
-python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose=yes scaffold
-python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose=yes check
+mypy ./unipipeline ./example
 
-rm -rf ./build
+FLAKE_IGNORE="D100,D101,D102,D103,D104,D107,D105,D106,D200,D400,D413,E501,SF01,T484,W503,E402,N815,N805"
 
-rm -rf ./dist
 
-python3 setup.py sdist bdist_wheel
+flake8 --max-line-length=120 --ignore=$FLAKE_IGNORE ./unipipeline
+
+flake8 --max-line-length=120 --ignore=$FLAKE_IGNORE ./example
 
 echo "EVERYTHING IS OK"

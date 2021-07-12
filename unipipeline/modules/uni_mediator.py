@@ -1,10 +1,11 @@
 from time import sleep
-from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List, NamedTuple, Tuple
+from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List, NamedTuple, Tuple, Callable
 from uuid import uuid4
 
 from pydantic import ValidationError
 
 from unipipeline.errors import UniPayloadError
+from unipipeline.modules.uni_util import UniUtil
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerConsumer
 from unipipeline.modules.uni_config import UniConfig
 from unipipeline.modules.uni_cron_job import UniCronJob
@@ -24,8 +25,9 @@ class UniBrokerInitRecipe(NamedTuple):
 
 
 class UniMediator:
-    def __init__(self, config: UniConfig) -> None:
+    def __init__(self, util: UniUtil, config: UniConfig) -> None:
         self._config = config
+        self._util = util
 
         self._worker_definition_by_type: Dict[Any, UniWorkerDefinition] = dict()
         self._worker_instance_indexes: Dict[str, UniWorker] = dict()
@@ -43,6 +45,11 @@ class UniMediator:
 
         self._brokers_with_active_consumption: List[UniBroker[Any]] = list()
 
+        self._decompression_modules: Dict[str, Callable[[bytes], bytes]] = dict()
+        self._compression_modules: Dict[str, Callable[[bytes], bytes]] = dict()
+        self._content_type_serializers: Dict[str, Callable[[Dict[str, Any]], Union[str, bytes]]] = dict()
+        self._content_type_parsers: Dict[str, Callable[[Union[str, bytes]], Dict[str, Any]]] = dict()
+
     @property
     def echo(self) -> UniEcho:
         return self._config.echo
@@ -53,7 +60,7 @@ class UniMediator:
     def get_broker(self, name: str, singleton: bool = True) -> UniBroker:
         if not singleton:
             broker_def = self.config.brokers[name]
-            broker_type = broker_def.type.import_class(UniBroker, self.echo)
+            broker_type = broker_def.type.import_class(UniBroker, self.echo, util=self._util)
             br = broker_type(mediator=self, definition=broker_def)
             return br
         if name not in self._broker_instance_indexes:
@@ -71,7 +78,7 @@ class UniMediator:
         if name in self._message_types:
             return self._message_types[name]
 
-        self._message_types[name] = self.config.messages[name].type.import_class(UniMessage, self.echo)
+        self._message_types[name] = self.config.messages[name].type.import_class(UniMessage, self.echo, util=self._util)
 
         return self._message_types[name]
 
@@ -204,6 +211,80 @@ class UniMediator:
         self._brokers_with_active_consumption = list()
         self.echo.log_info('all brokers was notified about interruption')
 
+    def get_compressor(self, name: str) -> Callable[[bytes], bytes]:
+        if name in self._compression_modules:
+            return self._compression_modules[name]
+        if name in self._config.compression:
+            c = self._config.compression[name]
+            self._compression_modules[name] = c.encoder_type.import_function()
+            return self._compression_modules[name]
+        raise ValueError(f'compression of "{name}" is not supported')
+
+    def get_decompressor(self, name: str) -> Callable[[bytes], bytes]:
+        if name in self._decompression_modules:
+            return self._decompression_modules[name]
+        if name in self._config.compression:
+            c = self._config.compression[name]
+            self._decompression_modules[name] = c.decoder_type.import_function()
+            return self._decompression_modules[name]
+        raise ValueError(f'decompression of "{name}" is not supported')
+
+    def decompress_message_body(self, compression: Optional[str], data: Union[str, bytes]) -> bytes:
+        data_bytes: bytes
+        if isinstance(data, str):
+            data_bytes = bytes(data, encoding='utf-8')
+        elif isinstance(data, bytes):
+            data_bytes = data
+        else:
+            raise TypeError('invalid type')
+        if compression is not None:
+            decompressor = self.get_decompressor(compression)
+            return decompressor(data_bytes)
+        return data_bytes
+
+    def compress_message_body(self, compression: Optional[str], data: Union[str, bytes]) -> bytes:
+        data_bytes: bytes
+        if isinstance(data, str):
+            data_bytes = bytes(data, encoding='utf-8')
+        elif isinstance(data, bytes):
+            data_bytes = data
+        else:
+            raise TypeError('invalid type')
+        if compression is not None:
+            compressor = self.get_compressor(compression)
+            return compressor(data_bytes)
+        return data_bytes
+
+    def parse_content_type(self, content_type: str, data: Union[bytes, str]) -> Dict[str, Any]:
+        data_str: str
+        if isinstance(data, str):
+            data_str = data
+        elif isinstance(data, bytes):
+            data_str = data.decode('utf-8')
+        else:
+            raise TypeError('invalid type')
+
+        parser = self.get_content_type_parser(content_type)
+        return parser(data_str)
+
+    def get_content_type_serializer(self, name: str) -> Callable[[Dict[str, Any]], Union[bytes, str]]:
+        if name in self._content_type_serializers:
+            return self._content_type_serializers[name]
+        if name in self._config.codecs:
+            c = self._config.codecs[name]
+            self._content_type_serializers[name] = c.encoder_type.import_function()
+            return self._content_type_serializers[name]
+        raise ValueError(f'content_type "{name}" is not supported')
+
+    def get_content_type_parser(self, name: str) -> Callable[[Union[bytes, str]], Dict[str, Any]]:
+        if name in self._content_type_parsers:
+            return self._content_type_parsers[name]
+        if name in self._config.codecs:
+            c = self._config.codecs[name]
+            self._content_type_parsers[name] = c.decoder_type.import_function()
+            return self._content_type_parsers[name]
+        raise ValueError(f'content_type "{name}" is not supported')
+
     def add_worker_to_init_list(self, name: str, no_related: bool) -> None:
         if name not in self._config.workers:
             self.echo.exit_with_error(f'worker "{name}" is not found in config "{self.config.file}"')
@@ -282,7 +363,7 @@ class UniMediator:
             raise OverflowError(f'worker "{worker}" is external. you could not get it')
         if not singleton or wd.name not in self._worker_instance_indexes:
             assert wd.type is not None
-            worker_type = wd.type.import_class(UniWorker, self.echo)
+            worker_type = wd.type.import_class(UniWorker, self.echo, util=self._util)
             self.echo.log_info(f'get_worker :: initialized worker "{wd.name}"')
             w = worker_type(definition=wd, mediator=self)
         else:

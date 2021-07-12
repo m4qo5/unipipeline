@@ -1,4 +1,4 @@
-from typing import Callable, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar, Type
+from typing import Callable, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar, Type, Optional
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -48,14 +48,12 @@ class UniBroker(Generic[TConf]):
     def config(self) -> TConf:
         return self._uni_conf
 
-    def codec_serialize(self, meta: UniMessageMeta) -> bytes:
+    def serialize_message_body(self, meta: UniMessageMeta) -> bytes:
         meta_dumps = self.definition.codec.dumps(meta.dict())
         meta_compressed = self.definition.codec.compress(meta_dumps)
         return meta_compressed
 
-    def codec_parse(self, content: bytes, codec: UniMessageCodec = None) -> UniMessageMeta:
-        if codec is None:
-            codec = self.definition.codec
+    def parse_message_body(self, content: bytes, compression: Optional[str], content_type: str) -> UniMessageMeta:
         body_uncompressed = codec.decompress(content)
         body_json = codec.loads(body_uncompressed)
         return UniMessageMeta(**body_json)

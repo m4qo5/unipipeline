@@ -2,7 +2,9 @@ from unipipeline.brokers.uni_amqp_broker import UniAmqpBroker, UniAmqpBrokerMess
 from unipipeline.brokers.uni_kafka_broker import UniKafkaBroker, UniKafkaBrokerMessageManager, UniKafkaBrokerConf
 from unipipeline.brokers.uni_log_broker import UniLogBroker
 from unipipeline.brokers.uni_memory_broker import UniMemoryBroker, UniMemoryBrokerMessageManager
+from unipipeline.errors import UniError, UniDefinitionNotFoundError, UniPayloadError, UniSendingToWorkerError, UniWorkFlowError, UniAnswerDelayError
 from unipipeline.messages.uni_cron_message import UniCronMessage
+from unipipeline.modules.uni_util import UniUtil
 from unipipeline.modules.uni import Uni
 from unipipeline.modules.uni_broker import UniBrokerMessageManager, UniBroker, UniBrokerConsumer
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
@@ -23,8 +25,7 @@ from unipipeline.modules.uni_wating import UniWaiting
 from unipipeline.modules.uni_worker import UniWorker, UniPayloadParsingError
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.connection_pool import ConnectionObj, ConnectionRC, ConnectionManager, ConnectionPool, connection_pool
-from unipipeline.utils.serializer_registry import SerializersRegistry, serializer_registry, compressor_registry, CONTENT_TYPE__APPLICATION_JSON, COMPRESSION__GZIP, \
-    COMPRESSION__BZ2, COMPRESSION__LZMA
+from unipipeline.utils.complex_serializer import json_dumps
 
 __all__ = (
     "Uni",
@@ -36,14 +37,9 @@ __all__ = (
     "UniServiceDefinition",
     "UniExternalDefinition",
     "UniMessageCodec",
+    "UniUtil",
 
-    "SerializersRegistry",
-    "serializer_registry",
-    "compressor_registry",
-    "CONTENT_TYPE__APPLICATION_JSON",
-    "COMPRESSION__GZIP",
-    "COMPRESSION__BZ2",
-    "COMPRESSION__LZMA",
+    "json_dumps",
 
     "ConnectionObj",
     "ConnectionRC",
@@ -90,4 +86,13 @@ __all__ = (
     # waiting
     "UniWaitingDefinition",
     "UniWaiting",
+
+    # Error
+    "UniError",
+    "UniDefinitionNotFoundError",
+    "UniConfigError",
+    "UniPayloadError",
+    "UniSendingToWorkerError",
+    "UniWorkFlowError",
+    "UniAnswerDelayError",
 )

@@ -2,7 +2,7 @@ import logging
 import sys
 from typing import IO, Union
 
-from unipipeline.utils.color import COLOR_RED, COLOR_CYAN, COLOR_YELLOW, COLOR_GRAY, color_it, COLOR_GREEN
+from unipipeline.modules.uni_util_color import UniUtilColor
 
 SUPPORTED_LVL = {logging.INFO, logging.DEBUG, logging.WARNING, logging.ERROR}
 
@@ -24,25 +24,22 @@ def get_lvl(lvl: Union[str, int]) -> int:
 
 
 class UniEcho:
-    def __init__(self, name: str, prefix: str = '', level: Union[int, str] = 'info', colors: bool = True) -> None:
+    def __init__(self, name: str, colors: UniUtilColor, prefix: str = '', level: Union[int, str] = 'info') -> None:
         self._name = name
         self._level = get_lvl(level)
         self._colors = colors
 
         prefix = f'{f"{prefix} | " if prefix else ""}{self._name}'
-        self._debug_prefix = self._color_it(COLOR_GRAY, f'{prefix} | DEBUG   :: ')
-        self._info_prefix = self._color_it(COLOR_CYAN, f'{prefix} | INFO    :: ')
-        self._warn_prefix = self._color_it(COLOR_YELLOW, f'{prefix} | WARNING :: ')
-        self._err_prefix = self._color_it(COLOR_RED, f'{prefix} | ERROR   :: ')
-        self._success_prefix = self._color_it(COLOR_GREEN, f'{prefix} :: ')
+        self._debug_prefix = self._colors.color_it(self._colors.COLOR_GRAY, f'{prefix} | DEBUG   :: ')
+        self._info_prefix = self._colors.color_it(self._colors.COLOR_CYAN, f'{prefix} | INFO    :: ')
+        self._warn_prefix = self._colors.color_it(self._colors.COLOR_YELLOW, f'{prefix} | WARNING :: ')
+        self._err_prefix = self._colors.color_it(self._colors.COLOR_RED, f'{prefix} | ERROR   :: ')
+        self._success_prefix = self._colors.color_it(self._colors.COLOR_GREEN, f'{prefix} :: ')
 
         self._prefix = prefix
 
-    def _color_it(self, color: str, msg: str) -> str:
-        return color_it(color, msg) if self._colors else msg
-
     def mk_child(self, name: str) -> 'UniEcho':
-        e = UniEcho(name, prefix=self._prefix, level=self._level, colors=self._colors)
+        e = UniEcho(name, colors=self._colors, prefix=self._prefix, level=self._level)
         return e
 
     @property
@@ -77,4 +74,4 @@ class UniEcho:
         exit(1)
 
     def success(self, msg: str) -> None:
-        self.echo(f'{self._success_prefix}{color_it(COLOR_GREEN, msg)}')
+        self.echo(f'{self._success_prefix}{self._colors.color_it(self._colors.COLOR_GREEN, msg)}')

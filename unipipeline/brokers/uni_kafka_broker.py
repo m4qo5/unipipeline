@@ -137,7 +137,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
         for consumer_record in kfk_consumer:
             self._in_processing = True
 
-            meta = self.codec_parse(consumer_record.value)
+            meta = self.parse_message_body(consumer_record.value)
 
             manager = UniKafkaBrokerMessageManager(commit)
             consumer.message_handler(meta, manager)
@@ -164,7 +164,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
             # TODO: retry
             p.send(
                 topic=topic,
-                value=self.codec_serialize(meta),
+                value=self.serialize_message_body(meta),
                 key=str(meta.id).encode('utf8')
             )
         p.flush()

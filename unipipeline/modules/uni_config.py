@@ -1,9 +1,11 @@
-from typing import Dict, Any, Set, Union, Type, Optional
+from typing import Dict, Any, Set, Union, Type, Optional, Iterator, Tuple
 from uuid import uuid4
 
 import yaml  # type: ignore
 
 from unipipeline.errors import UniDefinitionNotFoundError, UniConfigError
+from unipipeline.modules.uni_codec_definition import UniCodecDefinition
+from unipipeline.modules.uni_util import UniUtil
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.modules.uni_echo import UniEcho
@@ -15,22 +17,22 @@ from unipipeline.modules.uni_service_definition import UniServiceDefinition
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 from unipipeline.modules.uni_worker import UniWorker
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
-from unipipeline.utils.parse_definition import parse_definition
-from unipipeline.utils.serializer_registry import CONTENT_TYPE__APPLICATION_JSON
-from unipipeline.utils.template import template
+from unipipeline.utils.complex_serializer import CONTENT_TYPE__APPLICATION_JSON
 
 UNI_CRON_MESSAGE = "uni_cron_message"
 
 
 class UniConfig:
-    def __init__(self, file_path: str, echo_level: Optional[Union[str, int]] = None) -> None:
+    def __init__(self, util: UniUtil, echo: UniEcho, file_path: str) -> None:
+        self._util = util
         self._file_path = file_path
-        self._echo_level = echo_level
-        self._echo = UniEcho('UNI', level=echo_level or 'error', colors=False)
+        self._echo = echo
 
         self._config: Dict[str, Any] = dict()
         self._parsed = False
         self._config_loaded = False
+        self._compression_index: Dict[str, UniCodecDefinition] = dict()
+        self._codecs_index: Dict[str, UniCodecDefinition] = dict()
         self._waiting_index: Dict[str, UniWaitingDefinition] = dict()
         self._external: Dict[str, UniExternalDefinition] = dict()
         self._brokers_index: Dict[str, UniBrokerDefinition] = dict()
@@ -39,10 +41,6 @@ class UniConfig:
         self._workers_by_class_index: Dict[str, UniWorkerDefinition] = dict()
         self._cron_tasks_index: Dict[str, UniCronTaskDefinition] = dict()
         self._service: UniServiceDefinition = None  # type: ignore
-
-    @property
-    def echo(self) -> UniEcho:
-        return self._echo
 
     @property
     def file(self) -> str:
@@ -57,6 +55,16 @@ class UniConfig:
     def service(self) -> UniServiceDefinition:
         self._parse()
         return self._service
+
+    @property
+    def compression(self) -> Dict[str, UniCodecDefinition]:
+        self._parse()
+        return self._compression_index
+
+    @property
+    def codecs(self) -> Dict[str, UniCodecDefinition]:
+        self._parse()
+        return self._codecs_index
 
     @property
     def cron_tasks(self) -> Dict[str, UniCronTaskDefinition]:
@@ -111,6 +119,55 @@ class UniConfig:
             raise UniConfigError('config must be dict')
         return self._config
 
+    def _parse_definition(
+            self,
+            conf_name: str,
+            definitions: Dict[str, Any],
+            defaults: Dict[str, Any],
+            required_keys: Set[str]
+    ) -> Iterator[Tuple[str, Dict[str, Any], Dict[str, Any]]]:
+        if not isinstance(definitions, dict):
+            raise UniConfigError(f'definition of {conf_name} has invalid type. must be dict')
+
+        common = definitions.get("__default__", dict())
+
+        for name, raw_definition in definitions.items():
+            other_props: Dict[str, Any] = dict()
+
+            name = str(name)
+            if name.startswith("_"):
+                if name == "__default__":
+                    continue
+                else:
+                    raise ValueError(f"key '{name}' is not acceptable")
+
+            if not isinstance(raw_definition, dict):
+                raise UniConfigError(f'definition of {conf_name}->{name} has invalid type. must be dict')
+
+            result_definition = dict(defaults)
+            combined_definition = dict(common)
+            combined_definition.update(raw_definition)
+
+            for k, v in combined_definition.items():
+                if k in defaults:
+                    result_definition[k] = v
+                    vd = defaults.get(k, None)
+                    if vd is not None and type(vd) != type(v):
+                        raise UniConfigError(f'definition of {conf_name}->{name} has invalid key "{k}" type')
+                elif k in required_keys:
+                    result_definition[k] = v
+                else:
+                    other_props[k] = v
+
+            for rk in required_keys:
+                if rk not in result_definition:
+                    raise UniConfigError(f'definition of {conf_name}->{name} has no required prop "{rk}"')
+
+            result_definition["name"] = name
+            result_definition["id"] = uuid4()
+
+            yield name, result_definition, other_props
+
     def _parse(self) -> None:
         if self._parsed:
             return
@@ -119,37 +176,92 @@ class UniConfig:
         cfg = self._load_config()
 
         self._service = self._parse_service(cfg)
-        self.echo.log_info(f'parsed service: {self._service.name}')
+        self._echo.log_info(f'service: {self._service.name}')
+
+        self._compression_index = self._parse_compression(cfg)
+        self._echo.log_info(f'compression codecs: {",".join(self._compression_index.keys())}')
+
+        self._codecs_index = self._parse_codecs(cfg)
+        self._echo.log_info(f'serialization codecs: {",".join(self._codecs_index.keys())}')
 
         self._external = self._parse_external_services(cfg)
-        self.echo.log_info(f'parsed external: {",".join(self._external.keys())}')
+        self._echo.log_info(f'external: {",".join(self._external.keys())}')
 
         self._waiting_index = self._parse_waitings(cfg, self._service)
-        self.echo.log_info(f'parsed waitings: {",".join(self._waiting_index.keys())}')
+        self._echo.log_info(f'waitings: {",".join(self._waiting_index.keys())}')
 
         self._brokers_index = self._parse_brokers(cfg, self._service, self._external)
-        self.echo.log_info(f'parsed brokers: {",".join(self._brokers_index.keys())}')
+        self._echo.log_info(f'brokers: {",".join(self._brokers_index.keys())}')
 
         self._messages_index = self._parse_messages(cfg, self._service)
-        self.echo.log_info(f'parsed messages: {",".join(self._messages_index.keys())}')
+        self._echo.log_info(f'messages: {",".join(self._messages_index.keys())}')
 
         self._workers_by_name_index = self._parse_workers(cfg, self._service, self._brokers_index, self._messages_index, self._waiting_index, self._external)
-        self.echo.log_info(f'parsed workers: {",".join(self._workers_by_name_index.keys())}')
+        self._echo.log_info(f'workers: {",".join(self._workers_by_name_index.keys())}')
 
         for wd in self._workers_by_name_index.values():
             if wd.marked_as_external:
                 continue
             assert wd.type is not None
-            self._workers_by_class_index[wd.type.class_name] = wd
+            self._workers_by_class_index[wd.type.object_name] = wd
 
         self._cron_tasks_index = self._parse_cron_tasks(cfg, self._service, self._workers_by_name_index)
+
+    APPLICATION_JSON = 'application/json'
+    COMPRESSION_GZIP = "application/x-gzip"
+    COMPRESSION_BZ2 = "application/x-bz2"
+    COMPRESSION_LZMA = "application/x-lzma"
+
+    def _parse_compression(self, config: Dict[str, Any]) -> Dict[str, UniCodecDefinition]:
+        result = {
+            self.COMPRESSION_GZIP: {
+                "encoder_import_template": "zlib:compress",
+                "decoder_import_template": "zlib:decompress",
+            },
+            self.COMPRESSION_BZ2: {
+                "encoder_import_template": "bz2:compress",
+                "decoder_import_template": "bz2:decompress",
+            },
+            self.COMPRESSION_LZMA: {
+                "encoder_import_template": "lzma:compress",
+                "decoder_import_template": "lzma:decompress",
+            },
+        }
+
+        for name, definition, other_props in self._parse_definition('compression', config.get("compression", dict()), dict(), {"encoder_import_template", "decoder_import_template",}):
+            result[name] = UniCodecDefinition(
+                name=name,
+                encoder_type=UniModuleDefinition.parse(self._util.template.template(definition['encoder_import_template'], name=name)),
+                decoder_type=UniModuleDefinition.parse(self._util.template.template(definition['decoder_import_template'], name=name)),
+                dynamic_props_={}
+            )
+
+        return result
+
+    def _parse_codecs(self, config: Dict[str, Any]) -> Dict[str, UniCodecDefinition]:
+        result = {
+            self.APPLICATION_JSON: {
+                "encoder_import_template": "unipipeline:json_dumps",
+                "decoder_import_template": "json:loads",
+            },
+        }
+
+        for name, definition, other_props in self._parse_definition('codecs', config.get("codecs", dict()), dict(), {"encoder_import_template", "decoder_import_template",}):
+            result[name] = UniCodecDefinition(
+                name=name,
+                encoder_type=UniModuleDefinition.parse(self._util.template.template(definition['encoder_import_template'], name=name)),
+                decoder_type=UniModuleDefinition.parse(self._util.template.template(definition['decoder_import_template'], name=name)),
+                dynamic_props_={}
+            )
+
+        return result
 
     def _parse_cron_tasks(self, config: Dict[str, Any], service: UniServiceDefinition, workers: Dict[str, UniWorkerDefinition]) -> Dict[str, UniCronTaskDefinition]:
         result = dict()
         defaults = dict(
             alone=True,
         )
-        for name, definition, other_props in parse_definition("cron", config.get("cron", dict()), defaults, {"when", "worker"}):
+        for name, definition, other_props in self._parse_definition("cron", config.get("cron", dict()), defaults, {"when", "worker"}):
             worker_def = workers[definition["worker"]]
             if worker_def.input_message.name != UNI_CRON_MESSAGE:
                 raise ValueError(f"input_message of worker '{worker_def.name}' must be '{UNI_CRON_MESSAGE}'. '{worker_def.input_message.name}' was given")
@@ -178,12 +290,12 @@ class UniConfig:
         if "messages" not in config:
             raise UniConfigError('messages is not defined in config')
 
-        for name, definition, other_props in parse_definition("messages", config["messages"], dict(), {"import_template", }):
+        for name, definition, other_props in self._parse_definition("messages", config["messages"], dict(), {"import_template", }):
             import_template = definition.pop("import_template")
             id_ = definition.pop("id")
             result[name] = UniMessageDefinition(
                 **definition,
-                type=UniModuleDefinition.parse(template(import_template, **definition, **{"service": service, "id": id_})),
+                type=UniModuleDefinition.parse(self._util.template.template(import_template, **definition, **{"service": service, "id": id_})),
                 dynamic_props_=other_props,
             )
 
@@ -196,10 +308,10 @@ class UniConfig:
             retry_delay_s=10,
         )
 
-        for name, definition, other_props in parse_definition('waitings', config.get('waitings', dict()), defaults, {"import_template", }):
+        for name, definition, other_props in self._parse_definition('waitings', config.get('waitings', dict()), defaults, {"import_template", }):
             result[name] = UniWaitingDefinition(
                 **definition,
-                type=UniModuleDefinition.parse(template(definition["import_template"], **definition, **{"service": service})),
+                type=UniModuleDefinition.parse(self._util.template.template(definition["import_template"], **definition, **{"service": service})),
                 dynamic_props_=other_props
             )
 
@@ -219,14 +331,14 @@ class UniConfig:
         if "brokers" not in config:
             raise UniConfigError('brokers is not defined in config')
 
-        for name, definition, other_def in parse_definition("brokers", config["brokers"], defaults, {"import_template", }):
+        for name, definition, other_def in self._parse_definition("brokers", config["brokers"], defaults, {"import_template", }):
             ext = definition["external"]
             if ext is not None and ext not in external:
                 raise UniConfigError(f'definition brokers->{name} has invalid external: "{ext}"')
 
             result[name] = UniBrokerDefinition(
                 **definition,
-                type=UniModuleDefinition.parse(template(definition["import_template"], **definition, **{"service": service})),
+                type=UniModuleDefinition.parse(self._util.template.template(definition["import_template"], **definition, **{"service": service})),
                 codec=UniMessageCodec(
                     content_type=definition["content_type"],
                     compression=definition["compression"],
@@ -247,7 +359,8 @@ class UniConfig:
         clrs = service_conf.get('echo_colors', True)
         lvl = service_conf.get('echo_level', 'warning')
 
-        self._echo = UniEcho('UNI', level=self._echo_level or lvl, colors=clrs)
+        self._echo.level = lvl  # TODO: enable verbose if set
+        self._util.color.enabled = clrs
 
         return UniServiceDefinition(
             name=service_conf["name"],
@@ -266,7 +379,7 @@ class UniConfig:
 
         result = dict()
 
-        for name, definition, other_props in parse_definition('external', external_conf, defaults, set()):
+        for name, definition, other_props in self._parse_definition('external', external_conf, defaults, set()):
             if other_props:
                 raise UniConfigError(f'external->{name} has invalid props: {set(other_props.keys())}')
 
@@ -315,7 +428,7 @@ class UniConfig:
         if "workers" not in config:
             raise UniConfigError('workers is not defined in config')
 
-        for name, definition, other_props in parse_definition("workers", config["workers"], defaults, {"import_template", "input_message"}):
+        for name, definition, other_props in self._parse_definition("workers", config["workers"], defaults, {"import_template", "input_message"}):
             for ow in definition["output_workers"]:
                 out_workers.add(ow)
 
@@ -355,16 +468,16 @@ class UniConfig:
                 raise UniConfigError(f'definition workers->{name} has duplicate topic templates: {", ".join(topic_templates)}')
 
             template_data: Dict[str, Any] = {**definition, "service": service}
-            topic = template(topic_template, **template_data)
+            topic = self._util.template.template(topic_template, **template_data)
             template_data['topic'] = topic
 
             defn = UniWorkerDefinition(
                 **definition,
-                type=UniModuleDefinition.parse(template(definition["import_template"], **template_data)) if definition["external"] is None else None,
+                type=UniModuleDefinition.parse(self._util.template.template.template(definition["import_template"], **template_data)) if definition["external"] is None else None,
                 topic=topic,
-                error_topic=template(error_topic_template, **template_data),
-                error_payload_topic=template(error_payload_topic_template, **template_data),
-                answer_topic=template(answer_topic_template, **template_data),
+                error_topic=self._util.template.template(error_topic_template, **template_data),
+                error_payload_topic=self._util.template.template(error_payload_topic_template, **template_data),
+                answer_topic=self._util.template.template(answer_topic_template, **template_data),
                 waitings=waitings_,
                 dynamic_props_=other_props,
             )

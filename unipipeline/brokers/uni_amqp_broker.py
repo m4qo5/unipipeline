@@ -195,10 +195,13 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
 
         def consumer_wrapper(channel: BlockingChannel, method_frame: spec.Basic.Deliver, properties: BasicProperties, body: bytes) -> None:
             self._in_processing = True
-            meta = self.codec_parse(body, UniMessageCodec(
+
+            meta = self.parse_message_body(
+                body,
                 compression=properties.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
-                content_type=properties.content_type
-            ))
+                content_type=properties.content_type,
+            )
+
             manager = UniAmqpBrokerMessageManager(channel, method_frame)
             consumer.message_handler(meta, manager)
             self._in_processing = False
@@ -251,7 +254,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             self._get_channel().basic_publish(
                 exchange=self.config.exchange_name,
                 routing_key=topic,
-                body=self.codec_serialize(meta),
+                body=self.serialize_message_body(meta),
                 properties=BasicProperties(
                     content_type=self.definition.codec.content_type,
                     content_encoding='utf-8',
@@ -283,7 +286,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 sleep(1)
                 continue
 
-            return self.codec_parse(body, UniMessageCodec(
+            return self.parse_message_body(body, UniMessageCodec(
                 compression=properties.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
                 content_type=properties.content_type
             ))
@@ -300,7 +303,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
         ch.basic_publish(
             exchange=self.config.answer_exchange_name,
             routing_key=topic,
-            body=self.codec_serialize(meta),
+            body=self.serialize_message_body(meta),
             properties=BasicProperties(
                 content_type=self.definition.codec.content_type,
                 content_encoding='utf-8',

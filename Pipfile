@@ -25,7 +25,7 @@ python_version = "3.8"
 [scripts]
 pack = "python3 setup.py sdist bdist_wheel"
 upload_pypi = "twine upload dist/*"
-check = "mypy ./unipipeline ./example"
+check = "./run-check.sh"
 example-consumer = "./example/bin-start-consumer.sh"
 example-cron = "./example/bin-start-cron.sh"
 prepare = "./run-prepare.sh"
