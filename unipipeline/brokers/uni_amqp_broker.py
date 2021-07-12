@@ -1,7 +1,6 @@
 import time
-from datetime import timedelta
 from time import sleep
-from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, Tuple
+from typing import Optional, TypeVar, Set, List, NamedTuple, Callable
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -247,7 +246,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 sleep(self.config.retry_delay_s)
 
     def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
-        for meta in meta_list: # TODO: package sending
+        for meta in meta_list:  # TODO: package sending
             # TODO: retry
             self._get_channel().basic_publish(
                 exchange=self.config.exchange_name,

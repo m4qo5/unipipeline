@@ -202,7 +202,7 @@ class UniMediator:
             self.echo.log_debug(f'broker "{b.definition.name}" was notified about interruption')
             b.stop_consuming()
         self._brokers_with_active_consumption = list()
-        self.echo.log_info(f'all brokers was notified about interruption')
+        self.echo.log_info('all brokers was notified about interruption')
 
     def add_worker_to_init_list(self, name: str, no_related: bool) -> None:
         if name not in self._config.workers:

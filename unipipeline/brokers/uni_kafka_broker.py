@@ -1,7 +1,6 @@
 from typing import Optional, Tuple, Any, Dict, List, Set, Callable
 
 from kafka import KafkaProducer, KafkaConsumer  # type: ignore
-from kafka.consumer.fetcher import ConsumerRecord  # type: ignore
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_definition import UniDynamicDefinition

@@ -1,6 +1,3 @@
-from pydantic import ValidationError
-
-
 class UniError(Exception):
     pass
 

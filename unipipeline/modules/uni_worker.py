@@ -67,7 +67,7 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
 
     def send_to(self, worker: Union[Type['UniWorker'], str], data: Any, alone: bool = False) -> Optional[Tuple[UniMessage, UniMessageMeta]]:
         if self._uni_current_meta is None:
-            raise UniSendingToWorkerError(f'meta was not defined. incorrect usage of function "send_to"')
+            raise UniSendingToWorkerError('meta was not defined. incorrect usage of function "send_to"')
         wd = self._uni_mediator.config.get_worker_definition(worker)
 
         if wd.name not in self._uni_definition.output_workers:

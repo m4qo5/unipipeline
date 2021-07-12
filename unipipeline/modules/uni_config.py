@@ -8,7 +8,6 @@ from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.modules.uni_external_definition import UniExternalDefinition
-from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_message_definition import UniMessageDefinition
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
@@ -177,7 +176,7 @@ class UniConfig:
         }
 
         if "messages" not in config:
-            raise UniConfigError(f'messages is not defined in config')
+            raise UniConfigError('messages is not defined in config')
 
         for name, definition, other_props in parse_definition("messages", config["messages"], dict(), {"import_template", }):
             import_template = definition.pop("import_template")
@@ -218,7 +217,7 @@ class UniConfig:
         )
 
         if "brokers" not in config:
-            raise UniConfigError(f'brokers is not defined in config')
+            raise UniConfigError('brokers is not defined in config')
 
         for name, definition, other_def in parse_definition("brokers", config["brokers"], defaults, {"import_template", }):
             ext = definition["external"]
@@ -238,12 +237,12 @@ class UniConfig:
 
     def _parse_service(self, config: Dict[str, Any]) -> UniServiceDefinition:
         if "service" not in config:
-            raise UniConfigError(f'service is not defined in config')
+            raise UniConfigError('service is not defined in config')
 
         service_conf = config["service"]
 
         if "name" not in service_conf:
-            raise UniConfigError(f'service->name is not defined')
+            raise UniConfigError('service->name is not defined')
 
         clrs = service_conf.get('echo_colors', True)
         lvl = service_conf.get('echo_level', 'warning')
@@ -314,7 +313,7 @@ class UniConfig:
         )
 
         if "workers" not in config:
-            raise UniConfigError(f'workers is not defined in config')
+            raise UniConfigError('workers is not defined in config')
 
         for name, definition, other_props in parse_definition("workers", config["workers"], defaults, {"import_template", "input_message"}):
             for ow in definition["output_workers"]:

@@ -35,6 +35,7 @@ __all__ = (
     "UniModuleDefinition",
     "UniServiceDefinition",
     "UniExternalDefinition",
+    "UniMessageCodec",
 
     "SerializersRegistry",
     "serializer_registry",

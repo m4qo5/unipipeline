@@ -4,32 +4,22 @@ import lzma
 import zlib
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Any, Callable, Set, Type, TypeVar, Generic
+from typing import Dict, Any, Callable, Set, TypeVar, Generic
 from uuid import UUID
 
 CONTENT_TYPE__APPLICATION_JSON = 'application/json'
-# CONTENT_TYPE__APPLICATION_DATA = 'application/data'
 
 COMPRESSION__GZIP = 'application/x-gzip'
 COMPRESSION__BZ2 = 'application/x-bz2'
 COMPRESSION__LZMA = 'application/x-lzma'
 
 
-TContentEncoding = str
-TContentType = str
-
-
 T = TypeVar('T')
 
 
-def ensure_type(name: str, value: T, constructor: Type[T]) -> T:
-    if not isinstance(value, constructor):
-        raise TypeError(f'{name} has invalid type. must be {constructor.__name__}, {type(value).__name__} was given')
-    return value
-
-
-def prepare_content_type(content_type: TContentType) -> TContentType:
-    ensure_type('content_type', content_type, TContentType)
+def prepare_content_type(content_type: str) -> str:
+    if not isinstance(content_type, str):
+        raise TypeError(f'content type has invalid type. must be str, {type(content_type).__name__} was given')
     return content_type.lower()
 
 
@@ -39,31 +29,31 @@ TParsedData = TypeVar("TParsedData")
 
 class SerializersRegistry(Generic[TParsedData, TSerializedData]):
     def __init__(self) -> None:
-        self._encoders: Dict[TContentType, Callable[[TParsedData], TSerializedData]] = dict()
-        self._decoders: Dict[TContentType, Callable[[TSerializedData], TParsedData]] = dict()
-        self._content_types: Set[TContentType] = set()
+        self._encoders: Dict[str, Callable[[TParsedData], TSerializedData]] = dict()
+        self._decoders: Dict[str, Callable[[TSerializedData], TParsedData]] = dict()
+        self._content_types: Set[str] = set()
 
-    def register(self, content_type: TContentType, encoder: Callable[[TParsedData], TSerializedData], decoder: Callable[[TSerializedData], TParsedData]) -> None:
+    def register(self, content_type: str, encoder: Callable[[TParsedData], TSerializedData], decoder: Callable[[TSerializedData], TParsedData]) -> None:
         content_type = prepare_content_type(content_type)
         self._encoders[content_type] = encoder
         self._decoders[content_type] = decoder
         self._content_types.add(content_type)
 
-    def supports(self, content_type: TContentType) -> bool:
+    def supports(self, content_type: str) -> bool:
         content_type = prepare_content_type(content_type)
         return content_type in self._content_types
 
-    def assert_supports(self, content_type: TContentType) -> None:
+    def assert_supports(self, content_type: str) -> None:
         content_type = prepare_content_type(content_type)
         if content_type not in self._content_types:
             raise TypeError(f'content_type "{content_type}" is not supported')
 
-    def dumps(self, data: TParsedData, content_type: TContentType) -> TSerializedData:
+    def dumps(self, data: TParsedData, content_type: str) -> TSerializedData:
         content_type = prepare_content_type(content_type)
         encoder = self._encoders[content_type]
         return encoder(data)
 
-    def loads(self, data: TSerializedData, content_type: TContentType) -> TParsedData:
+    def loads(self, data: TSerializedData, content_type: str) -> TParsedData:
         content_type = prepare_content_type(content_type)
         decoder = self._decoders[content_type]
         return decoder(data)

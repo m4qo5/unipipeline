@@ -1,5 +1,4 @@
 from collections import deque
-from datetime import timedelta
 from typing import Callable, Dict, TypeVar, Tuple, Optional, Deque, Set, List
 from uuid import UUID
 
@@ -163,7 +162,7 @@ class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
 
     def start_consuming(self) -> None:
         if self._consuming_started:
-            raise OverflowError(f'consuming has already started')
+            raise OverflowError('consuming has already started')
 
         if self._consumers_count == 0:
             self.echo.log_warning('has no consumers')
@@ -171,7 +170,7 @@ class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
 
         self._consuming_started = True
 
-        self.echo.log_info(f'start consuming')
+        self.echo.log_info('start consuming')
         for ql in self._queues_by_topic.values():
             ql.process_all()
 

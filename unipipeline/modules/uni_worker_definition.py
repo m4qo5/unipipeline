@@ -1,4 +1,4 @@
-from typing import Set, Any, Optional
+from typing import Set, Optional
 from uuid import UUID
 
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition

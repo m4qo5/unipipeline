@@ -141,7 +141,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
                     echo.log_debug(f'still not found. try to waiting for {i}s before invalidating the cache')
                     sleep(i)
             if not success:
-                echo.log_error(f'could not be loaded')
+                echo.log_error('could not be loaded')
                 exit(1)
         assert mdl is not None
         tp = getattr(mdl, self.class_name)
