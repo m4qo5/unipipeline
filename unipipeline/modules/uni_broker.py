@@ -6,7 +6,6 @@ from pydantic import ValidationError
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_echo import UniEcho
-from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 
 if TYPE_CHECKING:
@@ -54,9 +53,9 @@ class UniBroker(Generic[TConf]):
         return meta_compressed
 
     def parse_message_body(self, content: bytes, compression: Optional[str], content_type: str) -> UniMessageMeta:
-        body_uncompressed = codec.decompress(content)
-        body_json = codec.loads(body_uncompressed)
-        return UniMessageMeta(**body_json)
+        content = self._uni_mediator.decompress_message_body(compression, content)
+        fields = self._uni_mediator.parse_content_type(content_type, content)
+        return UniMessageMeta(**fields)
 
     def connect(self) -> None:
         raise NotImplementedError(f'method connect must be implemented for {type(self).__name__}')

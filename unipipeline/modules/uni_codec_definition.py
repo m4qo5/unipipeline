@@ -1,4 +1,5 @@
-from unipipeline import UniModuleDefinition, UniDefinition
+from unipipeline.modules.uni_module_definition import UniModuleDefinition
+from unipipeline.modules.uni_definition import UniDefinition
 
 
 class UniCodecDefinition(UniDefinition):

@@ -2,7 +2,6 @@ from typing import TypeVar, Optional
 from uuid import UUID
 
 from unipipeline.modules.uni_definition import UniDefinition
-from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 
 TContent = TypeVar('TContent')
@@ -17,7 +16,8 @@ class UniBrokerDefinition(UniDefinition):
 
     external: Optional[str]
 
-    codec: UniMessageCodec
+    content_type: str
+    compression: Optional[str]
 
     @property
     def marked_as_external(self) -> bool:

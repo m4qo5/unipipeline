@@ -344,3 +344,12 @@ start cron jobs, That defined in config file
 optional arguments:
   -h, --help  show this help message and exit
 ```
+
+
+## Contributing
+
+### TODO LIST
+[] Common Error Handling
+[] Ignoring The Basic Structure of MessageMeta
+[] Async by default
+[] Multi-threading start with run-groups

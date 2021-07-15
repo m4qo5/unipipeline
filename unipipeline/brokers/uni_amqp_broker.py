@@ -12,7 +12,6 @@ from unipipeline.errors import UniAnswerDelayError
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_message import UniMessage
-from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 
 BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
@@ -286,10 +285,11 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 sleep(1)
                 continue
 
-            return self.parse_message_body(body, UniMessageCodec(
+            return self.parse_message_body(
+                body,  # type: ignore
                 compression=properties.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
                 content_type=properties.content_type
-            ))
+            )
 
     def publish_answer(self, answer_topic: str, answer_id: UUID, meta: UniMessageMeta) -> None:
         ch = self._get_channel()

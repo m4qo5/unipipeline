@@ -10,7 +10,6 @@ from unipipeline.modules.uni_broker import UniBrokerMessageManager, UniBroker, U
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_definition import UniDefinition
 from unipipeline.modules.uni_external_definition import UniExternalDefinition
-from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_config import UniConfig, UniConfigError
 from unipipeline.modules.uni_cron_job import UniCronJob
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
@@ -36,7 +35,6 @@ __all__ = (
     "UniModuleDefinition",
     "UniServiceDefinition",
     "UniExternalDefinition",
-    "UniMessageCodec",
     "UniUtil",
 
     "json_dumps",

@@ -1,12 +1,11 @@
-from typing import Dict, Any, Set, Union, Type, Optional, Iterator, Tuple
+from typing import Dict, Any, Set, Union, Type, Iterator, Tuple
 from uuid import uuid4
 
 import yaml  # type: ignore
 
 from unipipeline.errors import UniDefinitionNotFoundError, UniConfigError
-from unipipeline.modules.uni_codec_definition import UniCodecDefinition
-from unipipeline.modules.uni_util import UniUtil
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
+from unipipeline.modules.uni_codec_definition import UniCodecDefinition
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.modules.uni_external_definition import UniExternalDefinition
@@ -14,10 +13,10 @@ from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_message_definition import UniMessageDefinition
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 from unipipeline.modules.uni_service_definition import UniServiceDefinition
+from unipipeline.modules.uni_util import UniUtil
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 from unipipeline.modules.uni_worker import UniWorker
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
-from unipipeline.utils.complex_serializer import CONTENT_TYPE__APPLICATION_JSON
 
 UNI_CRON_MESSAGE = "uni_cron_message"
 
@@ -228,7 +227,7 @@ class UniConfig:
             },
         }
 
-        for name, definition, other_props in self._parse_definition('compression', config.get("compression", dict()), dict(), {"encoder_import_template", "decoder_import_template",}):
+        for name, definition, other_props in self._parse_definition('compression', config.get("compression", dict()), dict(), {"encoder_import_template", "decoder_import_template"}):
             result[name] = UniCodecDefinition(
                 name=name,
                 encoder_type=UniModuleDefinition.parse(self._util.template.template(definition['encoder_import_template'], name=name)),
@@ -246,7 +245,7 @@ class UniConfig:
             },
         }
 
-        for name, definition, other_props in self._parse_definition('codecs', config.get("codecs", dict()), dict(), {"encoder_import_template", "decoder_import_template",}):
+        for name, definition, other_props in self._parse_definition('codecs', config.get("codecs", dict()), dict(), {"encoder_import_template", "decoder_import_template"}):
             result[name] = UniCodecDefinition(
                 name=name,
                 encoder_type=UniModuleDefinition.parse(self._util.template.template(definition['encoder_import_template'], name=name)),
@@ -323,7 +322,7 @@ class UniConfig:
             retry_max_count=3,
             retry_delay_s=10,
 
-            content_type=CONTENT_TYPE__APPLICATION_JSON,
+            content_type=self.APPLICATION_JSON,
             compression=None,
             external=None,
         )
@@ -339,10 +338,8 @@ class UniConfig:
             result[name] = UniBrokerDefinition(
                 **definition,
                 type=UniModuleDefinition.parse(self._util.template.template(definition["import_template"], **definition, **{"service": service})),
-                codec=UniMessageCodec(
-                    content_type=definition["content_type"],
-                    compression=definition["compression"],
-                ),
+                content_type=definition["content_type"],
+                compression=definition["compression"],
                 dynamic_props_=other_def,
             )
         return result
