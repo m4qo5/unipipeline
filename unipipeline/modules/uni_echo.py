@@ -1,6 +1,6 @@
 import logging
 import sys
-from typing import IO, Union
+from typing import IO, Union, Optional
 
 from unipipeline.modules.uni_util_color import UniUtilColor
 
@@ -24,9 +24,10 @@ def get_lvl(lvl: Union[str, int]) -> int:
 
 
 class UniEcho:
-    def __init__(self, name: str, colors: UniUtilColor, prefix: str = '', level: Union[int, str] = 'info') -> None:
+    def __init__(self, name: str, colors: UniUtilColor, prefix: str = '', level: Optional[Union[int, str]] = None) -> None:
+        self._level_set = level is not None
         self._name = name
-        self._level = get_lvl(level)
+        self._level = get_lvl(level if level is not None else 'info')
         self._colors = colors
 
         prefix = f'{f"{prefix} | " if prefix else ""}{self._name}'
@@ -48,6 +49,8 @@ class UniEcho:
 
     @level.setter
     def level(self, value: Union[int, str]) -> None:
+        if self._level_set:
+            return
         self._level = get_lvl(value)
 
     def echo(self, msg: str, stream: IO = sys.stdout) -> None:

@@ -25,8 +25,9 @@ class UniBrokerInitRecipe(NamedTuple):
 
 
 class UniMediator:
-    def __init__(self, util: UniUtil, config: UniConfig) -> None:
+    def __init__(self, util: UniUtil, echo: UniEcho, config: UniConfig) -> None:
         self._config = config
+        self._echo = echo
         self._util = util
 
         self._worker_definition_by_type: Dict[Any, UniWorkerDefinition] = dict()
@@ -52,7 +53,7 @@ class UniMediator:
 
     @property
     def echo(self) -> UniEcho:
-        return self._config.echo
+        return self._echo
 
     def set_echo_level(self, level: int) -> None:
         self.echo.level = level

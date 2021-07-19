@@ -9,7 +9,6 @@ from unipipeline.modules.uni_codec_definition import UniCodecDefinition
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.modules.uni_external_definition import UniExternalDefinition
-from unipipeline.modules.uni_message_codec import UniMessageCodec
 from unipipeline.modules.uni_message_definition import UniMessageDefinition
 from unipipeline.modules.uni_module_definition import UniModuleDefinition
 from unipipeline.modules.uni_service_definition import UniServiceDefinition
@@ -280,7 +279,7 @@ class UniConfig:
                 name=UNI_CRON_MESSAGE,
                 type=UniModuleDefinition(
                     module="unipipeline.messages.uni_cron_message",
-                    class_name="UniCronMessage",
+                    object_name="UniCronMessage",
                 ),
                 dynamic_props_=dict(),
             )
@@ -338,8 +337,6 @@ class UniConfig:
             result[name] = UniBrokerDefinition(
                 **definition,
                 type=UniModuleDefinition.parse(self._util.template.template(definition["import_template"], **definition, **{"service": service})),
-                content_type=definition["content_type"],
-                compression=definition["compression"],
                 dynamic_props_=other_def,
             )
         return result
@@ -470,7 +467,7 @@ class UniConfig:
 
             defn = UniWorkerDefinition(
                 **definition,
-                type=UniModuleDefinition.parse(self._util.template.template.template(definition["import_template"], **template_data)) if definition["external"] is None else None,
+                type=UniModuleDefinition.parse(self._util.template.template(definition["import_template"], **template_data)) if definition["external"] is None else None,
                 topic=topic,
                 error_topic=self._util.template.template(error_topic_template, **template_data),
                 error_payload_topic=self._util.template.template(error_payload_topic_template, **template_data),

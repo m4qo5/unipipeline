@@ -22,10 +22,10 @@ class Uni:
         self._echo = UniEcho('UNI', level=echo_level or 'error', colors=self._util.color)
 
         if isinstance(config, str):
-            config = UniConfig(self._util, self._echo, config, echo_level)
+            config = UniConfig(self._util, self._echo, config)
         if not isinstance(config, UniConfig):
             raise ValueError(f'invalid config type. {type(config).__name__} was given')
-        self._mediator = UniMediator(self._util, config)
+        self._mediator = UniMediator(self._util, self._echo, config)
 
     @property
     def echo(self) -> UniEcho:
