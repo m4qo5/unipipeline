@@ -32,7 +32,7 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
         self._uni_worker_instances_for_sending: Dict[Type[UniWorker[Any, Any]], UniWorker[Any, Any]] = dict()
         self._uni_echo = self._uni_mediator.echo.mk_child(f'worker[{self._uni_definition.name}]')
         self._uni_input_message_type: Type[TInputMessage] = self._uni_mediator.get_message_type(self._uni_definition.input_message.name)  # type: ignore
-        self._uni_output_message_type: Optional[Type[TOutputMessage]] = self._uni_mediator.get_message_type(self._uni_definition.output_message.name) if self._uni_definition.output_message is not None else None  # type: ignore
+        self._uni_output_message_type: Optional[Type[TOutputMessage]] = self._uni_mediator.get_message_type(self._uni_definition.answer_message.name) if self._uni_definition.answer_message is not None else None  # type: ignore
         self._uni_echo_consumer = self._uni_echo.mk_child('consuming')
         self._uni_echo_consumer_sending = self._uni_echo_consumer.mk_child('sending')
 

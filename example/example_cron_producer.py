@@ -10,8 +10,8 @@ from example.args import args
 
 u = Uni(f"{CWD}/dag-{args.type}.yml")
 
-u.init_consumer_worker(args.worker)
+u.initialize_cron_producer_workers()
 
 u.initialize()
 
-u.start_consuming()
+u.start_cron()

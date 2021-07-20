@@ -1,7 +1,7 @@
 ---
 
 service:
-  name: "example"
+  name: "example-mem"
   echo_colors: true
   echo_level: debug
 
@@ -12,21 +12,7 @@ external:
 
 brokers:
   default_broker:
-    import_template: "example.brokers.kafka_broker:KafkaBroker"
-    api_version: [ 0, 10 ]
-
-  ender_broker:
-    import_template: "example.brokers.uni_log_broker:LogBroker"
-
-  mem_broker:
     import_template: "unipipeline.brokers.uni_memory_broker:UniMemoryBroker"
-
-  rmq_broker:
-    import_template: "example.brokers.rmq_broker:RmqBroker"
-
-  kafka_broker:
-    import_template: "example.brokers.kafka_broker:KafkaBroker"
-    api_version: [ 0, 10 ]
 
 
 messages:
@@ -34,10 +20,11 @@ messages:
     import_template: "example.messages.{{name}}:{{name|camel}}"
 
   input_message: {}
-
-  inetermediate_message: {}
-
-  ender_message: {}
+  ender_after_cron_input_message: {}
+  ender_after_cron_answer_message: {}
+  ender_after_input_message: {}
+  ender_after_answer_message: {}
+  some_external_message: {}
 
 
 cron:
@@ -63,40 +50,34 @@ waitings:
 
 workers:
   __default__:
-    broker: mem_broker
     import_template: "example.workers.{{name}}:{{name|camel}}"
 
   my_super_cron_worker:
-    broker: mem_broker
     input_message: uni_cron_message
     output_workers:
-      - ender_second_worker
+      - ender_after_cron_worker
 
   input_worker:
-    broker: mem_broker
     input_message: input_message
+    input_unwrapped: true
     waiting_for:
       - common_db
 
-  intermediate_first_worker:
-    input_message: inetermediate_message
+  ender_after_cron_worker:
+    input_message: ender_after_cron_input_message
+    answer_message: ender_after_cron_answer_message
+    answer_unwrapped: true
+    waiting_for:
+      - common_db
+
+  ender_after_input_worker:
+    input_message: ender_after_input_message
+    answer_message: ender_after_answer_message
     output_workers:
-      - ender_second_worker
+      - some_external_worker
     waiting_for:
       - common_db
 
-  intermediate_second_worker:
-    input_message: inetermediate_message
+  some_external_worker:
+    input_message: some_external_message
     external: service_name
-    output_workers:
-      - ender_frist_worker
-
-  ender_frist_worker:
-    input_message: ender_message
-
-  ender_second_worker:
-    input_message: ender_message
-    output_message: ender_message
-    broker: mem_broker
-    waiting_for:
-      - common_db

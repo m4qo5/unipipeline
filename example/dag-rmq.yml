@@ -1,0 +1,83 @@
+---
+
+service:
+  name: "example-rmq"
+  echo_colors: true
+  echo_level: debug
+
+
+external:
+  service_name: {}
+
+
+brokers:
+  default_broker:
+    import_template: "example.brokers.rmq_broker:RmqBroker"
+
+
+messages:
+  __default__:
+    import_template: "example.messages.{{name}}:{{name|camel}}"
+
+  input_message: {}
+  ender_after_cron_input_message: {}
+  ender_after_cron_answer_message: {}
+  ender_after_input_message: {}
+  ender_after_answer_message: {}
+  some_external_message: {}
+
+
+cron:
+  my_super_task:
+    worker: my_super_cron_worker
+    when: 0/1 * * * *
+
+  my_mega_task:
+    worker: my_super_cron_worker
+    when: 0/2 * * * *
+
+  my_puper_task:
+    worker: my_super_cron_worker
+    when: 0/3 * * * *
+
+
+waitings:
+  __default__:
+    import_template: example.waitings.{{name}}_wating:{{name|camel}}Waiting
+
+  common_db: {}
+
+
+workers:
+  __default__:
+    import_template: "example.workers.{{name}}:{{name|camel}}"
+
+  my_super_cron_worker:
+    input_message: uni_cron_message
+    output_workers:
+      - ender_after_cron_worker
+
+  input_worker:
+    input_message: input_message
+    input_unwrapped: true
+    waiting_for:
+      - common_db
+
+  ender_after_cron_worker:
+    input_message: ender_after_cron_input_message
+    answer_message: ender_after_cron_answer_message
+    answer_unwrapped: true
+    waiting_for:
+      - common_db
+
+  ender_after_input_worker:
+    input_message: ender_after_input_message
+    answer_message: ender_after_answer_message
+    output_workers:
+      - some_external_worker
+    waiting_for:
+      - common_db
+
+  some_external_worker:
+    input_message: some_external_message
+    external: service_name

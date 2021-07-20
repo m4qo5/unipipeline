@@ -97,8 +97,8 @@ class UniMediator:
         if isinstance(payload, UniMessageMeta):
             answ_meta = payload
         else:
-            assert wd.output_message is not None
-            output_message_type = self.get_message_type(wd.output_message.name)
+            assert wd.answer_message is not None
+            output_message_type = self.get_message_type(wd.answer_message.name)
             payload_msg: UniMessage
             if isinstance(payload, output_message_type):
                 payload_msg = payload
@@ -149,9 +149,9 @@ class UniMediator:
         self.echo.log_info(f"worker {wd.name} sent message to topic '{wd.topic}':: {meta_list}")
 
         if wd.need_answer:
-            assert wd.output_message is not None
+            assert wd.answer_message is not None
             answ_meta = br.get_answer(wd.answer_topic, answer_id=meta.id, max_delay_s=1, unwrapped=wd.answer_unwrapped)
-            answ_message_type = self.get_message_type(wd.output_message.name)
+            answ_message_type = self.get_message_type(wd.answer_message.name)
             answ_msg = answ_message_type(**answ_meta.payload)  # type: ignore
             return answ_msg, answ_meta
         return None

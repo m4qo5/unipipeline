@@ -315,9 +315,10 @@ class UniConfig:
         )
 
         for name, definition, other_props in self._parse_definition('waitings', config.get('waitings', dict()), defaults, {"import_template", }):
+            import_template = definition.pop("import_template")
             result[name] = UniWaitingDefinition(
                 **definition,
-                type=UniModuleDefinition.parse(self._util.template.template(definition["import_template"], **definition, **{"service": service})),
+                type=UniModuleDefinition.parse(self._util.template.template(import_template, **definition, **{"service": service})),
                 dynamic_props_=other_props
             )
 
@@ -342,9 +343,10 @@ class UniConfig:
             if ext is not None and ext not in external:
                 raise UniConfigError(f'definition brokers->{name} has invalid external: "{ext}"')
 
+            import_template = definition.pop('import_template')
             result[name] = UniBrokerDefinition(
                 **definition,
-                type=UniModuleDefinition.parse(self._util.template.template(definition["import_template"], **definition, **{"service": service})),
+                type=UniModuleDefinition.parse(self._util.template.template(import_template, **definition, **{"service": service})),
                 dynamic_props_=other_def,
             )
         return result
@@ -407,18 +409,13 @@ class UniConfig:
         out_workers = set()
 
         defaults: Dict[str, Any] = dict(
-            max_ttl_s=None,
-            is_permanent=True,
-
-            retry_max_count=3,
-            retry_delay_s=1,
             topic="{{name}}",
             error_payload_topic="{{topic}}__error__payload",
             error_topic="{{topic}}__error",
             answer_topic="{{name}}__answer",
             broker="default_broker",
             external=None,
-            output_message=None,
+            answer_message=None,
 
             input_unwrapped=False,
             answer_unwrapped=False,
@@ -447,18 +444,18 @@ class UniConfig:
                 raise UniConfigError(f'definition workers->{name} has invalid input_message: {im}')
             definition["input_message"] = messages[im]
 
-            om = definition['output_message']
+            om = definition['answer_message']
             if om is not None:
                 if om not in messages:
-                    raise UniConfigError(f'definition workers->{name} has invalid output_message: {om}')
-                definition["output_message"] = messages[om]
+                    raise UniConfigError(f'definition workers->{name} has invalid answer_message: {om}')
+                definition["answer_message"] = messages[om]
 
             ext = definition["external"]
             if ext is not None and ext not in external:
                 raise UniConfigError(f'definition workers->{name} has invalid external: "{ext}"')
 
             waitings_: Set[UniWaitingDefinition] = set()
-            for w in definition["waiting_for"]:
+            for w in definition.pop('waiting_for'):
                 if w not in waitings:
                     raise UniConfigError(f'definition workers->{name} has invalid waiting_for: {w}')
                 waitings_.add(waitings[w])
@@ -476,9 +473,11 @@ class UniConfig:
             topic = self._util.template.template(topic_template, **template_data)
             template_data['topic'] = topic
 
+            import_template = definition.pop("import_template")
+
             defn = UniWorkerDefinition(
                 **definition,
-                type=UniModuleDefinition.parse(self._util.template.template(definition["import_template"], **template_data)) if definition["external"] is None else None,
+                type=UniModuleDefinition.parse(self._util.template.template(import_template, **template_data)) if definition["external"] is None else None,
                 topic=topic,
                 error_topic=self._util.template.template(error_topic_template, **template_data),
                 error_payload_topic=self._util.template.template(error_payload_topic_template, **template_data),

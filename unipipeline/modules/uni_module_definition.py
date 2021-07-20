@@ -53,11 +53,11 @@ class {{name}}(UniMessage):
 
 uni_worker_template = '''from unipipeline import UniWorker
 
-from {{data.input_message.type.module}} import {{data.input_message.type.class_name}}
+from {{data.input_message.type.module}} import {{data.input_message.type.object_name}}
 
 
-class {{name}}(UniWorker[{{data.input_message.type.class_name}}, None]):
-    def handle_message(self, message: {{data.input_message.type.class_name}}) -> None:
+class {{name}}(UniWorker[{{data.input_message.type.object_name}}, None]):
+    def handle_message(self, message: {{data.input_message.type.object_name}}) -> None:
         raise NotImplementedError('method handle_message must be specified for class "{{name}}"')
 
 '''
@@ -138,6 +138,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
                     echo.log_debug(f'file {pi} was created')
 
             with open(path, 'wt') as fm:
+                print(class_type.__name__, create_template_params.input_message)
                 fm.writelines(util.template.template(tpl_map[class_type.__name__], data=create_template_params, name=self.object_name))
                 echo.log_info(f'file {path} was created')
 

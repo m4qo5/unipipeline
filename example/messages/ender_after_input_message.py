@@ -1,5 +1,5 @@
 from unipipeline import UniMessage
 
 
-class InetermediateMessage(UniMessage):
+class EnderAfterInputMessage(UniMessage):
     pass

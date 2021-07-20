@@ -10,8 +10,8 @@ from example.args import args
 
 u = Uni(f"{CWD}/dag-{args.type}.yml")
 
-u.init_consumer_worker(args.worker)
+u.scaffold()
 
-u.initialize()
+u.check()
 
-u.start_consuming()
+u.initialize(everything=True)

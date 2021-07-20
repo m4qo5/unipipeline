@@ -20,6 +20,9 @@ class UniMessageMetaErr(BaseModel):
     error_message: str
     retry_times: int
 
+    class Config:
+        extra = 'forbid'
+
 
 class UniMessageMeta(BaseModel):
     id: UUID
@@ -30,6 +33,9 @@ class UniMessageMeta(BaseModel):
     error: Optional[UniMessageMetaErr]
 
     unwrapped: bool
+
+    class Config:
+        extra = 'forbid'
 
     @property
     def has_error(self) -> bool:

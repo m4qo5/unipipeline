@@ -19,7 +19,7 @@ class Uni:
         self._util = UniUtil()
         self._util.template.set_filter('camel', camel_case)
 
-        self._echo = UniEcho('UNI', level=echo_level or 'error', colors=self._util.color)
+        self._echo = UniEcho('UNI', level=echo_level, colors=self._util.color)
 
         if isinstance(config, str):
             config = UniConfig(self._util, self._echo, config)
@@ -89,7 +89,7 @@ class Uni:
             self.echo.log_warning('interrupted')
             exit(0)
 
-    def initialize_cron_workers(self) -> None:
+    def initialize_cron_producer_workers(self) -> None:
         for t in self._mediator.config.cron_tasks.values():
             self.init_producer_worker(t.worker.name)
 

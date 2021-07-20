@@ -2,4 +2,5 @@ from pydantic import BaseModel
 
 
 class UniMessage(BaseModel):
-    pass
+    class Config:
+        extra = 'forbid'
