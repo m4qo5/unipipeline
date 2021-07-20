@@ -44,7 +44,7 @@ class ConnectionRC(Generic[TConnectionObj]):
 
 
 class ConnectionManager(Generic[TConnectionObj]):
-    def __init__(self, rc: ConnectionRC[TConnectionObj], identifier: int, connection_obj: ConnectionObj) -> None:
+    def __init__(self, rc: ConnectionRC[TConnectionObj], identifier: int, connection_obj: ConnectionObj[Any]) -> None:
         self._rc = rc
         self._id = identifier
         self._key = hash(connection_obj)

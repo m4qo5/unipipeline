@@ -18,5 +18,5 @@ class ComplexEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-def json_dumps(data: Any) -> str:
+def complex_serializer_json_dumps(data: Any) -> str:
     return ComplexEncoder().encode(data)

@@ -1,7 +1,7 @@
 from typing import Dict, Any, Set, Union, Type, Iterator, Tuple
 from uuid import uuid4
 
-import yaml  # type: ignore
+import yaml
 
 from unipipeline.errors import UniDefinitionNotFoundError, UniConfigError
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
@@ -94,7 +94,7 @@ class UniConfig:
         self._parse()
         return self._messages_index
 
-    def get_worker_definition(self, worker: Union[Type['UniWorker'], str]) -> UniWorkerDefinition:
+    def get_worker_definition(self, worker: Union[Type['UniWorker[Any, Any]'], str]) -> UniWorkerDefinition:
         if isinstance(worker, str):
             if worker in self.workers:
                 return self.workers[worker]
@@ -212,18 +212,24 @@ class UniConfig:
 
     def _parse_compression(self, config: Dict[str, Any]) -> Dict[str, UniCodecDefinition]:
         result = {
-            self.COMPRESSION_GZIP: {
-                "encoder_import_template": "zlib:compress",
-                "decoder_import_template": "zlib:decompress",
-            },
-            self.COMPRESSION_BZ2: {
-                "encoder_import_template": "bz2:compress",
-                "decoder_import_template": "bz2:decompress",
-            },
-            self.COMPRESSION_LZMA: {
-                "encoder_import_template": "lzma:compress",
-                "decoder_import_template": "lzma:decompress",
-            },
+            self.COMPRESSION_GZIP: UniCodecDefinition(
+                name=self.COMPRESSION_GZIP,
+                encoder_type=UniModuleDefinition.parse("zlib:compress"),
+                decoder_type=UniModuleDefinition.parse("zlib:decompress"),
+                dynamic_props_={}
+            ),
+            self.COMPRESSION_BZ2: UniCodecDefinition(
+                name=self.COMPRESSION_BZ2,
+                encoder_type=UniModuleDefinition.parse("bz2:compress"),
+                decoder_type=UniModuleDefinition.parse("bz2:decompress"),
+                dynamic_props_={}
+            ),
+            self.COMPRESSION_LZMA: UniCodecDefinition(
+                name=self.COMPRESSION_LZMA,
+                encoder_type=UniModuleDefinition.parse("lzma:compress"),
+                decoder_type=UniModuleDefinition.parse("lzma:decompress"),
+                dynamic_props_={}
+            ),
         }
 
         for name, definition, other_props in self._parse_definition('compression', config.get("compression", dict()), dict(), {"encoder_import_template", "decoder_import_template"}):
@@ -238,10 +244,12 @@ class UniConfig:
 
     def _parse_codecs(self, config: Dict[str, Any]) -> Dict[str, UniCodecDefinition]:
         result = {
-            self.APPLICATION_JSON: {
-                "encoder_import_template": "unipipeline:json_dumps",
-                "decoder_import_template": "json:loads",
-            },
+            self.APPLICATION_JSON: UniCodecDefinition(
+                name=self.APPLICATION_JSON,
+                encoder_type=UniModuleDefinition.parse("unipipeline:complex_serializer_json_dumps"),
+                decoder_type=UniModuleDefinition.parse("json:loads"),
+                dynamic_props_={}
+            ),
         }
 
         for name, definition, other_props in self._parse_definition('codecs', config.get("codecs", dict()), dict(), {"encoder_import_template", "decoder_import_template"}):
@@ -411,6 +419,9 @@ class UniConfig:
             broker="default_broker",
             external=None,
             output_message=None,
+
+            input_unwrapped=False,
+            answer_unwrapped=False,
 
             # notification_file="/var/unipipeline/{{service.name}}/{{service.id}}/worker_{{name}}_{{id}}/metrics",
 

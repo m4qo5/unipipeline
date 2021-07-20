@@ -1,12 +1,12 @@
 import json
 import os.path
 from argparse import ArgumentParser, ArgumentTypeError
+from typing import Union, Dict, Any, Tuple
+
+CWD = str(os.getcwdb())
 
 
-CWD = os.getcwdb()
-
-
-def str2bool(v):
+def str2bool(v: Union[str, bool]) -> bool:
     if isinstance(v, bool):
         return v
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -16,18 +16,18 @@ def str2bool(v):
     raise ArgumentTypeError('Boolean value expected.')
 
 
-def file(v):
+def file(v: str) -> str:
     if os.path.isfile(v):
         return v
-    rel = os.path.join(CWD, os.path.normpath(v))
+    rel = str(os.path.join(CWD, os.path.normpath(v)))
     if os.path.isfile(rel):
         return rel
     raise ArgumentTypeError(f'file {v} is not exists')
 
 
-def json_data(v):
+def json_data(v: str) -> Dict[str, Any]:
     try:
-        return json.loads(v)
+        return json.loads(v)  # type: ignore
     except Exception as e:
         raise ArgumentTypeError(f'INVALID JSON: {e}')
 
@@ -108,5 +108,5 @@ produce_parser.usage = f'''
 '''
 
 
-def parse_args():
+def parse_args() -> Any:
     return parser.parse_args()

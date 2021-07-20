@@ -39,7 +39,7 @@ class Uni:
     def config(self) -> UniConfig:
         return self._mediator.config
 
-    def set_echo_level(self, level: int):
+    def set_echo_level(self, level: int) -> None:
         self._mediator.set_echo_level(level)
 
     def scaffold(self) -> None:

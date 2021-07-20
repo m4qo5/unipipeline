@@ -23,6 +23,8 @@ class UniWorkerDefinition(UniDefinition):
     ack_after_success: bool
     waitings: Set[UniWaitingDefinition]
     external: Optional[str]
+    input_unwrapped: bool
+    answer_unwrapped: bool
 
     @property
     def marked_as_external(self) -> bool:

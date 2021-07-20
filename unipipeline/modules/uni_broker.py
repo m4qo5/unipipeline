@@ -1,4 +1,4 @@
-from typing import Callable, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar, Type, Optional
+from typing import Callable, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar, Type, Optional, Dict, Any
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -24,6 +24,7 @@ class UniBrokerConsumer(NamedTuple):
     topic: str
     id: str
     group_id: str
+    unwrapped: bool
     message_handler: Callable[[UniMessageMeta, UniBrokerMessageManager], None]
 
 
@@ -48,13 +49,16 @@ class UniBroker(Generic[TConf]):
         return self._uni_conf
 
     def serialize_message_body(self, meta: UniMessageMeta) -> bytes:
-        meta_dumps = self.definition.codec.dumps(meta.dict())
-        meta_compressed = self.definition.codec.compress(meta_dumps)
-        return meta_compressed
+        data_dict: Dict[str, Any] = meta.payload if meta.unwrapped else meta.dict()
+        data_bytes = self._uni_mediator.serialize_content_type(self.definition.content_type, data_dict)
+        data_bytes = self._uni_mediator.compress_message_body(self.definition.compression, data_bytes)
+        return data_bytes
 
-    def parse_message_body(self, content: bytes, compression: Optional[str], content_type: str) -> UniMessageMeta:
+    def parse_message_body(self, content: bytes, compression: Optional[str], content_type: str, unwrapped: bool) -> UniMessageMeta:
         content = self._uni_mediator.decompress_message_body(compression, content)
         fields = self._uni_mediator.parse_content_type(content_type, content)
+        if unwrapped:
+            return UniMessageMeta.create_new(fields, unwrapped=True)
         return UniMessageMeta(**fields)
 
     def connect(self) -> None:
@@ -81,7 +85,7 @@ class UniBroker(Generic[TConf]):
     def initialize(self, topics: Set[str], answer_topics: Set[str]) -> None:
         raise NotImplementedError(f'method initialize must be implemented for {type(self).__name__}')
 
-    def get_answer(self, answer_topic: str, answer_id: UUID, max_delay_s: int) -> UniMessageMeta:
+    def get_answer(self, answer_topic: str, answer_id: UUID, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
         raise NotImplementedError(f'method initialize must be implemented for {type(self).__name__}')
 
     def publish_answer(self, answer_topic: str, answer_id: UUID, meta: UniMessageMeta) -> None:

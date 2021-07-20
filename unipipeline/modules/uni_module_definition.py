@@ -97,14 +97,14 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
             object_name=spec[1],
         )
 
-    def import_function(self) -> Callable:
+    def import_function(self) -> Callable[..., Any]:
         mdl = importlib.import_module(self.module)
         tp = getattr(mdl, self.object_name)
         if not callable(tp):
             raise TypeError(f'object "{self.module}:{self.object_name}" is not callable')
-        return tp
+        return tp  # type: ignore
 
-    def import_class(self, class_type: Type[T], echo: UniEcho, auto_create: bool = False, create_template_params: Any = None, util: UniUtil = None) -> Type[T]:
+    def import_class(self, class_type: Type[T], echo: UniEcho, auto_create: bool = False, create_template_params: Any = None, util: Optional[UniUtil] = None) -> Type[T]:
         try:
             mdl = importlib.import_module(self.module)
         except ModuleNotFoundError:
@@ -138,7 +138,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
                     echo.log_debug(f'file {pi} was created')
 
             with open(path, 'wt') as fm:
-                fm.writelines(util.template(tpl_map[class_type.__name__], data=create_template_params, name=self.object_name))
+                fm.writelines(util.template.template(tpl_map[class_type.__name__], data=create_template_params, name=self.object_name))
                 echo.log_info(f'file {path} was created')
 
             success = False
@@ -158,4 +158,4 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
         tp = getattr(mdl, self.object_name)
         if not issubclass(tp, class_type):
             ValueError(f'class {self.object_name} is not subclass of {class_type.__name__}')
-        return tp
+        return tp  # type: ignore

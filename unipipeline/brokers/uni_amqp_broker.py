@@ -1,6 +1,6 @@
 import time
 from time import sleep
-from typing import Optional, TypeVar, Set, List, NamedTuple, Callable
+from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -8,11 +8,15 @@ from pika import ConnectionParameters, PlainCredentials, BlockingConnection, Bas
 from pika.adapters.blocking_connection import BlockingChannel  # type: ignore
 from pika.exceptions import AMQPConnectionError, AMQPError, ConnectionClosedByBroker  # type: ignore
 
+from unipipeline import UniBrokerDefinition
 from unipipeline.errors import UniAnswerDelayError
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta
+
+if TYPE_CHECKING:
+    from unipipeline.modules.uni_mediator import UniMediator
 
 BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
 
@@ -69,14 +73,14 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             queue=topic,
             passive=True
         )
-        return res.method.message_count
+        return int(res.method.message_count)
 
     @classmethod
     def get_connection_uri(cls) -> str:
         raise NotImplementedError(f"cls method get_connection_uri must be implemented for class '{cls.__name__}'")
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition) -> None:
+        super().__init__(mediator, definition)
 
         broker_url = self.get_connection_uri()
 
@@ -134,7 +138,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
     def stop_consuming(self) -> None:
         self._end_consuming()
 
-    def _end_consuming(self):
+    def _end_consuming(self) -> None:
         if not self._consuming_started:
             return
         self._interrupted = True
@@ -199,6 +203,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 body,
                 compression=properties.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
                 content_type=properties.content_type,
+                unwrapped=consumer.unwrapped,
             )
 
             manager = UniAmqpBrokerMessageManager(channel, method_frame)
@@ -255,16 +260,16 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 routing_key=topic,
                 body=self.serialize_message_body(meta),
                 properties=BasicProperties(
-                    content_type=self.definition.codec.content_type,
+                    content_type=self.definition.content_type,
                     content_encoding='utf-8',
                     delivery_mode=2 if self.config.is_persistent else 0,
                     headers={
-                        BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.codec.compression
+                        BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.compression
                     }
                 )
             )
 
-    def get_answer(self, answer_topic: str, answer_id: UUID, max_delay_s: int) -> UniMessageMeta:
+    def get_answer(self, answer_topic: str, answer_id: UUID, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
         topic = f'{answer_topic}.{answer_id}' if answer_topic else str(answer_id)
         ch = self._get_channel()
 
@@ -286,9 +291,10 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 continue
 
             return self.parse_message_body(
-                body,  # type: ignore
+                body,
                 compression=properties.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
-                content_type=properties.content_type
+                content_type=properties.content_type,
+                unwrapped=unwrapped,
             )
 
     def publish_answer(self, answer_topic: str, answer_id: UUID, meta: UniMessageMeta) -> None:
@@ -305,11 +311,11 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             routing_key=topic,
             body=self.serialize_message_body(meta),
             properties=BasicProperties(
-                content_type=self.definition.codec.content_type,
+                content_type=self.definition.content_type,
                 content_encoding='utf-8',
                 delivery_mode=0,
                 headers={
-                    BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.codec.compression
+                    BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.compression
                 }
             )
         )

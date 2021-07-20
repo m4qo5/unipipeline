@@ -53,7 +53,7 @@ class UniEcho:
             return
         self._level = get_lvl(value)
 
-    def echo(self, msg: str, stream: IO = sys.stdout) -> None:
+    def echo(self, msg: str, stream: IO[str] = sys.stdout) -> None:
         stream.write(f'{msg}\n')
 
     def log_debug(self, msg: str) -> None:

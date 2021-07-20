@@ -29,7 +29,7 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
         self._uni_current_manager: Optional[UniBrokerMessageManager] = None
         self._uni_definition = definition
         self._uni_mediator: UniMediator = mediator
-        self._uni_worker_instances_for_sending: Dict[Type[UniWorker], UniWorker] = dict()
+        self._uni_worker_instances_for_sending: Dict[Type[UniWorker[Any, Any]], UniWorker[Any, Any]] = dict()
         self._uni_echo = self._uni_mediator.echo.mk_child(f'worker[{self._uni_definition.name}]')
         self._uni_input_message_type: Type[TInputMessage] = self._uni_mediator.get_message_type(self._uni_definition.input_message.name)  # type: ignore
         self._uni_output_message_type: Optional[Type[TOutputMessage]] = self._uni_mediator.get_message_type(self._uni_definition.output_message.name) if self._uni_definition.output_message is not None else None  # type: ignore
@@ -65,7 +65,7 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
     def handle_message(self, message: TInputMessage) -> Optional[Union[TOutputMessage, Dict[str, Any]]]:
         raise NotImplementedError(f'method handle_message not implemented for {type(self).__name__}')
 
-    def send_to(self, worker: Union[Type['UniWorker'], str], data: Any, alone: bool = False) -> Optional[Tuple[UniMessage, UniMessageMeta]]:
+    def send_to(self, worker: Union[Type['UniWorker[Any, Any]'], str], data: Any, alone: bool = False) -> Optional[Tuple[UniMessage, UniMessageMeta]]:
         if self._uni_current_meta is None:
             raise UniSendingToWorkerError('meta was not defined. incorrect usage of function "send_to"')
         wd = self._uni_mediator.config.get_worker_definition(worker)
@@ -81,10 +81,10 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
 
         err_topic = UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR
         try:
-            self._uni_payload_cache = self._uni_input_message_type(**self.meta.payload)
+            self._uni_payload_cache = self._uni_input_message_type(**self.meta.payload)  # type: ignore
             err_topic = UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR
             result = self.handle_message(self._uni_payload_cache)
-            self._uni_mediator.answer_to(self._uni_definition.name, meta, result)
+            self._uni_mediator.answer_to(self._uni_definition.name, meta, result, self.definition.answer_unwrapped)
         except Exception as e:
             self._uni_move_to_error_topic(err_topic, e)
         # else:
@@ -111,9 +111,9 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
             manager.ack()
 
         self._uni_echo_consumer.log_info(f"message {meta.id} processed")
-        self._uni_reset_processing()
+        self._uni_reset_processing(None, None)
 
-    def _uni_reset_processing(self, meta: UniMessageMeta = None, manager: UniBrokerMessageManager = None) -> None:
+    def _uni_reset_processing(self, meta: Optional[UniMessageMeta], manager: Optional[UniBrokerMessageManager]) -> None:
         self._uni_moved = False
         self._uni_current_meta = meta
         self._uni_current_manager = manager
@@ -125,7 +125,7 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
         meta = self.meta.create_error_child(err_topic, err)
         br = self._uni_mediator.get_broker(self._uni_definition.broker.name)
         error_topic = self.definition.error_topic
-        if error_topic is UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR:
+        if error_topic == UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR.value:
             error_topic = self.definition.error_payload_topic
         br.publish(error_topic, [meta])
         self.manager.ack()

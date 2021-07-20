@@ -29,26 +29,30 @@ class UniMessageMeta(BaseModel):
     parent: Optional[Dict[str, Any]]
     error: Optional[UniMessageMetaErr]
 
+    unwrapped: bool
+
     @property
     def has_error(self) -> bool:
         return self.error is not None
 
     @staticmethod
-    def create_new(data: Dict[str, Any], error: Optional[UniMessageMetaErr] = None) -> 'UniMessageMeta':
+    def create_new(data: Dict[str, Any], unwrapped: bool, error: Optional[UniMessageMetaErr] = None) -> 'UniMessageMeta':
         return UniMessageMeta(
             id=uuid.uuid4(),
             date_created=datetime.now(),
             payload=data,
             parent=None,
             error=error,
+            unwrapped=unwrapped,
         )
 
-    def create_child(self, payload: Dict[str, Any]) -> 'UniMessageMeta':
+    def create_child(self, payload: Dict[str, Any], unwrapped: bool) -> 'UniMessageMeta':
         return UniMessageMeta(
             id=uuid.uuid4(),
             date_created=datetime.now(),
             payload=payload,
             parent=self.dict(),
+            unwrapped=unwrapped,
             error=None,
         )
 
@@ -58,6 +62,7 @@ class UniMessageMeta(BaseModel):
             date_created=self.date_created,
             payload=self.payload,
             parent=self.dict(),
+            unwrapped=self.unwrapped,
             error=UniMessageMetaErr(
                 error_topic=error_topic,
                 error_type=type(error).__name__,

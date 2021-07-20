@@ -24,7 +24,7 @@ from unipipeline.modules.uni_wating import UniWaiting
 from unipipeline.modules.uni_worker import UniWorker, UniPayloadParsingError
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.connection_pool import ConnectionObj, ConnectionRC, ConnectionManager, ConnectionPool, connection_pool
-from unipipeline.utils.complex_serializer import json_dumps
+from unipipeline.utils.complex_serializer import complex_serializer_json_dumps
 
 __all__ = (
     "Uni",
@@ -37,7 +37,7 @@ __all__ = (
     "UniExternalDefinition",
     "UniUtil",
 
-    "json_dumps",
+    "complex_serializer_json_dumps",
 
     "ConnectionObj",
     "ConnectionRC",
