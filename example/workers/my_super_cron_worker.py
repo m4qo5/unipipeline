@@ -1,8 +1,6 @@
-from unipipeline import UniWorker
-
-from unipipeline.messages.uni_cron_message import UniCronMessage
+from unipipeline import UniWorker, UniCronMessage
 
 
-class MySuperCronWorker(UniWorker):
+class MySuperCronWorker(UniWorker[UniCronMessage, None]):
     def handle_message(self, message: UniCronMessage) -> None:
         print(f"!!! MySuperCronWorker.handle_message task_name={message.task_name}")

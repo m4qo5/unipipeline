@@ -31,7 +31,7 @@ u.send_to("input_worker", dict())
 u.start_consuming()
 
 w = u._mediator.get_worker('my_super_cron_worker')
-w._uni_current_meta = UniMessageMeta.create_new({})
+w._uni_current_meta = UniMessageMeta.create_new({}, False)
 answ = w.send_to(EnderSecondWorker, {"some_prop": "hello!"})
 print(answ)
 exit()

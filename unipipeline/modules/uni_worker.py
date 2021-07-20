@@ -7,7 +7,7 @@ from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaE
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 
 TInputMessage = TypeVar('TInputMessage', bound=UniMessage)
-TOutputMessage = TypeVar('TOutputMessage', bound=UniMessage)
+TOutputMessage = TypeVar('TOutputMessage', bound=Optional[UniMessage])
 
 
 class UniPayloadParsingError(Exception):

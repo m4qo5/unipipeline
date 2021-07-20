@@ -1,7 +1,7 @@
 import json
 import os.path
 from argparse import ArgumentParser, ArgumentTypeError
-from typing import Union, Dict, Any, Tuple
+from typing import Union, Dict, Any
 
 CWD = str(os.getcwdb())
 

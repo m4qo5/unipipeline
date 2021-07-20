@@ -3,7 +3,7 @@ from unipipeline import UniWorker
 from example.messages.input_message import InputMessage
 
 
-class InputWorker(UniWorker):
+class InputWorker(UniWorker[InputMessage, None]):
     def handle_message(self, message: InputMessage) -> None:
         print("!!! InputWorker.handle_message. IT IS OK", message)
         raise NotImplementedError('some error in InputWorker.handle_message. IT IS OK')

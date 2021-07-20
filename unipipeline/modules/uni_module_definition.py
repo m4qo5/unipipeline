@@ -56,7 +56,7 @@ uni_worker_template = '''from unipipeline import UniWorker
 from {{data.input_message.type.module}} import {{data.input_message.type.class_name}}
 
 
-class {{name}}(UniWorker):
+class {{name}}(UniWorker[{{data.input_message.type.class_name}}, None]):
     def handle_message(self, message: {{data.input_message.type.class_name}}) -> None:
         raise NotImplementedError('method handle_message must be specified for class "{{name}}"')
 
