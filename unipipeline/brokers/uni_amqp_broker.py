@@ -68,11 +68,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
     config_type = UniAmqpBrokerConfig
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:
-        ch = self._get_channel()
-        res = ch.queue_declare(
-            queue=topic,
-            passive=True
-        )
+        res = self._get_channel().queue_declare(queue=topic, passive=True)
         return int(res.method.message_count)
 
     @classmethod
@@ -193,8 +189,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
     def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         echo = self.echo.mk_child(f'topic[{consumer.topic}]')
         if self._consuming_started:
-            echo.log_error(f'you cannot add consumer dynamically :: tag="{consumer.id}" group_id={consumer.group_id}')
-            exit(1)
+            echo.exit_with_error(f'you cannot add consumer dynamically :: tag="{consumer.id}" group_id={consumer.group_id}')
 
         def consumer_wrapper(channel: BlockingChannel, method_frame: spec.Basic.Deliver, properties: BasicProperties, body: bytes) -> None:
             self._in_processing = True

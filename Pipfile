@@ -10,6 +10,7 @@ pika = "==1.*"
 pydantic = "==1.*"
 kafka-python = "==2.*"
 crontab = "==0.23.*"
+psycopg2-binary = "==2.8.6"
 
 [dev-packages]
 wheel = "*"
