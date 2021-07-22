@@ -27,7 +27,7 @@ from unipipeline.modules.uni_service_definition import UniServiceDefinition
 from unipipeline.modules.uni_util import UniUtil
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 from unipipeline.modules.uni_wating import UniWaiting
-from unipipeline.modules.uni_worker import UniWorker, UniPayloadParsingError
+from unipipeline.modules.uni_worker import UniWorker
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.complex_serializer import complex_serializer_json_dumps
 from unipipeline.utils.connection_pool import ConnectionObj, ConnectionRC, ConnectionManager, ConnectionPool, connection_pool
@@ -83,7 +83,6 @@ __all__ = (
     "UniCronMessage",
 
     # worker
-    "UniPayloadParsingError",
     "UniWorker",
     "UniWorkerDefinition",
 

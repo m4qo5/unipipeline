@@ -13,29 +13,21 @@ TInputMessage = TypeVar('TInputMessage', bound=UniMessage)
 TOutputMessage = TypeVar('TOutputMessage', bound=Optional[UniMessage])
 
 
-class UniPayloadParsingError(Exception):
-    def __init__(self, exception: Exception):
-        self.parent_exception = exception
-
-
 class UniWorker(Generic[TInputMessage, TOutputMessage]):
     def __init__(
         self,
         definition: UniWorkerDefinition,
         mediator: 'UniMediator'
     ) -> None:
-        self._uni_consume_initialized = False
         self._uni_payload_cache: Optional[TInputMessage] = None
         self._uni_current_meta: Optional[UniMessageMeta] = None
         self._uni_current_manager: Optional[UniBrokerMessageManager] = None
         self._uni_definition = definition
         self._uni_mediator = mediator
-        self._uni_worker_instances_for_sending: Dict[Type[UniWorker[Any, Any]], UniWorker[Any, Any]] = dict()
         self._uni_echo = self._uni_mediator.echo.mk_child(f'worker[{self._uni_definition.name}]')
         self._uni_input_message_type: Type[TInputMessage] = self._uni_mediator.get_message_type(self._uni_definition.input_message.name)  # type: ignore
         self._uni_output_message_type: Optional[Type[TOutputMessage]] = self._uni_mediator.get_message_type(self._uni_definition.answer_message.name) if self._uni_definition.answer_message is not None else None  # type: ignore
         self._uni_echo_consumer = self._uni_echo.mk_child('consuming')
-        self._uni_echo_consumer_sending = self._uni_echo_consumer.mk_child('sending')
 
     @property
     def input_message_type(self) -> Type[TInputMessage]:
@@ -78,7 +70,9 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
 
     def uni_process_message(self, meta: UniMessageMeta, manager: UniBrokerMessageManager) -> None:
         self._uni_echo_consumer.log_debug(f"message {meta.id} received :: {meta}")
-        self._uni_reset_processing(meta, manager)
+        self._uni_current_meta = meta
+        self._uni_current_manager = manager
+        self._uni_payload_cache = None
 
         err_topic: Optional[UniMessageMetaErrTopic] = UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR
         try:
@@ -115,9 +109,6 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
             manager.ack()
 
         self._uni_echo_consumer.log_info(f"message {meta.id} processed")
-        self._uni_reset_processing(None, None)
-
-    def _uni_reset_processing(self, meta: Optional[UniMessageMeta], manager: Optional[UniBrokerMessageManager]) -> None:
-        self._uni_current_meta = meta
-        self._uni_current_manager = manager
+        self._uni_current_meta = None
+        self._uni_current_manager = None
         self._uni_payload_cache = None
