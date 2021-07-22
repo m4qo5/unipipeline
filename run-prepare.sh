@@ -13,19 +13,9 @@ set -o nounset
 cd "$(dirname "${BASH_SOURCE[0]}")"
 CWD="$(pwd)"
 
-
 export PYTHONPATH=$CWD
 
-pytest ./unipipeline --strict-markers
-
-mypy ./unipipeline ./example
-
-FLAKE_IGNORE="D100,D101,D102,D103,D104,D107,D105,D106,D200,D400,D413,E501,SF01,T484,W503,E402,N815,N805"
-
-
-flake8 --max-line-length=120 --ignore=$FLAKE_IGNORE ./unipipeline
-
-flake8 --max-line-length=120 --ignore=$FLAKE_IGNORE ./example
+./run-check.sh
 
 python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose=yes scaffold
 python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose=yes check

@@ -1,19 +1,21 @@
 import time
 from time import sleep
-from typing import Optional, TypeVar, Set, List, NamedTuple, Callable
+from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING
 from urllib.parse import urlparse
-from uuid import UUID
 
 from pika import ConnectionParameters, PlainCredentials, BlockingConnection, BasicProperties, spec  # type: ignore
 from pika.adapters.blocking_connection import BlockingChannel  # type: ignore
 from pika.exceptions import AMQPConnectionError, AMQPError, ConnectionClosedByBroker  # type: ignore
 
-from unipipeline.errors import UniAnswerDelayError
+from unipipeline.errors.uni_answer_delay_error import UniAnswerDelayError
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
+from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_message import UniMessage
-from unipipeline.modules.uni_message_codec import UniMessageCodec
-from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaAnswerParams
+
+if TYPE_CHECKING:
+    from unipipeline.modules.uni_mediator import UniMediator
 
 BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
 
@@ -65,19 +67,15 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
     config_type = UniAmqpBrokerConfig
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:
-        ch = self._get_channel()
-        res = ch.queue_declare(
-            queue=topic,
-            passive=True
-        )
-        return res.method.message_count
+        res = self._get_channel().queue_declare(queue=topic, passive=True)
+        return int(res.method.message_count)
 
     @classmethod
     def get_connection_uri(cls) -> str:
         raise NotImplementedError(f"cls method get_connection_uri must be implemented for class '{cls.__name__}'")
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition) -> None:
+        super().__init__(mediator, definition)
 
         broker_url = self.get_connection_uri()
 
@@ -135,7 +133,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
     def stop_consuming(self) -> None:
         self._end_consuming()
 
-    def _end_consuming(self):
+    def _end_consuming(self) -> None:
         if not self._consuming_started:
             return
         self._interrupted = True
@@ -182,23 +180,29 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
         self._connection = None
         self._channel = None
 
-    def _get_channel(self) -> BlockingChannel:
+    def _get_channel(self, new: bool = False) -> BlockingChannel:
         self.connect()
+        if new:
+            assert self._connection is not None
+            return self._connection.channel()
         assert self._channel is not None
         return self._channel
 
     def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         echo = self.echo.mk_child(f'topic[{consumer.topic}]')
         if self._consuming_started:
-            echo.log_error(f'you cannot add consumer dynamically :: tag="{consumer.id}" group_id={consumer.group_id}')
-            exit(1)
+            echo.exit_with_error(f'you cannot add consumer dynamically :: tag="{consumer.id}" group_id={consumer.group_id}')
 
         def consumer_wrapper(channel: BlockingChannel, method_frame: spec.Basic.Deliver, properties: BasicProperties, body: bytes) -> None:
             self._in_processing = True
-            meta = self.codec_parse(body, UniMessageCodec(
+
+            meta = self.parse_message_body(
+                body,
                 compression=properties.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
-                content_type=properties.content_type
-            ))
+                content_type=properties.content_type,
+                unwrapped=consumer.unwrapped,
+            )
+
             manager = UniAmqpBrokerMessageManager(channel, method_frame)
             consumer.message_handler(meta, manager)
             self._in_processing = False
@@ -233,6 +237,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 ch = self._get_channel()
                 for c in self._consumers:
                     ch.basic_consume(queue=c.queue, on_message_callback=c.on_message_callback, consumer_tag=c.consumer_tag)
+                    echo.log_debug(f'added consumer {c.consumer_tag} of {c.queue}')
                 echo.log_info(f'consumers count is {len(self._consumers)}')
                 ch.start_consuming()  # blocking operation
             except (ConnectionClosedByBroker, ConnectionError) as e:
@@ -246,67 +251,81 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 sleep(self.config.retry_delay_s)
 
     def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
+        ch = self._get_channel()
         for meta in meta_list:  # TODO: package sending
             # TODO: retry
-            self._get_channel().basic_publish(
-                exchange=self.config.exchange_name,
-                routing_key=topic,
-                body=self.codec_serialize(meta),
-                properties=BasicProperties(
-                    content_type=self.definition.codec.content_type,
+            headers = {
+                BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.compression,
+                # **({'x-message-ttl': ttl_s * 1000} if ttl_s is not None else {}),
+            }
+            if meta.need_answer:
+                assert meta.answer_params is not None
+                props = BasicProperties(
+                    content_type=self.definition.content_type,
+                    content_encoding='utf-8',
+                    reply_to=f'{meta.answer_params.topic}.{meta.answer_params.id}',
+                    correlation_id=str(meta.id),
+                    delivery_mode=2 if self.config.is_persistent else 0,
+                    headers=headers
+                )
+            else:
+                props = BasicProperties(
+                    content_type=self.definition.content_type,
                     content_encoding='utf-8',
                     delivery_mode=2 if self.config.is_persistent else 0,
-                    headers={
-                        BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.codec.compression
-                    }
+                    headers=headers
                 )
+            ch.basic_publish(
+                exchange=self.config.exchange_name,
+                routing_key=topic,
+                body=self.serialize_message_body(meta),
+                properties=props
             )
+        self.echo.log_debug(f'sent messages ({len(meta_list)}) to {self.config.exchange_name}->{topic}')
 
-    def get_answer(self, answer_topic: str, answer_id: UUID, max_delay_s: int) -> UniMessageMeta:
-        topic = f'{answer_topic}.{answer_id}' if answer_topic else str(answer_id)
-        ch = self._get_channel()
+    def get_answer(self, answer_params: UniMessageMetaAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
+        answ_topic = f'{answer_params.topic}.{answer_params.id}'
+        exchange = self.config.answer_exchange_name
+        ch = self._get_channel(True)
 
-        ch.queue_declare(
-            queue=topic,
-            durable=False,
-            auto_delete=True,
-            passive=False,
-        )
+        ch.queue_declare(queue=answ_topic, durable=False, exclusive=True, passive=False)
+
+        ch.queue_bind(queue=answ_topic, exchange=exchange, routing_key=answ_topic)
 
         started = time.time()
         while True:
-            (method, properties, body) = ch.basic_get(topic, auto_ack=True)
+            (method, properties, body) = ch.basic_get(queue=answ_topic, auto_ack=True)
 
             if method is None:
                 if (time.time() - started) > max_delay_s:
-                    raise UniAnswerDelayError(f'answer for {topic} reached limit')
+                    raise UniAnswerDelayError(f'answer for {exchange}->{answ_topic} reached delay limit {max_delay_s} seconds')
+                self.echo.log_debug(f'no answer {int(time.time() - started + 1)}s in {exchange}->{answ_topic}')
                 sleep(1)
                 continue
 
-            return self.codec_parse(body, UniMessageCodec(
+            self.echo.log_debug(f'took answer from {exchange}->{answ_topic}')
+            return self.parse_message_body(
+                body,
                 compression=properties.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
-                content_type=properties.content_type
-            ))
+                content_type=properties.content_type,
+                unwrapped=unwrapped,
+            )
 
-    def publish_answer(self, answer_topic: str, answer_id: UUID, meta: UniMessageMeta) -> None:
+    def publish_answer(self, answer_params: UniMessageMetaAnswerParams, meta: UniMessageMeta) -> None:
         ch = self._get_channel()
-        topic = f'{answer_topic}.{answer_id}' if answer_topic else str(answer_id)
-        ch.queue_declare(
-            queue=topic,
-            durable=False,
-            auto_delete=True,
-            passive=False,
-        )
+        answ_topic = f'{answer_params.topic}.{answer_params.id}'
         ch.basic_publish(
             exchange=self.config.answer_exchange_name,
-            routing_key=topic,
-            body=self.codec_serialize(meta),
+            routing_key=answ_topic,
+            body=self.serialize_message_body(meta),
             properties=BasicProperties(
-                content_type=self.definition.codec.content_type,
+                content_type=self.definition.content_type,
                 content_encoding='utf-8',
-                delivery_mode=0,
+                delivery_mode=1,
                 headers={
-                    BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.codec.compression
+                    BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.compression,
+                    # **({'x-message-ttl': ttl_s * 1000} if ttl_s is not None else {}),
                 }
             )
         )
+        self.echo.log_debug(f'sent message to {self.config.answer_exchange_name}->{answ_topic}')

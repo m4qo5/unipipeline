@@ -344,3 +344,22 @@ start cron jobs, That defined in config file
 optional arguments:
   -h, --help  show this help message and exit
 ```
+
+
+## Contributing
+
+### TODO LIST
+1. [ ] Close/Exit uni by call method
+2. [ ] Async producer
+3. [ ] Common Error Handling
+4. [ ] Async get_answer
+5. [ ] Tcp Gateway
+6. [ ] Udp Gateway
+7. [ ] Http Gateway
+8. [ ] Server of Message layout
+9. [ ] Prometheus api
+10. [ ] req/res Sdk
+11. [ ] request tasks result registry
+12. [ ] Async consumer
+13. [ ] Async by default
+14. [ ] Multi-threading start with run-groups

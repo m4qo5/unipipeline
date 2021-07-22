@@ -1,10 +1,14 @@
-from typing import Optional, Tuple, Any, Dict, List, Set, Callable
+from typing import Optional, Tuple, Any, Dict, List, Set, Callable, TYPE_CHECKING
 
 from kafka import KafkaProducer, KafkaConsumer  # type: ignore
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
+from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_message_meta import UniMessageMeta
+
+if TYPE_CHECKING:
+    from unipipeline.modules.uni_mediator import UniMediator
 
 
 class UniKafkaBrokerMessageManager(UniBrokerMessageManager):
@@ -37,8 +41,8 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
     def get_security_conf(self) -> Dict[str, Any]:
         raise NotImplementedError(f'method get_security_conf must be implemented for {type(self).__name__}')
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition) -> None:
+        super().__init__(mediator, definition)
 
         self._bootstrap_servers = self.get_boostrap_servers()
 
@@ -130,14 +134,14 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
 
         self._kfk_active_consumers.append(kfk_consumer)
 
-        def commit():
+        def commit() -> None:
             kfk_consumer.commit()
 
         # TODO: retry
         for consumer_record in kfk_consumer:
             self._in_processing = True
 
-            meta = self.codec_parse(consumer_record.value)
+            meta = self.parse_message_body(consumer_record.value, self.definition.compression, self.definition.content_type, consumer.unwrapped)
 
             manager = UniKafkaBrokerMessageManager(commit)
             consumer.message_handler(meta, manager)
@@ -155,7 +159,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
         assert self._producer is not None
         return self._producer
 
-    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
+    def publish(self, topic: str, meta_list: List[UniMessageMeta], ttl_s: Optional[int] = None) -> None:
         self.echo.log_debug(f'publishing the messages: {meta_list}')
 
         p = self._get_producer()
@@ -164,7 +168,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
             # TODO: retry
             p.send(
                 topic=topic,
-                value=self.codec_serialize(meta),
+                value=self.serialize_message_body(meta),
                 key=str(meta.id).encode('utf8')
             )
         p.flush()

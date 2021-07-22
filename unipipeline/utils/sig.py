@@ -4,7 +4,7 @@ from typing import Callable, Tuple, Any, Optional, Union
 
 
 class soft_interruption:
-    def __init__(self, on_interrupt_once: Callable[[], None], on_force_interruption: Callable[[], None] = None, on_error: Callable[[Exception], None] = None) -> None:
+    def __init__(self, on_interrupt_once: Callable[[], None], on_force_interruption: Optional[Callable[[], None]] = None, on_error: Optional[Callable[[Exception], None]] = None) -> None:
         self._on_interrupt_once = on_interrupt_once
         self._on_force_interruption = on_force_interruption
         self._sig_int_received = False

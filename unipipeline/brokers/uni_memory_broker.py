@@ -1,11 +1,15 @@
 from collections import deque
-from typing import Callable, Dict, TypeVar, Tuple, Optional, Deque, Set, List
+from typing import Callable, Dict, TypeVar, Tuple, Optional, Deque, Set, List, TYPE_CHECKING
 from uuid import UUID
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
+from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_echo import UniEcho
-from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaAnswerParams
+
+if TYPE_CHECKING:
+    from unipipeline.modules.uni_mediator import UniMediator
 
 
 class UniMemoryBrokerMessageManager(UniBrokerMessageManager):
@@ -128,8 +132,8 @@ class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
     def stop_consuming(self) -> None:
         pass
 
-    def __init__(self, *args, **kwargs) -> None:
-        super(UniMemoryBroker, self).__init__(*args, **kwargs)
+    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition) -> None:
+        super(UniMemoryBroker, self).__init__(mediator, definition)
         self._consuming_started = False
         self._queues_by_topic: Dict[str, QL] = dict()
         self._consumers_count = 0
@@ -181,15 +185,18 @@ class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
         if self._consuming_started:
             ql.process_all()
 
-    def get_answer(self, answer_topic: str, answer_id: UUID, max_delay_s: int) -> UniMessageMeta:
-        topic = self._get_answer_topic_name(answer_topic, answer_id)
+    def get_answer(self, answer_params: UniMessageMetaAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
+        topic = self._get_answer_topic_name(answer_params.topic, answer_params.id)
         self._init_queue(topic)
 
-        answ = self._queues_by_topic[topic].get_next()
+        answ_meta = self._queues_by_topic[topic].get_next()
 
-        return answ
+        if unwrapped:
+            return UniMessageMeta.create_new(answ_meta.payload, unwrapped=True)
 
-    def publish_answer(self, answer_topic: str, answer_id: UUID, meta: UniMessageMeta) -> None:
-        topic = self._get_answer_topic_name(answer_topic, answer_id)
+        return answ_meta
+
+    def publish_answer(self, answer_params: UniMessageMetaAnswerParams, meta: UniMessageMeta) -> None:
+        topic = self._get_answer_topic_name(answer_params.topic, answer_params.id)
         self._init_queue(topic)
         self._queues_by_topic[topic].add(meta)

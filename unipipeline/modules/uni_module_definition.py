@@ -1,10 +1,10 @@
 import os.path
 import importlib
 from time import sleep
-from typing import NamedTuple, Generic, Type, TypeVar, Any, Optional, Set
+from typing import NamedTuple, Generic, Type, TypeVar, Any, Optional, Set, Callable
 
+from unipipeline.modules.uni_util import UniUtil
 from unipipeline.modules.uni_echo import UniEcho
-from unipipeline.utils.template import template
 
 T = TypeVar('T')
 
@@ -51,13 +51,13 @@ class {{name}}(UniMessage):
 '''
 
 
-uni_worker_template = '''from unipipeline import UniWorker
+uni_worker_template = '''from unipipeline import UniWorker, UniWorkerConsumerMessage
 
-from {{data.input_message.type.module}} import {{data.input_message.type.class_name}}
+from {{data.input_message.type.module}} import {{data.input_message.type.object_name}}
 
 
-class {{name}}(UniWorker):
-    def handle_message(self, message: {{data.input_message.type.class_name}}) -> None:
+class {{name}}(UniWorker[{{data.input_message.type.object_name}}, None]):
+    def handle_message(self, msg: UniWorkerConsumerMessage[{{data.input_message.type.object_name}}]) -> None:
         raise NotImplementedError('method handle_message must be specified for class "{{name}}"')
 
 '''
@@ -85,7 +85,7 @@ CWD = str(os.getcwdb().decode('utf-8'))
 
 class UniModuleDefinition(NamedTuple, Generic[T]):
     module: str
-    class_name: str
+    object_name: str
 
     @staticmethod
     def parse(type_def: str) -> 'UniModuleDefinition':
@@ -94,17 +94,28 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
         assert len(spec) == 2, f'must have 2 segments. {len(spec)} was given from "{type_def}"'
         return UniModuleDefinition(
             module=spec[0],
-            class_name=spec[1],
+            object_name=spec[1],
         )
 
-    def import_class(self, class_type: Type[T], echo: UniEcho, auto_create: bool = False, create_template_params: Any = None) -> Type[T]:
+    def import_function(self) -> Callable[..., Any]:
+        mdl = importlib.import_module(self.module)
+        tp = getattr(mdl, self.object_name)
+        if not callable(tp):
+            raise TypeError(f'object "{self.module}:{self.object_name}" is not callable')
+        return tp  # type: ignore
+
+    def import_class(self, class_type: Type[T], echo: UniEcho, auto_create: bool = False, create_template_params: Any = None, util: Optional[UniUtil] = None) -> Type[T]:
         try:
             mdl = importlib.import_module(self.module)
         except ModuleNotFoundError:
             if not auto_create:
                 raise
+
+            if util is None:
+                raise TypeError('util must be set')
+
             mdl = None  # type: ignore
-            echo = echo.mk_child(f'module[{self.module}::{self.class_name}]')
+            echo = echo.mk_child(f'module[{self.module}::{self.object_name}]')
             hierarchy = self.module.split('.')
             path = os.path.abspath(f'{os.path.join("./", *hierarchy)}.py')
             path_dir = os.path.dirname(path)
@@ -127,7 +138,8 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
                     echo.log_debug(f'file {pi} was created')
 
             with open(path, 'wt') as fm:
-                fm.writelines(template(tpl_map[class_type.__name__], data=create_template_params, name=self.class_name))
+                print(class_type.__name__, create_template_params.input_message)
+                fm.writelines(util.template.template(tpl_map[class_type.__name__], data=create_template_params, name=self.object_name))
                 echo.log_info(f'file {path} was created')
 
             success = False
@@ -144,7 +156,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
                 echo.log_error('could not be loaded')
                 exit(1)
         assert mdl is not None
-        tp = getattr(mdl, self.class_name)
+        tp = getattr(mdl, self.object_name)
         if not issubclass(tp, class_type):
-            ValueError(f'class {self.class_name} is not subclass of {class_type.__name__}')
-        return tp
+            ValueError(f'class {self.object_name} is not subclass of {class_type.__name__}')
+        return tp  # type: ignore

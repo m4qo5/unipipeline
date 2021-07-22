@@ -1,14 +1,19 @@
 import json
 import logging
 from logging import Logger
-from typing import Set, List
+from typing import Set, List, TYPE_CHECKING
 from uuid import uuid4
 
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerConsumer
+from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
+from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_message_meta import UniMessageMeta
 
+if TYPE_CHECKING:
+    from unipipeline.modules.uni_mediator import UniMediator
 
-class UniLogBroker(UniBroker):
+
+class UniLogBroker(UniBroker[UniDynamicDefinition]):
     def start_consuming(self) -> None:
         self._logger.info(f'{self._logging_prefix} start consuming')
 
@@ -24,8 +29,8 @@ class UniLogBroker(UniBroker):
     def mk_log_prefix(self) -> str:
         return f'{type(self).__name__} {self._uni_definition.name}::{uuid4()} :'
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition) -> None:
+        super().__init__(mediator, definition)
         self._logger = self.mk_logger()
         self._logging_prefix = self.mk_log_prefix()
 

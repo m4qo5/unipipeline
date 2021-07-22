@@ -18,11 +18,14 @@ class UniWorkerDefinition(UniDefinition):
     error_payload_topic: str
     answer_topic: str
     input_message: UniMessageDefinition
-    output_message: Optional[UniMessageDefinition]
+    answer_message: Optional[UniMessageDefinition]
     output_workers: Set[str]
     ack_after_success: bool
     waitings: Set[UniWaitingDefinition]
     external: Optional[str]
+    input_unwrapped: bool
+    answer_unwrapped: bool
+    answer_avg_delay_s: int
 
     @property
     def marked_as_external(self) -> bool:
@@ -30,4 +33,4 @@ class UniWorkerDefinition(UniDefinition):
 
     @property
     def need_answer(self) -> bool:
-        return self.output_message is not None
+        return self.answer_message is not None

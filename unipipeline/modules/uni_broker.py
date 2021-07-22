@@ -1,13 +1,11 @@
-from typing import Callable, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar, Type
-from uuid import UUID
+from typing import Callable, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar, Type, Optional, Dict, Any
 
 from pydantic import ValidationError
 
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_echo import UniEcho
-from unipipeline.modules.uni_message_codec import UniMessageCodec
-from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaAnswerParams
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
@@ -25,6 +23,7 @@ class UniBrokerConsumer(NamedTuple):
     topic: str
     id: str
     group_id: str
+    unwrapped: bool
     message_handler: Callable[[UniMessageMeta, UniBrokerMessageManager], None]
 
 
@@ -48,17 +47,18 @@ class UniBroker(Generic[TConf]):
     def config(self) -> TConf:
         return self._uni_conf
 
-    def codec_serialize(self, meta: UniMessageMeta) -> bytes:
-        meta_dumps = self.definition.codec.dumps(meta.dict())
-        meta_compressed = self.definition.codec.compress(meta_dumps)
-        return meta_compressed
+    def serialize_message_body(self, meta: UniMessageMeta) -> bytes:
+        data_dict: Dict[str, Any] = meta.payload if meta.unwrapped else meta.dict()
+        data_bytes = self._uni_mediator.serialize_content_type(self.definition.content_type, data_dict)
+        data_bytes = self._uni_mediator.compress_message_body(self.definition.compression, data_bytes)
+        return data_bytes
 
-    def codec_parse(self, content: bytes, codec: UniMessageCodec = None) -> UniMessageMeta:
-        if codec is None:
-            codec = self.definition.codec
-        body_uncompressed = codec.decompress(content)
-        body_json = codec.loads(body_uncompressed)
-        return UniMessageMeta(**body_json)
+    def parse_message_body(self, content: bytes, compression: Optional[str], content_type: str, unwrapped: bool) -> UniMessageMeta:
+        content = self._uni_mediator.decompress_message_body(compression, content)
+        fields = self._uni_mediator.parse_content_type(content_type, content)
+        if unwrapped:
+            return UniMessageMeta.create_new(fields, unwrapped=True)
+        return UniMessageMeta(**fields)
 
     def connect(self) -> None:
         raise NotImplementedError(f'method connect must be implemented for {type(self).__name__}')
@@ -84,10 +84,10 @@ class UniBroker(Generic[TConf]):
     def initialize(self, topics: Set[str], answer_topics: Set[str]) -> None:
         raise NotImplementedError(f'method initialize must be implemented for {type(self).__name__}')
 
-    def get_answer(self, answer_topic: str, answer_id: UUID, max_delay_s: int) -> UniMessageMeta:
+    def get_answer(self, answer_params: UniMessageMetaAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
         raise NotImplementedError(f'method initialize must be implemented for {type(self).__name__}')
 
-    def publish_answer(self, answer_topic: str, answer_id: UUID, meta: UniMessageMeta) -> None:
+    def publish_answer(self, answer_params: UniMessageMetaAnswerParams, meta: UniMessageMeta) -> None:
         raise NotImplementedError(f'method publish_answer must be implemented for {type(self).__name__}')
 
     @property
