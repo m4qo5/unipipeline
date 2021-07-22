@@ -7,12 +7,14 @@ from pika import ConnectionParameters, PlainCredentials, BlockingConnection, Bas
 from pika.adapters.blocking_connection import BlockingChannel  # type: ignore
 from pika.exceptions import AMQPConnectionError, AMQPError, ConnectionClosedByBroker  # type: ignore
 
+from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
 from unipipeline.errors.uni_answer_delay_error import UniAnswerDelayError
-from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
-from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
-from unipipeline.modules.uni_definition import UniDynamicDefinition
-from unipipeline.modules.uni_message import UniMessage
-from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaAnswerParams
+from unipipeline.brokers.uni_broker import UniBroker
+from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
+from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
+from unipipeline.definitions.uni_definition import UniDynamicDefinition
+from unipipeline.message.uni_message import UniMessage
+from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
@@ -283,7 +285,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             )
         self.echo.log_debug(f'sent messages ({len(meta_list)}) to {self.config.exchange_name}->{topic}')
 
-    def get_answer(self, answer_params: UniMessageMetaAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
+    def get_answer(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
         answ_topic = f'{answer_params.topic}.{answer_params.id}'
         exchange = self.config.answer_exchange_name
         ch = self._get_channel(True)
@@ -311,7 +313,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 unwrapped=unwrapped,
             )
 
-    def publish_answer(self, answer_params: UniMessageMetaAnswerParams, meta: UniMessageMeta) -> None:
+    def publish_answer(self, answer_params: UniAnswerParams, meta: UniMessageMeta) -> None:
         ch = self._get_channel()
         answ_topic = f'{answer_params.topic}.{answer_params.id}'
         ch.basic_publish(

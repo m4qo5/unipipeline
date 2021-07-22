@@ -3,14 +3,14 @@ from typing import TypeVar, Generic, Optional, Type, Any, Union, Dict, TYPE_CHEC
 from unipipeline import UniWorkFlowError
 from unipipeline.errors.uni_payload_error import UniPayloadParsingError, UniAnswerPayloadParsingError
 from unipipeline.errors.uni_sending_to_worker_error import UniSendingToWorkerError
-from unipipeline.modules.uni_answer_message import UniAnswerMessage
-from unipipeline.modules.uni_broker import UniBrokerMessageManager
-from unipipeline.modules.uni_message import UniMessage
-from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic, UniMessageMetaAnswerParams
-from unipipeline.modules.uni_worker import UniWorker
-from unipipeline.modules.uni_worker_consumer_manager import UniWorkerConsumerManager
-from unipipeline.modules.uni_worker_consumer_message import UniWorkerConsumerMessage
-from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
+from unipipeline.answer.uni_answer_message import UniAnswerMessage
+from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
+from unipipeline.message.uni_message import UniMessage
+from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic, UniAnswerParams
+from unipipeline.worker.uni_worker import UniWorker
+from unipipeline.worker.uni_worker_consumer_manager import UniWorkerConsumerManager
+from unipipeline.worker.uni_worker_consumer_message import UniWorkerConsumerMessage
+from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
@@ -40,7 +40,7 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
         if need_answer and not wd.need_answer:
             raise UniWorkFlowError(f'you will get no response form worker {wd.name}')
         if need_answer:
-            answ_params = UniMessageMetaAnswerParams(topic=self._definition.answer_topic, id=self._worker_manager.id)
+            answ_params = UniAnswerParams(topic=self._definition.answer_topic, id=self._worker_manager.id)
             return self._mediator.send_to(wd.name, data, self._current_meta, answer_params=answ_params, alone=alone)
         self._mediator.send_to(wd.name, data, self._current_meta, answer_params=None, alone=alone)
         return None

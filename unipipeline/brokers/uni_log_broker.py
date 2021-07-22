@@ -4,10 +4,10 @@ from logging import Logger
 from typing import Set, List, TYPE_CHECKING
 from uuid import uuid4
 
-from unipipeline.modules.uni_broker import UniBroker, UniBrokerConsumer
-from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
-from unipipeline.modules.uni_definition import UniDynamicDefinition
-from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.brokers.uni_broker import UniBroker, UniBrokerConsumer
+from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
+from unipipeline.definitions.uni_definition import UniDynamicDefinition
+from unipipeline.message_meta.uni_message_meta import UniMessageMeta
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator

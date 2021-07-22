@@ -3,8 +3,8 @@ import importlib
 from time import sleep
 from typing import NamedTuple, Generic, Type, TypeVar, Any, Optional, Set, Callable
 
-from unipipeline.modules.uni_util import UniUtil
-from unipipeline.modules.uni_echo import UniEcho
+from unipipeline.utils.uni_util import UniUtil
+from unipipeline.utils.uni_echo import UniEcho
 
 T = TypeVar('T')
 
@@ -117,11 +117,11 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
             mdl = None  # type: ignore
             echo = echo.mk_child(f'module[{self.module}::{self.object_name}]')
             hierarchy = self.module.split('.')
-            path = os.path.abspath(f'{os.path.join("./", *hierarchy)}.py')
+            path = os.path.abspath(f'{os.path.join("../modules/", *hierarchy)}.py')
             path_dir = os.path.dirname(path)
             os.makedirs(path_dir, exist_ok=True)
 
-            path_inits: Set[str] = {os.path.join(path_dir, "__init__.py"), }
+            path_inits: Set[str] = {os.path.join(path_dir, "../modules/__init__.py"), }
 
             if path_dir.startswith(CWD):
                 current_dir: Optional[str] = None
@@ -129,7 +129,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
                     if current_dir is not None:
                         pi_dir = os.path.join(current_dir, pi_dir)
                     current_dir = pi_dir
-                    path_inits.add(os.path.join(CWD, pi_dir, "__init__.py"))
+                    path_inits.add(os.path.join(CWD, pi_dir, "../modules/__init__.py"))
 
             for pi in path_inits:
                 if not os.path.isfile(pi):

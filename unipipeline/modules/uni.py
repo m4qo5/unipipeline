@@ -1,14 +1,14 @@
 from typing import Dict, Any, Union, Optional
 
 from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
-from unipipeline.modules.uni_broker import UniBroker
-from unipipeline.modules.uni_config import UniConfig, UniConfigError
-from unipipeline.modules.uni_echo import UniEcho
+from unipipeline.brokers.uni_broker import UniBroker
+from unipipeline.config.uni_config import UniConfig, UniConfigError
+from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.modules.uni_mediator import UniMediator
-from unipipeline.modules.uni_message import UniMessage
-from unipipeline.modules.uni_util import UniUtil
-from unipipeline.modules.uni_wating import UniWaiting
-from unipipeline.modules.uni_worker import UniWorker
+from unipipeline.message.uni_message import UniMessage
+from unipipeline.utils.uni_util import UniUtil
+from unipipeline.waiting.uni_wating import UniWaiting
+from unipipeline.worker.uni_worker import UniWorker
 
 
 def camel_case(snake_cased: str) -> str:

@@ -3,9 +3,9 @@ from typing import TypeVar, Optional, Generic, Type
 from uuid import UUID
 
 from unipipeline.errors.uni_payload_error import UniPayloadParsingError
-from unipipeline.modules.uni_broker import UniBrokerMessageManager
-from unipipeline.modules.uni_message import UniMessage
-from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
+from unipipeline.message.uni_message import UniMessage
+from unipipeline.message_meta.uni_message_meta import UniMessageMeta
 
 TInputMsgPayload = TypeVar('TInputMsgPayload', bound=UniMessage)
 TAnswerMsgPayload = TypeVar('TAnswerMsgPayload', bound=Optional[UniMessage])

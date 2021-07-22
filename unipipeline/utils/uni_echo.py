@@ -2,7 +2,7 @@ import logging
 import sys
 from typing import IO, Union, Optional
 
-from unipipeline.modules.uni_util_color import UniUtilColor
+from unipipeline.utils.uni_util_color import UniUtilColor
 
 SUPPORTED_LVL = {logging.INFO, logging.DEBUG, logging.WARNING, logging.ERROR}
 

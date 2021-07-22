@@ -2,7 +2,7 @@ from urllib.parse import urlparse
 
 import psycopg2  # type: ignore
 
-from unipipeline import UniWaiting
+from unipipeline.waiting.uni_wating import UniWaiting
 
 
 class UniPostgresWaiting(UniWaiting):

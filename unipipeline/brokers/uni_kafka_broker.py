@@ -1,39 +1,20 @@
-from typing import Optional, Tuple, Any, Dict, List, Set, Callable, TYPE_CHECKING
+from typing import Optional, Any, Dict, List, Set, TYPE_CHECKING
 
 from kafka import KafkaProducer, KafkaConsumer  # type: ignore
 
-from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
-from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
-from unipipeline.modules.uni_definition import UniDynamicDefinition
-from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.brokers.uni_broker import UniBroker
+from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
+from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
+from unipipeline.brokers.uni_kafka_broker_config import UniKafkaBrokerConfig
+from unipipeline.brokers.uni_kafka_broker_message_manager import UniKafkaBrokerMessageManager
+from unipipeline.message_meta.uni_message_meta import UniMessageMeta
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
 
 
-class UniKafkaBrokerMessageManager(UniBrokerMessageManager):
-    def __init__(self, commit: Callable[[], None]) -> None:
-        self._commit = commit
-        self._acknowledged = False
-
-    def reject(self) -> None:
-        pass
-
-    def ack(self) -> None:
-        if self._acknowledged:
-            return
-        self._acknowledged = True
-        self._commit()
-
-
-class UniKafkaBrokerConf(UniDynamicDefinition):
-    api_version: Tuple[int, ...]
-    retry_max_count: int = 100
-    retry_delay_s: int = 3
-
-
-class UniKafkaBroker(UniBroker[UniKafkaBrokerConf]):
-    config_type = UniKafkaBrokerConf
+class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
+    config_type = UniKafkaBrokerConfig
 
     def get_boostrap_servers(self) -> List[str]:
         raise NotImplementedError(f'method get_boostrap_server must be implemented for {type(self).__name__}')

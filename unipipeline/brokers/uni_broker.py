@@ -1,30 +1,15 @@
-from typing import Callable, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar, Type, Optional, Dict, Any
+from typing import Set, List, TYPE_CHECKING, Generic, TypeVar, Type, Optional, Dict, Any
 
 from pydantic import ValidationError
 
-from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
-from unipipeline.modules.uni_definition import UniDynamicDefinition
-from unipipeline.modules.uni_echo import UniEcho
-from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaAnswerParams
+from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
+from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
+from unipipeline.definitions.uni_definition import UniDynamicDefinition
+from unipipeline.utils.uni_echo import UniEcho
+from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
-
-
-class UniBrokerMessageManager:
-    def reject(self) -> None:
-        raise NotImplementedError(f'method reject must be specified for class "{type(self).__name__}"')
-
-    def ack(self) -> None:
-        raise NotImplementedError(f'method acknowledge must be specified for class "{type(self).__name__}"')
-
-
-class UniBrokerConsumer(NamedTuple):
-    topic: str
-    id: str
-    group_id: str
-    unwrapped: bool
-    message_handler: Callable[[UniMessageMeta, UniBrokerMessageManager], None]
 
 
 TConf = TypeVar('TConf')
@@ -84,10 +69,10 @@ class UniBroker(Generic[TConf]):
     def initialize(self, topics: Set[str], answer_topics: Set[str]) -> None:
         raise NotImplementedError(f'method initialize must be implemented for {type(self).__name__}')
 
-    def get_answer(self, answer_params: UniMessageMetaAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
+    def get_answer(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
         raise NotImplementedError(f'method initialize must be implemented for {type(self).__name__}')
 
-    def publish_answer(self, answer_params: UniMessageMetaAnswerParams, meta: UniMessageMeta) -> None:
+    def publish_answer(self, answer_params: UniAnswerParams, meta: UniMessageMeta) -> None:
         raise NotImplementedError(f'method publish_answer must be implemented for {type(self).__name__}')
 
     @property

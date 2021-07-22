@@ -4,17 +4,17 @@ from uuid import uuid4
 
 from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
 from unipipeline.errors.uni_work_flow_error import UniWorkFlowError
-from unipipeline.modules.uni_answer_message import UniAnswerMessage
-from unipipeline.modules.uni_broker import UniBroker, UniBrokerConsumer
-from unipipeline.modules.uni_config import UniConfig
+from unipipeline.answer.uni_answer_message import UniAnswerMessage
+from unipipeline.brokers.uni_broker import UniBroker, UniBrokerConsumer
+from unipipeline.config.uni_config import UniConfig
 from unipipeline.modules.uni_cron_job import UniCronJob
-from unipipeline.modules.uni_echo import UniEcho
-from unipipeline.modules.uni_message import UniMessage
-from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic, UniMessageMetaAnswerParams
-from unipipeline.modules.uni_util import UniUtil
-from unipipeline.modules.uni_worker import UniWorker
-from unipipeline.modules.uni_worker_consumer import UniWorkerConsumer
-from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
+from unipipeline.utils.uni_echo import UniEcho
+from unipipeline.message.uni_message import UniMessage
+from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic, UniAnswerParams
+from unipipeline.utils.uni_util import UniUtil
+from unipipeline.worker.uni_worker import UniWorker
+from unipipeline.worker.uni_worker_consumer import UniWorkerConsumer
+from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.sig import soft_interruption
 
 TWorker = TypeVar('TWorker', bound=UniWorker[Any, Any])
@@ -133,7 +133,7 @@ class UniMediator:
         worker_name: str,
         payload: Union[Dict[str, Any], UniMessage],
         parent_meta: Optional[UniMessageMeta] = None,
-        answer_params: Optional[UniMessageMetaAnswerParams] = None,
+        answer_params: Optional[UniAnswerParams] = None,
         alone: bool = False
     ) -> Optional[UniAnswerMessage[UniMessage]]:
         if worker_name not in self._worker_initialized_list:

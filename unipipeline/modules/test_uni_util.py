@@ -1,6 +1,6 @@
 import pytest
 
-from unipipeline.modules.uni_util_color import UniUtilColor
+from unipipeline.utils.uni_util_color import UniUtilColor
 
 
 @pytest.mark.parametrize('enabled,color,text,expected', [

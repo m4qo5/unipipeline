@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from unipipeline.modules.uni_definition import UniDefinition
+from unipipeline.definitions.uni_definition import UniDefinition
 
 
 class UniExternalDefinition(UniDefinition):

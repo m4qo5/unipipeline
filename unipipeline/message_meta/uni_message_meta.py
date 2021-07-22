@@ -1,37 +1,13 @@
 import uuid
 from datetime import datetime
-from enum import Enum
 from typing import Dict, Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel
 
-
-class UniMessageMetaErrTopic(Enum):
-    SYSTEM_ERR = 'error_system'
-    MESSAGE_PAYLOAD_ERR = 'error_message_payload'
-    HANDLE_MESSAGE_ERR = 'error_message_handling'
-    ERROR_HANDLING_ERR = 'error_handling'
-
-
-class UniMessageMetaErr(BaseModel):
-    error_topic: UniMessageMetaErrTopic
-    error_type: str
-    error_message: str
-    retry_times: int
-
-    class Config:
-        frozen = True
-        extra = 'forbid'
-
-
-class UniMessageMetaAnswerParams(BaseModel):
-    topic: str
-    id: UUID
-
-    class Config:
-        frozen = True
-        extra = 'forbid'
+from unipipeline.answer.uni_answer_params import UniAnswerParams
+from unipipeline.message_meta.uni_message_meta_err import UniMessageMetaErr
+from unipipeline.message_meta.uni_message_meta_error_topic import UniMessageMetaErrTopic
 
 
 class UniMessageMeta(BaseModel):
@@ -43,7 +19,7 @@ class UniMessageMeta(BaseModel):
     error: Optional[UniMessageMetaErr]
 
     unwrapped: bool
-    answer_params: Optional[UniMessageMetaAnswerParams]
+    answer_params: Optional[UniAnswerParams]
 
     worker_creator: Optional[str]  # name of worker who created it
 
@@ -60,7 +36,7 @@ class UniMessageMeta(BaseModel):
         return self.error is not None
 
     @staticmethod
-    def create_new(data: Dict[str, Any], unwrapped: bool, answer_params: Optional[UniMessageMetaAnswerParams] = None, error: Optional[UniMessageMetaErr] = None) -> 'UniMessageMeta':
+    def create_new(data: Dict[str, Any], unwrapped: bool, answer_params: Optional[UniAnswerParams] = None, error: Optional[UniMessageMetaErr] = None) -> 'UniMessageMeta':
         return UniMessageMeta(
             id=uuid.uuid4(),
             date_created=datetime.now(),
@@ -71,7 +47,7 @@ class UniMessageMeta(BaseModel):
             unwrapped=unwrapped,
         )
 
-    def create_child(self, payload: Dict[str, Any], unwrapped: bool, answer_params: Optional[UniMessageMetaAnswerParams] = None) -> 'UniMessageMeta':
+    def create_child(self, payload: Dict[str, Any], unwrapped: bool, answer_params: Optional[UniAnswerParams] = None) -> 'UniMessageMeta':
         return UniMessageMeta(
             id=uuid.uuid4(),
             date_created=datetime.now(),

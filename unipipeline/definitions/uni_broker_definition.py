@@ -1,10 +1,8 @@
-from typing import TypeVar, Optional
+from typing import Optional
 from uuid import UUID
 
-from unipipeline.modules.uni_definition import UniDefinition
-from unipipeline.modules.uni_module_definition import UniModuleDefinition
-
-TContent = TypeVar('TContent')
+from unipipeline.definitions.uni_definition import UniDefinition
+from unipipeline.definitions.uni_module_definition import UniModuleDefinition
 
 
 class UniBrokerDefinition(UniDefinition):

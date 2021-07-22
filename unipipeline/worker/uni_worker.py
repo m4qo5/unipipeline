@@ -1,8 +1,8 @@
 from typing import Generic, Any, TypeVar, Optional, Dict, Union
 
-from unipipeline.modules.uni_message import UniMessage
-from unipipeline.modules.uni_worker_consumer_manager import UniWorkerConsumerManager
-from unipipeline.modules.uni_worker_consumer_message import UniWorkerConsumerMessage
+from unipipeline.message.uni_message import UniMessage
+from unipipeline.worker.uni_worker_consumer_manager import UniWorkerConsumerManager
+from unipipeline.worker.uni_worker_consumer_message import UniWorkerConsumerMessage
 
 TInputMessage = TypeVar('TInputMessage', bound=UniMessage)
 TOutputMessage = TypeVar('TOutputMessage', bound=Optional[UniMessage])

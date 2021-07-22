@@ -3,8 +3,8 @@ from typing import TypeVar, Generic, Type, Optional
 from uuid import UUID
 
 from unipipeline.errors.uni_payload_error import UniAnswerPayloadParsingError
-from unipipeline.modules.uni_message import UniMessage
-from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.message.uni_message import UniMessage
+from unipipeline.message_meta.uni_message_meta import UniMessageMeta
 
 TMessage = TypeVar('TMessage', bound=UniMessage)
 

@@ -1,5 +1,5 @@
-from unipipeline.modules.uni_util_color import UniUtilColor
-from unipipeline.modules.uni_util_template import UniUtilTemplate
+from unipipeline.utils.uni_util_color import UniUtilColor
+from unipipeline.utils.uni_util_template import UniUtilTemplate
 
 
 class UniUtil:

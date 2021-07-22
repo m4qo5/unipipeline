@@ -2,13 +2,7 @@ from typing import Any, Dict, TypeVar, Type
 
 from pydantic import BaseModel
 
-
-class UniDynamicDefinition(BaseModel):
-    class Config:
-        extra = 'ignore'
-        allow_mutation = False
-        frozen = True
-
+from unipipeline.definitions.uni_dynamic_definition import UniDynamicDefinition
 
 T = TypeVar('T', bound=UniDynamicDefinition)
 

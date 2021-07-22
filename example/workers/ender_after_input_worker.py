@@ -1,7 +1,6 @@
 from example.messages.ender_after_answer_message import EnderAfterAnswerMessage
-from unipipeline import UniWorker, UniWorkerConsumerMessage
-
 from example.messages.ender_after_input_message import EnderAfterInputMessage
+from unipipeline import UniWorker, UniWorkerConsumerMessage
 
 
 class EnderAfterInputWorker(UniWorker[EnderAfterInputMessage, EnderAfterAnswerMessage]):

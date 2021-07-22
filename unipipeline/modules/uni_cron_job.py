@@ -2,8 +2,8 @@ from typing import NamedTuple, List, Tuple, Optional, Iterable, TYPE_CHECKING
 
 from crontab import CronTab  # type: ignore
 
-from unipipeline.messages.uni_cron_message import UniCronMessage
-from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
+from unipipeline.message.uni_cron_message import UniCronMessage
+from unipipeline.definitions.uni_cron_task_definition import UniCronTaskDefinition
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator

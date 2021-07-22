@@ -1,11 +1,11 @@
 from typing import Callable, Union, Type, Any, Optional, Dict, TYPE_CHECKING, TypeVar
 from uuid import uuid4, UUID
 
-from unipipeline.modules.uni_answer_message import UniAnswerMessage
-from unipipeline.modules.uni_message import UniMessage
+from unipipeline.answer.uni_answer_message import UniAnswerMessage
+from unipipeline.message.uni_message import UniMessage
 
 if TYPE_CHECKING:
-    from unipipeline.modules.uni_worker import UniWorker
+    from unipipeline.worker.uni_worker import UniWorker
 
 
 TInputMessage = TypeVar('TInputMessage', bound=UniMessage)
