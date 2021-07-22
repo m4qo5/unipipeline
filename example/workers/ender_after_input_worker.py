@@ -1,8 +1,11 @@
-from unipipeline import UniWorker
+from example.messages.ender_after_answer_message import EnderAfterAnswerMessage
+from unipipeline import UniWorker, UniWorkerConsumerMessage
 
 from example.messages.ender_after_input_message import EnderAfterInputMessage
 
 
-class EnderAfterInputWorker(UniWorker[EnderAfterInputMessage, None]):
-    def handle_message(self, message: EnderAfterInputMessage) -> None:
-        raise NotImplementedError('method handle_message must be specified for class "EnderAfterInputWorker"')
+class EnderAfterInputWorker(UniWorker[EnderAfterInputMessage, EnderAfterAnswerMessage]):
+    def handle_message(self, msg: UniWorkerConsumerMessage[EnderAfterInputMessage]) -> EnderAfterAnswerMessage:
+        return EnderAfterAnswerMessage(
+            value=f'EnderAfterInputWorker answer on >>> {msg.payload.value}'
+        )

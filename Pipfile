@@ -34,7 +34,7 @@ example-mem-consumer-input = "python3 ./example/example_consumer.py --type mem -
 example-mem-consumer-after-cron = "python3 ./example/example_consumer.py --type mem --worker ender_after_cron_worker"
 example-mem-consumer-after-input = "python3 ./example/example_consumer.py --type mem --worker ender_after_input_worker"
 example-mem-consumer-cron = "python3 ./example/example_consumer.py --type mem --worker my_super_cron_worker"
-example-mem-cron = "python3 ./example/example_cron.py --type mem"
+example-mem-cron = "python3 ./example/example_cron_producer.py --type mem"
 example-mem-csi = "python3 ./example/example_csi.py --type mem"
 
 example-kafka-producer = "python3 ./example/example_producer.py --type kafka"
@@ -42,7 +42,7 @@ example-kafka-consumer-input = "python3 ./example/example_consumer.py --type kaf
 example-kafka-consumer-after-cron = "python3 ./example/example_consumer.py --type kafka --worker ender_after_cron_worker"
 example-kafka-consumer-after-input = "python3 ./example/example_consumer.py --type kafka --worker ender_after_input_worker"
 example-kafka-consumer-cron = "python3 ./example/example_consumer.py --type kafka --worker my_super_cron_worker"
-example-kafka-cron = "python3 ./example/example_cron.py --type kafka"
+example-kafka-cron = "python3 ./example/example_cron_producer.py --type kafka"
 example-kafka-csi = "python3 ./example/example_csi.py --type kafka"
 
 example-rmq-producer = "python3 ./example/example_producer.py --type rmq"
@@ -50,5 +50,5 @@ example-rmq-consumer-input = "python3 ./example/example_consumer.py --type rmq -
 example-rmq-consumer-after-cron = "python3 ./example/example_consumer.py --type rmq --worker ender_after_cron_worker"
 example-rmq-consumer-after-input = "python3 ./example/example_consumer.py --type rmq --worker ender_after_input_worker"
 example-rmq-consumer-cron = "python3 ./example/example_consumer.py --type rmq --worker my_super_cron_worker"
-example-rmq-cron = "python3 ./example/example_cron.py --type rmq"
+example-rmq-cron = "python3 ./example/example_cron_producer.py --type rmq"
 example-rmq-csi = "python3 ./example/example_csi.py --type rmq"

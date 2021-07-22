@@ -60,6 +60,9 @@ workers:
   input_worker:
     input_message: input_message
     input_unwrapped: true
+    output_workers:
+      - ender_after_input_worker
+      - some_external_worker
     waiting_for:
       - common_db
 
