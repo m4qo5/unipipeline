@@ -28,7 +28,10 @@ from unipipeline.modules.uni_util import UniUtil
 from unipipeline.modules.uni_waiting_definition import UniWaitingDefinition
 from unipipeline.modules.uni_wating import UniWaiting
 from unipipeline.modules.uni_worker import UniWorker
+from unipipeline.modules.uni_worker_consumer_manager import UniWorkerConsumerManager
+from unipipeline.modules.uni_worker_consumer_message import UniWorkerConsumerMessage
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
+from unipipeline.modules.uni_worker_consumer import UniWorkerConsumer
 from unipipeline.utils.complex_serializer import complex_serializer_json_dumps
 from unipipeline.utils.connection_pool import ConnectionObj, ConnectionRC, ConnectionManager, ConnectionPool, connection_pool
 from unipipeline.waitings.uni_postgres_waiting import UniPostgresWaiting
@@ -84,6 +87,9 @@ __all__ = (
 
     # worker
     "UniWorker",
+    "UniWorkerConsumer",
+    "UniWorkerConsumerManager",
+    "UniWorkerConsumerMessage",
     "UniWorkerDefinition",
 
     # waiting

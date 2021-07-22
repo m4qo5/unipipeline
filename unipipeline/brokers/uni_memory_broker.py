@@ -6,7 +6,7 @@ from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, U
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_echo import UniEcho
-from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaAnswerParams
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
@@ -185,8 +185,8 @@ class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
         if self._consuming_started:
             ql.process_all()
 
-    def get_answer(self, answer_topic: str, answer_id: UUID, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
-        topic = self._get_answer_topic_name(answer_topic, answer_id)
+    def get_answer(self, answer_params: UniMessageMetaAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
+        topic = self._get_answer_topic_name(answer_params.topic, answer_params.id)
         self._init_queue(topic)
 
         answ_meta = self._queues_by_topic[topic].get_next()
@@ -196,7 +196,7 @@ class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
 
         return answ_meta
 
-    def publish_answer(self, answer_topic: str, answer_id: UUID, meta: UniMessageMeta) -> None:
-        topic = self._get_answer_topic_name(answer_topic, answer_id)
+    def publish_answer(self, answer_params: UniMessageMetaAnswerParams, meta: UniMessageMeta) -> None:
+        topic = self._get_answer_topic_name(answer_params.topic, answer_params.id)
         self._init_queue(topic)
         self._queues_by_topic[topic].add(meta)

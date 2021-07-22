@@ -1,12 +1,11 @@
 from typing import Callable, Set, NamedTuple, List, TYPE_CHECKING, Generic, TypeVar, Type, Optional, Dict, Any
-from uuid import UUID
 
 from pydantic import ValidationError
 
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_definition import UniDynamicDefinition
 from unipipeline.modules.uni_echo import UniEcho
-from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaAnswerParams
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
@@ -85,10 +84,10 @@ class UniBroker(Generic[TConf]):
     def initialize(self, topics: Set[str], answer_topics: Set[str]) -> None:
         raise NotImplementedError(f'method initialize must be implemented for {type(self).__name__}')
 
-    def get_answer(self, answer_topic: str, answer_id: UUID, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
+    def get_answer(self, answer_params: UniMessageMetaAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
         raise NotImplementedError(f'method initialize must be implemented for {type(self).__name__}')
 
-    def publish_answer(self, answer_topic: str, answer_id: UUID, meta: UniMessageMeta) -> None:
+    def publish_answer(self, answer_params: UniMessageMetaAnswerParams, meta: UniMessageMeta) -> None:
         raise NotImplementedError(f'method publish_answer must be implemented for {type(self).__name__}')
 
     @property

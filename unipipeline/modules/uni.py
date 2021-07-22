@@ -1,11 +1,12 @@
 from typing import Dict, Any, Union, Optional
 
-from unipipeline.modules.uni_util import UniUtil
+from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
 from unipipeline.modules.uni_broker import UniBroker
 from unipipeline.modules.uni_config import UniConfig, UniConfigError
 from unipipeline.modules.uni_echo import UniEcho
-from unipipeline.modules.uni_mediator import UniMediator, UniPayloadError
+from unipipeline.modules.uni_mediator import UniMediator
 from unipipeline.modules.uni_message import UniMessage
+from unipipeline.modules.uni_util import UniUtil
 from unipipeline.modules.uni_wating import UniWaiting
 from unipipeline.modules.uni_worker import UniWorker
 
@@ -113,7 +114,7 @@ class Uni:
     def send_to(self, name: str, data: Union[Dict[str, Any], UniMessage], alone: bool = False) -> None:
         try:
             self._mediator.send_to(name, data, alone=alone)
-        except UniPayloadError as e:
+        except UniPayloadSerializationError as e:
             self.echo.exit_with_error(f'invalid props in message: {e}')
 
     def start_consuming(self) -> None:

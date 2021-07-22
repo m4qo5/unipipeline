@@ -1,18 +1,19 @@
 from time import sleep
-from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List, NamedTuple, Tuple, Callable
+from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List, NamedTuple, Callable
 from uuid import uuid4
 
-from pydantic import ValidationError
-
-from unipipeline import UniPayloadError
-from unipipeline.modules.uni_util import UniUtil
+from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
+from unipipeline.errors.uni_work_flow_error import UniWorkFlowError
+from unipipeline.modules.uni_answer_message import UniAnswerMessage
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerConsumer
 from unipipeline.modules.uni_config import UniConfig
 from unipipeline.modules.uni_cron_job import UniCronJob
 from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.modules.uni_message import UniMessage
-from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic
+from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic, UniMessageMetaAnswerParams
+from unipipeline.modules.uni_util import UniUtil
 from unipipeline.modules.uni_worker import UniWorker
+from unipipeline.modules.uni_worker_consumer import UniWorkerConsumer
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.sig import soft_interruption
 
@@ -31,7 +32,7 @@ class UniMediator:
         self._util = util
 
         self._worker_definition_by_type: Dict[Any, UniWorkerDefinition] = dict()
-        self._worker_instance_indexes: Dict[str, UniWorker[Any, Any]] = dict()
+        self._worker_instance_indexes: Dict[str, UniWorkerConsumer[Any, Any]] = dict()
         self._broker_instance_indexes: Dict[str, UniBroker[Any]] = dict()
         self._worker_init_list: Set[str] = set()
         self._worker_initialized_list: Set[str] = set()
@@ -96,34 +97,45 @@ class UniMediator:
         wd = self._config.workers[worker_name]
         if not wd.need_answer:
             if payload is not None:
-                raise UniPayloadError(f'output message must be None because worker {wd.name} has no possibility to send output messages')
+                raise UniWorkFlowError(f'output message must be None because worker {wd.name} has no possibility to send output messages')
             return
 
         if payload is None:
-            raise UniPayloadError('output message must be not empty')
+            raise UniPayloadSerializationError('output message must be not empty')
 
         answ_meta: UniMessageMeta
         if isinstance(payload, UniMessageMeta):
             answ_meta = payload
         else:
             assert wd.answer_message is not None
-            output_message_type = self.get_message_type(wd.answer_message.name)
+            answ_message_type = self.get_message_type(wd.answer_message.name)
             payload_msg: UniMessage
-            if isinstance(payload, output_message_type):
+            if isinstance(payload, answ_message_type):
                 payload_msg = payload
             elif isinstance(payload, dict):
-                payload_msg = output_message_type(**payload)  # type: ignore
+                try:
+                    payload_msg = answ_message_type(**payload)  # type: ignore
+                except Exception as e:
+                    raise UniPayloadSerializationError(str(e))
             else:
-                raise UniPayloadError(f'output message has invalid type. {type(payload).__name__} was given')
+                raise UniPayloadSerializationError(f'output message has invalid type. {type(payload).__name__} was given')
 
             answ_meta = req_meta.create_child(payload_msg.dict(), unwrapped=unwrapped)
 
         b = self.get_broker(wd.broker.name)
 
-        b.publish_answer(wd.answer_topic, req_meta.id, answ_meta)
-        self.echo.log_info(f'worker {worker_name} answers to {wd.answer_topic}->{req_meta.id} :: {answ_meta}')
+        assert req_meta.answer_params is not None
+        b.publish_answer(req_meta.answer_params, answ_meta)
+        self.echo.log_info(f'worker {worker_name} answers to {req_meta.answer_params.topic}->{req_meta.answer_params.id} :: {answ_meta}')
 
-    def send_to(self, worker_name: str, payload: Union[Dict[str, Any], UniMessage], parent_meta: Optional[UniMessageMeta] = None, alone: bool = False) -> Optional[Tuple[UniMessage, UniMessageMeta]]:
+    def send_to(
+        self,
+        worker_name: str,
+        payload: Union[Dict[str, Any], UniMessage],
+        parent_meta: Optional[UniMessageMeta] = None,
+        answer_params: Optional[UniMessageMetaAnswerParams] = None,
+        alone: bool = False
+    ) -> Optional[UniAnswerMessage[UniMessage]]:
         if worker_name not in self._worker_initialized_list:
             raise OverflowError(f'worker {worker_name} was not initialized')
 
@@ -137,8 +149,8 @@ class UniMediator:
                 payload_data = message_type(**payload).dict()  # type: ignore
             else:
                 raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
-        except ValidationError as e:
-            raise UniPayloadError(e)
+        except Exception as e:
+            raise UniPayloadSerializationError(str(e))
 
         br = self.get_broker(wd.broker.name)
 
@@ -149,20 +161,20 @@ class UniMediator:
                 return None
 
         if parent_meta is not None:
-            meta = parent_meta.create_child(payload_data, unwrapped=wd.input_unwrapped)
+            meta = parent_meta.create_child(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
         else:
-            meta = UniMessageMeta.create_new(payload_data, unwrapped=wd.input_unwrapped)
+            meta = UniMessageMeta.create_new(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
 
         meta_list = [meta]
         br.publish(wd.topic, meta_list)  # TODO: make it list by default
         self.echo.log_info(f"worker {wd.name} sent message to topic '{wd.topic}':: {meta_list}")
 
-        if wd.need_answer:
+        if meta.need_answer and wd.need_answer:
             assert wd.answer_message is not None
-            answ_meta = br.get_answer(wd.answer_topic, answer_id=meta.id, max_delay_s=1, unwrapped=wd.answer_unwrapped)
+            assert answer_params is not None
+            answ_meta = br.get_answer(answer_params, max_delay_s=wd.answer_avg_delay_s * 3, unwrapped=wd.answer_unwrapped)
             answ_message_type = self.get_message_type(wd.answer_message.name)
-            answ_msg = answ_message_type(**answ_meta.payload)  # type: ignore
-            return answ_msg, answ_meta
+            return UniAnswerMessage(answ_meta, answ_message_type)
         return None
 
     def start_cron(self) -> None:
@@ -184,7 +196,7 @@ class UniMediator:
         brokers = set()
         for wn in self._consumers_list:
             wd = self._config.workers[wn]
-            w = self.get_worker(wn)
+            wc = self.get_worker_consumer(wn)
 
             br = self.get_broker(wd.broker.name)
 
@@ -194,7 +206,7 @@ class UniMediator:
                 id=f'{wn}__{uuid4()}',
                 group_id=wn,
                 unwrapped=wd.input_unwrapped,
-                message_handler=w.uni_process_message
+                message_handler=wc.process_message
             ))
 
             self.echo.log_info(f'consumer {wn} initialized')
@@ -378,7 +390,7 @@ class UniMediator:
                     self._brokers_with_topics_initialized[bn].answer_topics.add(topic)
             self._brokers_with_topics_to_init = dict()
 
-    def get_worker(self, worker: Union[Type['UniWorker[Any, Any]'], str], singleton: bool = True) -> UniWorker[Any, Any]:
+    def get_worker_consumer(self, worker: Union[Type['UniWorker[Any, Any]'], str], singleton: bool = True) -> UniWorkerConsumer[Any, Any]:
         wd = self._config.get_worker_definition(worker)
         if wd.marked_as_external:
             raise OverflowError(f'worker "{worker}" is external. you could not get it')
@@ -386,11 +398,11 @@ class UniMediator:
             assert wd.type is not None
             worker_type = wd.type.import_class(UniWorker, self.echo, util=self._util)
             self.echo.log_info(f'get_worker :: initialized worker "{wd.name}"')
-            w = worker_type(definition=wd, mediator=self)
+            wc = UniWorkerConsumer(wd, self, worker_type)
         else:
             return self._worker_instance_indexes[wd.name]
-        self._worker_instance_indexes[wd.name] = w
-        return w
+        self._worker_instance_indexes[wd.name] = wc
+        return wc
 
     @property
     def config(self) -> UniConfig:

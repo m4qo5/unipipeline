@@ -417,6 +417,7 @@ class UniConfig:
             broker="default_broker",
             external=None,
             answer_message=None,
+            answer_avg_delay_s=3,
 
             input_unwrapped=False,
             answer_unwrapped=False,

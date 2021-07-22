@@ -21,6 +21,16 @@ class UniMessageMetaErr(BaseModel):
     retry_times: int
 
     class Config:
+        frozen = True
+        extra = 'forbid'
+
+
+class UniMessageMetaAnswerParams(BaseModel):
+    topic: str
+    id: UUID
+
+    class Config:
+        frozen = True
         extra = 'forbid'
 
 
@@ -33,34 +43,42 @@ class UniMessageMeta(BaseModel):
     error: Optional[UniMessageMetaErr]
 
     unwrapped: bool
+    answer_params: Optional[UniMessageMetaAnswerParams]
 
     worker_creator: Optional[str]  # name of worker who created it
 
     class Config:
+        frozen = True
         extra = 'forbid'
+
+    @property
+    def need_answer(self) -> bool:
+        return self.answer_params is not None
 
     @property
     def has_error(self) -> bool:
         return self.error is not None
 
     @staticmethod
-    def create_new(data: Dict[str, Any], unwrapped: bool, error: Optional[UniMessageMetaErr] = None) -> 'UniMessageMeta':
+    def create_new(data: Dict[str, Any], unwrapped: bool, answer_params: Optional[UniMessageMetaAnswerParams] = None, error: Optional[UniMessageMetaErr] = None) -> 'UniMessageMeta':
         return UniMessageMeta(
             id=uuid.uuid4(),
             date_created=datetime.now(),
             payload=data,
             parent=None,
             error=error,
+            answer_params=answer_params,
             unwrapped=unwrapped,
         )
 
-    def create_child(self, payload: Dict[str, Any], unwrapped: bool) -> 'UniMessageMeta':
+    def create_child(self, payload: Dict[str, Any], unwrapped: bool, answer_params: Optional[UniMessageMetaAnswerParams] = None) -> 'UniMessageMeta':
         return UniMessageMeta(
             id=uuid.uuid4(),
             date_created=datetime.now(),
             payload=payload,
             parent=self.dict(),
             unwrapped=unwrapped,
+            answer_params=answer_params,
             error=None,
         )
 
@@ -71,6 +89,7 @@ class UniMessageMeta(BaseModel):
             payload=self.payload,
             parent=self.dict(),
             unwrapped=self.unwrapped,
+            answer_params=self.answer_params,
             error=UniMessageMetaErr(
                 error_topic=error_topic,
                 error_type=type(error).__name__,
