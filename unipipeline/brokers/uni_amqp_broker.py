@@ -8,7 +8,7 @@ from pika import ConnectionParameters, PlainCredentials, BlockingConnection, Bas
 from pika.adapters.blocking_connection import BlockingChannel  # type: ignore
 from pika.exceptions import AMQPConnectionError, AMQPError, ConnectionClosedByBroker  # type: ignore
 
-from unipipeline.errors import UniAnswerDelayError
+from unipipeline.errors.uni_answer_delay_error import UniAnswerDelayError
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerMessageManager, UniBrokerConsumer
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
 from unipipeline.modules.uni_definition import UniDynamicDefinition

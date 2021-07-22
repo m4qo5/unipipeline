@@ -2,12 +2,18 @@ from unipipeline.brokers.uni_amqp_broker import UniAmqpBroker, UniAmqpBrokerMess
 from unipipeline.brokers.uni_kafka_broker import UniKafkaBroker, UniKafkaBrokerMessageManager, UniKafkaBrokerConf
 from unipipeline.brokers.uni_log_broker import UniLogBroker
 from unipipeline.brokers.uni_memory_broker import UniMemoryBroker, UniMemoryBrokerMessageManager
-from unipipeline.errors import UniError, UniDefinitionNotFoundError, UniPayloadError, UniSendingToWorkerError, UniWorkFlowError, UniAnswerDelayError
+from unipipeline.errors.uni_answer_delay_error import UniAnswerDelayError
+from unipipeline.errors.uni_config_error import UniConfigError
+from unipipeline.errors.uni_definition_not_found_error import UniDefinitionNotFoundError
+from unipipeline.errors.uni_error import UniError
+from unipipeline.errors.uni_payload_error import UniPayloadError
+from unipipeline.errors.uni_sending_to_worker_error import UniSendingToWorkerError
+from unipipeline.errors.uni_work_flow_error import UniWorkFlowError
 from unipipeline.messages.uni_cron_message import UniCronMessage
 from unipipeline.modules.uni import Uni
 from unipipeline.modules.uni_broker import UniBrokerMessageManager, UniBroker, UniBrokerConsumer
 from unipipeline.modules.uni_broker_definition import UniBrokerDefinition
-from unipipeline.modules.uni_config import UniConfig, UniConfigError
+from unipipeline.modules.uni_config import UniConfig
 from unipipeline.modules.uni_cron_job import UniCronJob
 from unipipeline.modules.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.modules.uni_definition import UniDefinition
@@ -30,7 +36,6 @@ from unipipeline.waitings.uni_postgres_waiting import UniPostgresWaiting
 __all__ = (
     "Uni",
     "UniConfig",
-    "UniConfigError",
     "UniMediator",
     "UniDefinition",
     "UniModuleDefinition",

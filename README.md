@@ -349,7 +349,17 @@ optional arguments:
 ## Contributing
 
 ### TODO LIST
-[] Common Error Handling
-[] Ignoring The Basic Structure of MessageMeta
-[] Async by default
-[] Multi-threading start with run-groups
+1. [ ] Close/Exit uni by call method
+2. [ ] Async producer
+3. [ ] Common Error Handling
+4. [ ] Async get_answer
+5. [ ] Tcp Gateway
+6. [ ] Udp Gateway
+7. [ ] Http Gateway
+8. [ ] Server of Message layout
+9. [ ] Prometheus api
+10. [ ] req/res Sdk
+11. [ ] request tasks result registry
+12. [ ] Async consumer
+13. [ ] Async by default
+14. [ ] Multi-threading start with run-groups

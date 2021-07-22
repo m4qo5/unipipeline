@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from unipipeline.errors import UniPayloadError
+from unipipeline import UniPayloadError
 from unipipeline.modules.uni_util import UniUtil
 from unipipeline.modules.uni_broker import UniBroker, UniBrokerConsumer
 from unipipeline.modules.uni_config import UniConfig

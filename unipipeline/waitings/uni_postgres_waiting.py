@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 
-import psycopg2
+import psycopg2  # type: ignore
 
 from unipipeline import UniWaiting
 

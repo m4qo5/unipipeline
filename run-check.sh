@@ -16,9 +16,6 @@ CWD="$(pwd)"
 
 export PYTHONPATH=$CWD
 
-echo "PYTEST package"
-pytest ./unipipeline --strict-markers
-
 echo "MYPY package"
 mypy ./unipipeline
 
@@ -32,5 +29,8 @@ flake8 --max-line-length=120 --ignore=$FLAKE_IGNORE ./unipipeline
 
 echo "FLAKE example"
 flake8 --max-line-length=120 --ignore=$FLAKE_IGNORE ./example
+
+echo "PYTEST package"
+pytest ./unipipeline --strict-markers
 
 echo "EVERYTHING IS OK"

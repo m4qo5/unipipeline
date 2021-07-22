@@ -1,6 +1,6 @@
 from typing import Generic, Type, Any, TypeVar, Optional, Dict, Union, Tuple
 
-from unipipeline.errors import UniSendingToWorkerError
+from unipipeline.errors.uni_sending_to_worker_error import UniSendingToWorkerError
 from unipipeline.modules.uni_broker import UniBrokerMessageManager
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic
