@@ -349,17 +349,15 @@ optional arguments:
 ## Contributing
 
 ### TODO LIST
+0. [ ] RPC Gateways: http, tcp, udp
 1. [ ] Close/Exit uni by call method
 2. [ ] Async producer
 3. [ ] Common Error Handling
 4. [ ] Async get_answer
-5. [ ] Tcp Gateway
-6. [ ] Udp Gateway
-7. [ ] Http Gateway
-8. [ ] Server of Message layout
-9. [ ] Prometheus api
-10. [ ] req/res Sdk
-11. [ ] request tasks result registry
-12. [ ] Async consumer
-13. [ ] Async by default
-14. [ ] Multi-threading start with run-groups
+5. [ ] Server of Message layout
+6. [ ] Prometheus api
+7. [ ] req/res Sdk
+8. [ ] request tasks result registry
+9. [ ] Async consumer
+10. [ ] Async by default
+11. [ ] Multi-threading start with run-groups
