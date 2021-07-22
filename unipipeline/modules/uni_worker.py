@@ -1,10 +1,13 @@
-from typing import Generic, Type, Any, TypeVar, Optional, Dict, Union, Tuple
+from typing import Generic, Type, Any, TypeVar, Optional, Dict, Union, Tuple, TYPE_CHECKING
 
 from unipipeline.errors.uni_sending_to_worker_error import UniSendingToWorkerError
 from unipipeline.modules.uni_broker import UniBrokerMessageManager
 from unipipeline.modules.uni_message import UniMessage
 from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
+
+if TYPE_CHECKING:
+    from unipipeline.modules.uni_mediator import UniMediator
 
 TInputMessage = TypeVar('TInputMessage', bound=UniMessage)
 TOutputMessage = TypeVar('TOutputMessage', bound=Optional[UniMessage])
@@ -19,16 +22,14 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
     def __init__(
         self,
         definition: UniWorkerDefinition,
-        mediator: Any
+        mediator: 'UniMediator'
     ) -> None:
-        from unipipeline.modules.uni_mediator import UniMediator
-        self._uni_moved = False
         self._uni_consume_initialized = False
         self._uni_payload_cache: Optional[TInputMessage] = None
         self._uni_current_meta: Optional[UniMessageMeta] = None
         self._uni_current_manager: Optional[UniBrokerMessageManager] = None
         self._uni_definition = definition
-        self._uni_mediator: UniMediator = mediator
+        self._uni_mediator = mediator
         self._uni_worker_instances_for_sending: Dict[Type[UniWorker[Any, Any]], UniWorker[Any, Any]] = dict()
         self._uni_echo = self._uni_mediator.echo.mk_child(f'worker[{self._uni_definition.name}]')
         self._uni_input_message_type: Type[TInputMessage] = self._uni_mediator.get_message_type(self._uni_definition.input_message.name)  # type: ignore
@@ -45,21 +46,21 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
         return self._uni_output_message_type
 
     @property
-    def definition(self) -> UniWorkerDefinition:
+    def worker_definition(self) -> UniWorkerDefinition:
         return self._uni_definition
 
     @property
-    def meta(self) -> UniMessageMeta:
+    def message_meta(self) -> UniMessageMeta:
         assert self._uni_current_meta is not None
         return self._uni_current_meta
 
     @property
-    def manager(self) -> UniBrokerMessageManager:
+    def message_manager(self) -> UniBrokerMessageManager:
         assert self._uni_current_manager is not None
         return self._uni_current_manager
 
     @property
-    def payload(self) -> TInputMessage:
+    def message_payload(self) -> TInputMessage:
         return self._uni_payload_cache  # type: ignore
 
     def handle_message(self, message: TInputMessage) -> Optional[Union[TOutputMessage, Dict[str, Any]]]:
@@ -79,14 +80,17 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
         self._uni_echo_consumer.log_debug(f"message {meta.id} received :: {meta}")
         self._uni_reset_processing(meta, manager)
 
-        err_topic = UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR
+        err_topic: Optional[UniMessageMetaErrTopic] = UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR
         try:
-            self._uni_payload_cache = self._uni_input_message_type(**self.meta.payload)  # type: ignore
+            self._uni_payload_cache = self._uni_input_message_type(**self.message_meta.payload)  # type: ignore
             err_topic = UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR
             result = self.handle_message(self._uni_payload_cache)
-            self._uni_mediator.answer_to(self._uni_definition.name, meta, result, self.definition.answer_unwrapped)
+            self._uni_mediator.answer_to(self._uni_definition.name, meta, result, self.worker_definition.answer_unwrapped)
+            err_topic = None
         except Exception as e:
-            self._uni_move_to_error_topic(err_topic, e)
+            assert err_topic is not None
+            self._uni_mediator.move_to_error_topic(self._uni_definition, meta, err_topic, e)
+            manager.ack()
         # else:
         #     try:
         #         assert meta.error is not None  # for mypy needs
@@ -107,25 +111,13 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
         #     self._uni_echo_consumer.log_error(str(err))
         #     self.move_to_error_topic(UniMessageMetaErrTopic.SYSTEM_ERR, err)
 
-        if not self._uni_moved and self._uni_definition.ack_after_success:
+        if err_topic is None and self._uni_definition.ack_after_success:
             manager.ack()
 
         self._uni_echo_consumer.log_info(f"message {meta.id} processed")
         self._uni_reset_processing(None, None)
 
     def _uni_reset_processing(self, meta: Optional[UniMessageMeta], manager: Optional[UniBrokerMessageManager]) -> None:
-        self._uni_moved = False
         self._uni_current_meta = meta
         self._uni_current_manager = manager
         self._uni_payload_cache = None
-
-    def _uni_move_to_error_topic(self, err_topic: UniMessageMetaErrTopic, err: Exception) -> None:
-        self._uni_echo_consumer.log_error(str(err))
-        self._uni_moved = True
-        meta = self.meta.create_error_child(err_topic, err)
-        br = self._uni_mediator.get_broker(self._uni_definition.broker.name)
-        error_topic = self.definition.error_topic
-        if error_topic == UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR.value:
-            error_topic = self.definition.error_payload_topic
-        br.publish(error_topic, [meta])
-        self.manager.ack()

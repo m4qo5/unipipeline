@@ -34,6 +34,8 @@ class UniMessageMeta(BaseModel):
 
     unwrapped: bool
 
+    worker_creator: Optional[str]  # name of worker who created it
+
     class Config:
         extra = 'forbid'
 

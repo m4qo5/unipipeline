@@ -126,7 +126,7 @@ class UniConfig:
             required_keys: Set[str]
     ) -> Iterator[Tuple[str, Dict[str, Any], Dict[str, Any]]]:
         if not isinstance(definitions, dict):
-            raise UniConfigError(f'definition of {conf_name} has invalid type. must be dict')
+            raise UniConfigError(f'worker_definition of {conf_name} has invalid type. must be dict')
 
         common = definitions.get("__default__", dict())
 
@@ -141,7 +141,7 @@ class UniConfig:
                     raise ValueError(f"key '{name}' is not acceptable")
 
             if not isinstance(raw_definition, dict):
-                raise UniConfigError(f'definition of {conf_name}->{name} has invalid type. must be dict')
+                raise UniConfigError(f'worker_definition of {conf_name}->{name} has invalid type. must be dict')
 
             result_definition = dict(defaults)
             combined_definition = dict(common)
@@ -152,7 +152,7 @@ class UniConfig:
                     result_definition[k] = v
                     vd = defaults.get(k, None)
                     if vd is not None and type(vd) != type(v):
-                        raise UniConfigError(f'definition of {conf_name}->{name} has invalid key "{k}" type')
+                        raise UniConfigError(f'worker_definition of {conf_name}->{name} has invalid key "{k}" type')
                 elif k in required_keys:
                     result_definition[k] = v
                 else:
@@ -160,7 +160,7 @@ class UniConfig:
 
             for rk in required_keys:
                 if rk not in result_definition:
-                    raise UniConfigError(f'definition of {conf_name}->{name} has no required prop "{rk}"')
+                    raise UniConfigError(f'worker_definition of {conf_name}->{name} has no required prop "{rk}"')
 
             result_definition["name"] = name
             result_definition["id"] = uuid4()
@@ -342,7 +342,7 @@ class UniConfig:
         for name, definition, other_def in self._parse_definition("brokers", config["brokers"], defaults, {"import_template", }):
             ext = definition["external"]
             if ext is not None and ext not in external:
-                raise UniConfigError(f'definition brokers->{name} has invalid external: "{ext}"')
+                raise UniConfigError(f'worker_definition brokers->{name} has invalid external: "{ext}"')
 
             import_template = definition.pop('import_template')
             result[name] = UniBrokerDefinition(
@@ -437,28 +437,28 @@ class UniConfig:
 
             br = definition["broker"]
             if br not in brokers:
-                raise UniConfigError(f'definition workers->{name} has invalid broker: {br}')
+                raise UniConfigError(f'worker_definition workers->{name} has invalid broker: {br}')
             definition["broker"] = brokers[br]
 
             im = definition["input_message"]
             if im not in messages:
-                raise UniConfigError(f'definition workers->{name} has invalid input_message: {im}')
+                raise UniConfigError(f'worker_definition workers->{name} has invalid input_message: {im}')
             definition["input_message"] = messages[im]
 
             om = definition['answer_message']
             if om is not None:
                 if om not in messages:
-                    raise UniConfigError(f'definition workers->{name} has invalid answer_message: {om}')
+                    raise UniConfigError(f'worker_definition workers->{name} has invalid answer_message: {om}')
                 definition["answer_message"] = messages[om]
 
             ext = definition["external"]
             if ext is not None and ext not in external:
-                raise UniConfigError(f'definition workers->{name} has invalid external: "{ext}"')
+                raise UniConfigError(f'worker_definition workers->{name} has invalid external: "{ext}"')
 
             waitings_: Set[UniWaitingDefinition] = set()
             for w in definition.pop('waiting_for'):
                 if w not in waitings:
-                    raise UniConfigError(f'definition workers->{name} has invalid waiting_for: {w}')
+                    raise UniConfigError(f'worker_definition workers->{name} has invalid waiting_for: {w}')
                 waitings_.add(waitings[w])
 
             topic_template = definition.pop('topic')
@@ -468,7 +468,7 @@ class UniConfig:
 
             topic_templates = {topic_template, error_topic_template, error_payload_topic_template, answer_topic_template}
             if len(topic_templates) != 4:
-                raise UniConfigError(f'definition workers->{name} has duplicate topic templates: {", ".join(topic_templates)}')
+                raise UniConfigError(f'worker_definition workers->{name} has duplicate topic templates: {", ".join(topic_templates)}')
 
             template_data: Dict[str, Any] = {**definition, "service": service}
             topic = self._util.template.template(topic_template, **template_data)
@@ -491,6 +491,6 @@ class UniConfig:
 
         out_intersection_workers = set(result.keys()).intersection(out_workers)
         if len(out_intersection_workers) != len(out_workers):
-            raise UniConfigError(f'workers definition has invalid worker_names (in output_workers prop): {", ".join(out_intersection_workers)}')
+            raise UniConfigError(f'workers worker_definition has invalid worker_names (in output_workers prop): {", ".join(out_intersection_workers)}')
 
         return result

@@ -11,7 +11,7 @@ from unipipeline.modules.uni_config import UniConfig
 from unipipeline.modules.uni_cron_job import UniCronJob
 from unipipeline.modules.uni_echo import UniEcho
 from unipipeline.modules.uni_message import UniMessage
-from unipipeline.modules.uni_message_meta import UniMessageMeta
+from unipipeline.modules.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic
 from unipipeline.modules.uni_worker import UniWorker
 from unipipeline.modules.uni_worker_definition import UniWorkerDefinition
 from unipipeline.utils.sig import soft_interruption
@@ -67,6 +67,15 @@ class UniMediator:
         if name not in self._broker_instance_indexes:
             self._broker_instance_indexes[name] = self.get_broker(name, singleton=False)
         return self._broker_instance_indexes[name]
+
+    def move_to_error_topic(self, wd: UniWorkerDefinition, meta: UniMessageMeta, err_topic: UniMessageMetaErrTopic, err: Exception) -> None:
+        self._echo.log_error(str(err))
+        meta = meta.create_error_child(err_topic, err)
+        br = self.get_broker(wd.broker.name)
+        error_topic = wd.error_topic
+        if error_topic == UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR.value:
+            error_topic = wd.error_payload_topic
+        br.publish(error_topic, [meta])
 
     def add_worker_to_consume_list(self, name: str) -> None:
         wd = self._config.workers[name]
@@ -189,7 +198,7 @@ class UniMediator:
             ))
 
             self.echo.log_info(f'consumer {wn} initialized')
-            brokers.add(w.definition.broker.name)
+            brokers.add(wd.broker.name)
 
         with soft_interruption(self._handle_interruption, self._handle_force_interruption, self._interruption_err):
             for bn in brokers:
