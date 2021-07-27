@@ -88,6 +88,7 @@ workers:
 rpc_http:
   some_name_of_rpc_group:
     port: 3000
+    answer_delay_s: 3
     /api/v1/some:
       worker: worker_name
 
@@ -95,8 +96,10 @@ rpc_tcp:
   some_name_tcp_rpc:
     port: 13000
     worker: worker_name
+    answer_delay_s: 3
 
 rpc_udp:
   some_name_udp_rpc:
     port: 14000
     worker: worker_name
+    answer_delay_s: 3

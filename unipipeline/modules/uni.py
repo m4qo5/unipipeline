@@ -1,3 +1,4 @@
+import asyncio
 from typing import Dict, Any, Union, Optional
 
 from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
@@ -16,7 +17,10 @@ def camel_case(snake_cased: str) -> str:
 
 
 class Uni:
-    def __init__(self, config: Union[UniConfig, str], echo_level: Optional[Union[str, int]] = None) -> None:
+    def __init__(self, config: Union[UniConfig, str], echo_level: Optional[Union[str, int]] = None, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+        if loop is None:
+            loop = asyncio.get_event_loop()
+        self._loop = loop
         self._util = UniUtil()
         self._util.template.set_filter('camel', camel_case)
 
@@ -26,7 +30,7 @@ class Uni:
             config = UniConfig(self._util, self._echo, config)
         if not isinstance(config, UniConfig):
             raise ValueError(f'invalid config type. {type(config).__name__} was given')
-        self._mediator = UniMediator(self._util, self._echo, config)
+        self._mediator = UniMediator(self._util, self._echo, config, loop)
 
     @property
     def echo(self) -> UniEcho:
@@ -98,7 +102,7 @@ class Uni:
         if everything:
             for wn in self._mediator.config.workers.keys():
                 self._mediator.add_worker_to_init_list(wn, no_related=True)
-        self._mediator.initialize(create=True)
+        self._loop.run_until_complete(self._mediator.initialize(create=True))
 
     def init_cron(self) -> None:
         for task in self._mediator.config.cron_tasks.values():
@@ -111,15 +115,18 @@ class Uni:
         self._mediator.add_worker_to_init_list(name, no_related=False)
         self._mediator.add_worker_to_consume_list(name)
 
-    def send_to(self, name: str, data: Union[Dict[str, Any], UniMessage], alone: bool = False) -> None:
+    async def _send_to(self, name: str, data: Union[Dict[str, Any], UniMessage], alone: bool) -> None:
         try:
-            self._mediator.send_to(name, data, alone=alone)
+            await self._mediator.send_to(name, data, alone=alone)
         except UniPayloadSerializationError as e:
             self.echo.exit_with_error(f'invalid props in message: {e}')
 
+    def send_to(self, name: str, data: Union[Dict[str, Any], UniMessage], alone: bool = False) -> None:
+        return self._loop.run_until_complete(self._send_to(name, data, alone))
+
     def start_consuming(self) -> None:
         try:
-            self._mediator.start_consuming()
+            self._loop.run_until_complete(self._mediator.start_consuming())
         except KeyboardInterrupt:
             self.echo.log_warning('interrupted')
             exit(0)

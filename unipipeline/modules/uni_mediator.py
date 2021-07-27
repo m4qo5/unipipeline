@@ -1,3 +1,4 @@
+import asyncio
 from time import sleep
 from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List, NamedTuple, Callable
 from uuid import uuid4
@@ -26,10 +27,11 @@ class UniBrokerInitRecipe(NamedTuple):
 
 
 class UniMediator:
-    def __init__(self, util: UniUtil, echo: UniEcho, config: UniConfig) -> None:
+    def __init__(self, util: UniUtil, echo: UniEcho, config: UniConfig, loop: asyncio.AbstractEventLoop) -> None:
         self._config = config
         self._echo = echo
         self._util = util
+        self._loop = loop
 
         self._worker_definition_by_type: Dict[Any, UniWorkerDefinition] = dict()
         self._worker_instance_indexes: Dict[str, UniWorkerConsumer[Any, Any]] = dict()
@@ -63,20 +65,20 @@ class UniMediator:
         if not singleton:
             broker_def = self.config.brokers[name]
             broker_type = broker_def.type.import_class(UniBroker, self.echo, util=self._util)
-            br = broker_type(mediator=self, definition=broker_def)
+            br = broker_type(mediator=self, definition=broker_def, loop=self._loop)
             return br
         if name not in self._broker_instance_indexes:
             self._broker_instance_indexes[name] = self.get_broker(name, singleton=False)
         return self._broker_instance_indexes[name]
 
-    def move_to_error_topic(self, wd: UniWorkerDefinition, meta: UniMessageMeta, err_topic: UniMessageMetaErrTopic, err: Exception) -> None:
+    async def move_to_error_topic(self, wd: UniWorkerDefinition, meta: UniMessageMeta, err_topic: UniMessageMetaErrTopic, err: Exception) -> None:
         self._echo.log_error(str(err))
         meta = meta.create_error_child(err_topic, err)
         br = self.get_broker(wd.broker.name)
         error_topic = wd.error_topic
         if error_topic == UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR.value:
             error_topic = wd.error_payload_topic
-        br.publish(error_topic, [meta])
+        await br.publish(error_topic, [meta])
 
     def add_worker_to_consume_list(self, name: str) -> None:
         wd = self._config.workers[name]
@@ -93,7 +95,7 @@ class UniMediator:
 
         return self._message_types[name]
 
-    def answer_to(self, worker_name: str, req_meta: UniMessageMeta, payload: Optional[Union[Dict[str, Any], UniMessageMeta, UniMessage]], unwrapped: bool) -> None:
+    async def answer_to(self, worker_name: str, req_meta: UniMessageMeta, payload: Optional[Union[Dict[str, Any], UniMessageMeta, UniMessage]], unwrapped: bool) -> None:
         wd = self._config.workers[worker_name]
         if not wd.need_answer:
             if payload is not None:
@@ -125,10 +127,10 @@ class UniMediator:
         b = self.get_broker(wd.broker.name)
 
         assert req_meta.answer_params is not None
-        b.publish_answer(req_meta.answer_params, answ_meta)
+        await b.publish_answer(req_meta.answer_params, answ_meta)
         self.echo.log_info(f'worker {worker_name} answers to {req_meta.answer_params.topic}->{req_meta.answer_params.id} :: {answ_meta}')
 
-    def send_to(
+    async def send_to(
         self,
         worker_name: str,
         payload: Union[Dict[str, Any], UniMessage],
@@ -155,7 +157,7 @@ class UniMediator:
         br = self.get_broker(wd.broker.name)
 
         if alone:
-            size = br.get_topic_approximate_messages_count(wd.topic)
+            size = await br.get_topic_approximate_messages_count(wd.topic)
             if size != 0:
                 self.echo.log_info(f'sending to worker "{wd.name}" was skipped, because topic {wd.topic} has messages: {size}>0')
                 return None
@@ -166,18 +168,18 @@ class UniMediator:
             meta = UniMessageMeta.create_new(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
 
         meta_list = [meta]
-        br.publish(wd.topic, meta_list)  # TODO: make it list by default
+        await br.publish(wd.topic, meta_list)  # TODO: make it list by default
         self.echo.log_info(f"worker {wd.name} sent message to topic '{wd.topic}':: {meta_list}")
 
         if meta.need_answer and wd.need_answer:
             assert wd.answer_message is not None
             assert answer_params is not None
-            answ_meta = br.get_answer(answer_params, max_delay_s=wd.answer_avg_delay_s * 3, unwrapped=wd.answer_unwrapped)
+            answ_meta = await br.get_answer(answer_params, max_delay_s=wd.answer_avg_delay_s * 3, unwrapped=wd.answer_unwrapped)
             answ_message_type = self.get_message_type(wd.answer_message.name)
             return UniAnswerMessage(answ_meta, answ_message_type)
         return None
 
-    def start_cron(self) -> None:
+    async def start_cron(self) -> None:
         cron_jobs = UniCronJob.mk_jobs_list(self.config.cron_tasks.values(), self)
         self.echo.log_debug(f'cron jobs defined: {", ".join(cj.task.name for cj in cron_jobs)}')
         while True:
@@ -192,7 +194,7 @@ class UniMediator:
                 cj.send()
             sleep(1.1)  # delay for correct next iteration
 
-    def start_consuming(self) -> None:
+    async def start_consuming(self) -> None:
         brokers = set()
         for wn in self._consumers_list:
             wd = self._config.workers[wn]
@@ -212,25 +214,25 @@ class UniMediator:
             self.echo.log_info(f'consumer {wn} initialized')
             brokers.add(wd.broker.name)
 
-        with soft_interruption(self._handle_interruption, self._handle_force_interruption, self._interruption_err):
+        async with soft_interruption(self._handle_interruption, self._handle_force_interruption, self._interruption_err):
             for bn in brokers:
                 b = self.get_broker(bn)
                 self._brokers_with_active_consumption.append(b)
                 self.echo.log_info(f'broker {bn} consuming start')
-                b.start_consuming()
+                await b.start_consuming()
 
-    def _interruption_err(self, err: Exception) -> None:
+    async def _interruption_err(self, err: Exception) -> None:
         self.echo.log_error(str(err))
         raise err
 
-    def _handle_force_interruption(self) -> None:
+    async def _handle_force_interruption(self) -> None:
         self.echo.log_warning('force interruption detected')
 
-    def _handle_interruption(self) -> None:
+    async def _handle_interruption(self) -> None:
         self.echo.log_warning('interruption detected')
         for b in self._brokers_with_active_consumption:
             self.echo.log_debug(f'broker "{b.definition.name}" was notified about interruption')
-            b.stop_consuming()
+            await b.stop_consuming()
         self._brokers_with_active_consumption = list()
         self.echo.log_info('all brokers was notified about interruption')
 
@@ -354,7 +356,7 @@ class UniMediator:
         else:
             self._brokers_with_topics_to_init[name].topics.add(topic)
 
-    def initialize(self, create: bool = True) -> None:
+    async def initialize(self, create: bool = True) -> None:
         echo = self.echo.mk_child('initialize')
         for wn in self._worker_init_list:
             echo.log_info(f'worker "{wn}"', )
@@ -375,9 +377,9 @@ class UniMediator:
                     echo.log_debug(f'broker "{bn}" skipped because it external')
                     continue
 
-                b = self.wait_for_broker_connection(bn)
+                b = await self.wait_for_broker_connection(bn)
 
-                b.initialize(collection.topics, collection.answer_topics)
+                await b.initialize(collection.topics, collection.answer_topics)
                 echo.log_info(f'broker "{b.definition.name}" topics :: {collection.topics}')
                 if len(collection.answer_topics) > 0:
                     echo.log_info(f'broker "{b.definition.name}" answer topics :: {collection.answer_topics}')
@@ -408,11 +410,11 @@ class UniMediator:
     def config(self) -> UniConfig:
         return self._config
 
-    def wait_for_broker_connection(self, name: str) -> UniBroker[Any]:
+    async def wait_for_broker_connection(self, name: str) -> UniBroker[Any]:
         br = self.get_broker(name)
         for try_count in range(br.definition.retry_max_count):
             try:
-                br.connect()
+                await br.connect()
                 self.echo.log_info(f'wait_for_broker_connection :: broker {br.definition.name} connected')
                 return br
             except ConnectionError as e:

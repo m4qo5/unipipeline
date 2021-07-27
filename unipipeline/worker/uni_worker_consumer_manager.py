@@ -1,4 +1,4 @@
-from typing import Callable, Union, Type, Any, Optional, Dict, TYPE_CHECKING, TypeVar
+from typing import Callable, Union, Type, Any, Optional, Dict, TYPE_CHECKING, TypeVar, Awaitable
 from uuid import uuid4, UUID
 
 from unipipeline.answer.uni_answer_message import UniAnswerMessage
@@ -13,7 +13,7 @@ TAnswMessage = TypeVar('TAnswMessage', bound=UniMessage)
 
 
 class UniWorkerConsumerManager:
-    def __init__(self, send: Callable[[Union[Type['UniWorker[Any, Any]'], str], Union[Dict[str, Any], UniMessage], bool, bool], Optional[UniAnswerMessage[UniMessage]]]) -> None:
+    def __init__(self, send: Callable[[Union[Type['UniWorker[Any, Any]'], str], Union[Dict[str, Any], UniMessage], bool, bool], Awaitable[Optional[UniAnswerMessage[UniMessage]]]]) -> None:
         self._send = send
         self._id = uuid4()
 
