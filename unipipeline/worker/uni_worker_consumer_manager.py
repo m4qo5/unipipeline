@@ -21,14 +21,14 @@ class UniWorkerConsumerManager:
     def id(self) -> UUID:
         return self._id
 
-    def stop_consuming(self) -> None:
+    async def stop_consuming(self) -> None:
         pass  # TODO
 
-    def exit(self) -> None:
+    async def exit(self) -> None:
         pass  # TODO
 
-    def get_answer_from(self, worker: Union[Type['UniWorker[TInputMessage, TAnswMessage]'], str], data: Union[Dict[str, Any], TInputMessage]) -> UniAnswerMessage[TAnswMessage]:
-        return self._send(worker, data, False, True)  # type: ignore
+    async def get_answer_from(self, worker: Union[Type['UniWorker[TInputMessage, TAnswMessage]'], str], data: Union[Dict[str, Any], TInputMessage]) -> UniAnswerMessage[TAnswMessage]:
+        return await self._send(worker, data, False, True)  # type: ignore
 
-    def send_to(self, worker: Union[Type['UniWorker[Any, Any]'], str], data: Union[Dict[str, Any], UniMessage], alone: bool = False) -> None:
-        self._send(worker, data, alone, False)
+    async def send_to(self, worker: Union[Type['UniWorker[Any, Any]'], str], data: Union[Dict[str, Any], UniMessage], alone: bool = False) -> None:
+        await self._send(worker, data, alone, False)

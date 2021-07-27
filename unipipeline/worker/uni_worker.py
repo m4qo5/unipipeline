@@ -16,5 +16,5 @@ class UniWorker(Generic[TInputMessage, TOutputMessage]):
     def manager(self) -> UniWorkerConsumerManager:
         return self._uni_manager
 
-    def handle_message(self, msg: UniWorkerConsumerMessage[TInputMessage]) -> Optional[Union[TOutputMessage, Dict[str, Any]]]:
+    async def handle_message(self, msg: UniWorkerConsumerMessage[TInputMessage]) -> Optional[Union[TOutputMessage, Dict[str, Any]]]:
         raise NotImplementedError(f'method handle_message not implemented for {type(self).__name__}')

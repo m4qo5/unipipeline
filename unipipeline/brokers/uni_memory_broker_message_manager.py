@@ -11,8 +11,8 @@ class UniMemoryBrokerMessageManager(UniBrokerMessageManager):
         self._msg_id = msg_id
         self._ql = ql
 
-    def reject(self) -> None:
+    async def reject(self) -> None:
         self._ql.move_back_from_reserved(self._msg_id)
 
-    def ack(self) -> None:
+    async def ack(self) -> None:
         self._ql.mark_as_processed(self._msg_id)

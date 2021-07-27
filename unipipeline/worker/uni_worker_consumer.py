@@ -50,20 +50,20 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
         msg = UniWorkerConsumerMessage[TInputMsgPayload](self._input_message_type, manager, meta)
 
         try:
-            result: Optional[Union[TAnswerMsgPayload, Dict[str, Any]]] = self._worker.handle_message(msg)
+            result: Optional[Union[TAnswerMsgPayload, Dict[str, Any]]] = await self._worker.handle_message(msg)
         except UniAnswerPayloadParsingError as e:
-            self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
+            await self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
         except UniPayloadParsingError as e:
-            self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR, e)
+            await self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR, e)
         except Exception as e:
-            self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
+            await self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
         else:
             if self._definition.need_answer:
                 try:
-                    self._mediator.answer_to(self._definition.name, meta, result, self._definition.answer_unwrapped)
+                    await self._mediator.answer_to(self._definition.name, meta, result, self._definition.answer_unwrapped)
                 except UniSendingToWorkerError:
                     pass
 
         if self._definition.ack_after_success:
-            msg.ack()
+            await msg.ack()
         self._current_meta = None

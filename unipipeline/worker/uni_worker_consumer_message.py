@@ -19,14 +19,14 @@ class UniWorkerConsumerMessage(Generic[TInputMsgPayload]):
         self._message_payload_cache: Optional[TInputMsgPayload] = None
         self._acknowledged_or_rejected = False
 
-    def ack(self) -> None:
+    async def ack(self) -> None:
         if not self._acknowledged_or_rejected:
-            self._message_manager.ack()
+            await self._message_manager.ack()
             self._acknowledged_or_rejected = True
 
-    def reject(self) -> None:
+    async def reject(self) -> None:
         if not self._acknowledged_or_rejected:
-            self._message_manager.reject()
+            await self._message_manager.reject()
             self._acknowledged_or_rejected = True
 
     @property

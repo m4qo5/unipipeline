@@ -127,6 +127,7 @@ class Uni:
     def start_consuming(self) -> None:
         try:
             self._loop.run_until_complete(self._mediator.start_consuming())
+            self._loop.run_forever()
         except KeyboardInterrupt:
             self.echo.log_warning('interrupted')
             exit(0)

@@ -169,7 +169,7 @@ class UniMediator:
 
         meta_list = [meta]
         await br.publish(wd.topic, meta_list)  # TODO: make it list by default
-        self.echo.log_info(f"worker {wd.name} sent message to topic '{wd.topic}':: {meta_list}")
+        self.echo.log_info(f"sent message to topic '{wd.topic}':: {meta_list}")
 
         if meta.need_answer and wd.need_answer:
             assert wd.answer_message is not None

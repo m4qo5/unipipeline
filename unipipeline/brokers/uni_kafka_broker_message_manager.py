@@ -6,13 +6,9 @@ from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManag
 class UniKafkaBrokerMessageManager(UniBrokerMessageManager):
     def __init__(self, commit: Callable[[], None]) -> None:
         self._commit = commit
-        self._acknowledged = False
 
-    def reject(self) -> None:
+    async def reject(self) -> None:
         pass
 
-    def ack(self) -> None:
-        if self._acknowledged:
-            return
-        self._acknowledged = True
+    async def ack(self) -> None:
         self._commit()
