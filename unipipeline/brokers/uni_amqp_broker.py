@@ -1,5 +1,6 @@
 import asyncio
 import time
+from asyncio import Future
 from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING, Awaitable, Dict, Any, Tuple
 
 from aio_pika import connect_robust, IncomingMessage, Channel, Queue, Exchange, Message, DeliveryMode, Connection
@@ -114,7 +115,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 name=topic,
                 durable=self.config.durable,
                 auto_delete=self.config.auto_delete,
-                passive=False,
+                passive=True,
             )
 
             await q.bind(exchange=self.config.exchange_name, routing_key=topic)
@@ -123,8 +124,6 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
         await self._end_consuming()
 
     async def _end_consuming(self) -> None:
-        if not self._consuming_started:
-            return
         self._interrupted = True
         if not self._in_processing:
             # ch = await self._get_channel()
@@ -159,10 +158,9 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
         self.echo.log_info('connected')
 
     async def close(self) -> None:
-        if self._channel is not None and not self._channel.is_closed:
-            self._channel.close()
         if self._connection is not None and not self._connection.is_closed:
-            self._connection.close()
+            print('connection closed')
+            await self._connection.close()
         self._connection = None
         self._channel = None
 
@@ -170,7 +168,8 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
         await self.connect()
         if new:
             assert self._connection is not None
-            return await self._connection.channel()
+            ch: Channel = await self._connection.channel()
+            return ch
         assert self._channel is not None
         return self._channel
 
@@ -205,13 +204,15 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
 
             async def consumer_wrapper(im: IncomingMessage) -> None:
                 self._in_processing = True
-                async with im.process(requeue=True):
+                print('>>>', 111)
+                async with im.process(requeue=True, ignore_processed=True):
                     meta = await self.parse_message_body(im.body, im.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None), im.content_type, c.unwrapped)
                     manager = UniAmqpBrokerMessageManager(im)
                     await c.message_handler(meta, manager)
                 self._in_processing = False
                 if self._interrupted:
                     await self._end_consuming()
+                print('>>>', 222, self._in_processing, self._interrupted)
 
             f = q.consume(consumer_wrapper, consumer_tag=c.id)
             consume_futures.append(f)
@@ -242,7 +243,13 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
 
         ch = await self._get_channel(True)
 
-        q = await ch.declare_queue(name=answ_topic, durable=False, auto_delete=True, passive=False)
+        q = await ch.declare_queue(
+            name=answ_topic,
+            durable=False,
+            exclusive=True,
+            # auto_delete=True,
+            passive=False,
+        )
 
         await q.bind(exchange=exchange, routing_key=answ_topic)
 
@@ -255,7 +262,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             await asyncio.sleep(1)
             continue
 
-        async with im.process():
+        async with im.process(requeue=True, ignore_processed=True):
             self.echo.log_debug(f'took answer from {exchange}->{answ_topic}')
             return await self.parse_message_body(
                 im.body,

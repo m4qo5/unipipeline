@@ -1,10 +1,10 @@
 import signal
 from types import FrameType
-from typing import Callable, Tuple, Any, Optional, Union, Awaitable
+from typing import Callable, Tuple, Any, Optional, Union
 
 
 class soft_interruption:
-    def __init__(self, on_interrupt_once: Callable[[], Awaitable[None]], on_force_interruption: Optional[Callable[[], Awaitable[None]]] = None, on_error: Optional[Callable[[Exception], Awaitable[None]]] = None) -> None:
+    def __init__(self, on_interrupt_once: Callable[[], None], on_force_interruption: Optional[Callable[[], None]] = None, on_error: Optional[Callable[[Exception], None]] = None) -> None:
         self._on_interrupt_once = on_interrupt_once
         self._on_force_interruption = on_force_interruption
         self._sig_int_received = False
@@ -54,10 +54,10 @@ class soft_interruption:
             else:
                 print(e)
 
-    async def __aenter__(self) -> None:
+    def __aenter__(self) -> None:
         self._old_sig_int = signal.signal(signal.SIGINT, self._interruption_handler)
         self._old_sig_term = signal.signal(signal.SIGTERM, self._term_handler)
         return None
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self._the_end(False)

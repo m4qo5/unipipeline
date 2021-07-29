@@ -1,4 +1,7 @@
 import asyncio
+import signal
+from asyncio import Future
+from time import time, sleep
 from typing import Dict, Any, Union, Optional
 
 from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
@@ -31,6 +34,8 @@ class Uni:
         if not isinstance(config, UniConfig):
             raise ValueError(f'invalid config type. {type(config).__name__} was given')
         self._mediator = UniMediator(self._util, self._echo, config, loop)
+
+        self._interrupted = False
 
     @property
     def echo(self) -> UniEcho:
@@ -124,10 +129,51 @@ class Uni:
     def send_to(self, name: str, data: Union[Dict[str, Any], UniMessage], alone: bool = False) -> None:
         return self._loop.run_until_complete(self._send_to(name, data, alone))
 
+    def _sync_interrupt(self, future: Future) -> None:
+        future.set_result('interrupt')
+        pass
+
+    async def _async_interrupt(self, f) -> None:
+        print('>>>', f)
+        pass
+
     def start_consuming(self) -> None:
         try:
             self._loop.run_until_complete(self._mediator.start_consuming())
+
+            interrupted = []
+
+            future = self._loop.create_future()
+            future.add_done_callback(self._async_interrupt)
+
+            self._loop.add_signal_handler(signal.SIGINT, self._sync_interrupt, future)
+
+            future = asyncio.wait([future], return_when=asyncio.)
+
+            done, pending = self._loop.run_until_complete(future)
+
+            if interrupted:
+                # Do whatever cleanup you want here and/or get the stacktrace
+                # of the interrupted main task.
+                sig = done.pop().result()
+                task = pending.pop()
+                msg = get_message(sig, task)
+
+                task.cancel()
+                raise KeyboardInterrupt(msg)
+
             self._loop.run_forever()
         except KeyboardInterrupt:
             self.echo.log_warning('interrupted')
-            exit(0)
+            self._loop.run_until_complete(self._mediator.interrupt())
+        except Exception as e:
+            self.echo.log_error(str(e))
+            self._loop.run_until_complete(self._mediator.interrupt())
+        else:
+            self._loop.run_until_complete(self._mediator.interrupt())
+        finally:
+            try:
+                self._loop.run_until_complete(self._loop.shutdown_asyncgens())
+            finally:
+                self._loop.close()
+        self.echo.log_warning('done')

@@ -1,5 +1,6 @@
 import asyncio
-from time import sleep
+import signal
+from time import sleep, time
 from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List, NamedTuple, Callable
 from uuid import uuid4
 
@@ -196,14 +197,16 @@ class UniMediator:
 
     async def start_consuming(self) -> None:
         brokers = set()
+        bf = list()
         for wn in self._consumers_list:
             wd = self._config.workers[wn]
             wc = self.get_worker_consumer(wn)
+            bn = wd.broker.name
 
-            br = self.get_broker(wd.broker.name)
+            b = self.get_broker(bn)
 
             self.echo.log_info(f"worker {wn} start consuming")
-            br.add_consumer(UniBrokerConsumer(
+            b.add_consumer(UniBrokerConsumer(
                 topic=wd.topic,
                 id=f'{wn}__{uuid4()}',
                 group_id=wn,
@@ -212,27 +215,22 @@ class UniMediator:
             ))
 
             self.echo.log_info(f'consumer {wn} initialized')
-            brokers.add(wd.broker.name)
+            if bn in brokers:
+                continue
+            brokers.add(bn)
 
-        async with soft_interruption(self._handle_interruption, self._handle_force_interruption, self._interruption_err):
-            for bn in brokers:
-                b = self.get_broker(bn)
-                self._brokers_with_active_consumption.append(b)
-                self.echo.log_info(f'broker {bn} consuming start')
-                await b.start_consuming()
+            self._brokers_with_active_consumption.append(b)
+            self.echo.log_info(f'broker {bn} consuming start')
+            bf.append(b.start_consuming())
 
-    async def _interruption_err(self, err: Exception) -> None:
-        self.echo.log_error(str(err))
-        raise err
+        await asyncio.gather(*bf)
 
-    async def _handle_force_interruption(self) -> None:
-        self.echo.log_warning('force interruption detected')
-
-    async def _handle_interruption(self) -> None:
-        self.echo.log_warning('interruption detected')
+    async def interrupt(self) -> None:
+        bf = list()
         for b in self._brokers_with_active_consumption:
+            bf.append(b.stop_consuming())
             self.echo.log_debug(f'broker "{b.definition.name}" was notified about interruption')
-            await b.stop_consuming()
+        await asyncio.gather(*bf)
         self._brokers_with_active_consumption = list()
         self.echo.log_info('all brokers was notified about interruption')
 
