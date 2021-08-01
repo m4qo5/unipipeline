@@ -54,10 +54,10 @@ class soft_interruption:
             else:
                 print(e)
 
-    def __enter__(self) -> None:
+    def __aenter__(self) -> None:
         self._old_sig_int = signal.signal(signal.SIGINT, self._interruption_handler)
         self._old_sig_term = signal.signal(signal.SIGTERM, self._term_handler)
         return None
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self._the_end(False)

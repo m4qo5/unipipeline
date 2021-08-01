@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from logging import Logger
@@ -14,35 +15,35 @@ if TYPE_CHECKING:
 
 
 class UniLogBroker(UniBroker[UniDynamicDefinition]):
-    def start_consuming(self) -> None:
+    async def start_consuming(self) -> None:
         self._logger.info(f'{self._logging_prefix} start consuming')
 
-    def get_topic_approximate_messages_count(self, topic: str) -> int:
+    async def get_topic_approximate_messages_count(self, topic: str) -> int:
         return 0
 
-    def initialize(self, topics: Set[str], answer_topic: Set[str]) -> None:
+    async def initialize(self, topics: Set[str], answer_topic: Set[str]) -> None:
         self._logger.info(f'{self._logging_prefix} initialized')
 
     def mk_logger(self) -> Logger:
         return logging.getLogger(__name__)
 
-    def mk_log_prefix(self) -> str:
+    async def mk_log_prefix(self) -> str:
         return f'{type(self).__name__} {self._uni_definition.name}::{uuid4()} :'
 
-    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition) -> None:
-        super().__init__(mediator, definition)
+    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition, loop: asyncio.AbstractEventLoop) -> None:
+        super().__init__(mediator, definition, loop)
         self._logger = self.mk_logger()
         self._logging_prefix = self.mk_log_prefix()
 
-    def connect(self) -> None:
+    async def connect(self) -> None:
         self._logger.info(f'{self._logging_prefix} connect')
 
-    def close(self) -> None:
+    async def close(self) -> None:
         self._logger.info(f'{self._logging_prefix} close')
 
     def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         self._logger.info(f'{self._logging_prefix} add consumer "{consumer.id}" to topic "{consumer.topic}" :: {consumer.group_id}')
 
-    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
+    async def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
         for meta in meta_list:
             self._logger.info(f'{self._logging_prefix} publish {json.dumps(meta.dict())}')

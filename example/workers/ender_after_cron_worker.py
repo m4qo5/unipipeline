@@ -4,7 +4,7 @@ from unipipeline import UniWorker, UniWorkerConsumerMessage
 
 
 class EnderAfterCronWorker(UniWorker[EnderAfterCronInputMessage, EnderAfterCronAnswerMessage]):
-    def handle_message(self, msg: UniWorkerConsumerMessage[EnderAfterCronInputMessage]) -> EnderAfterCronAnswerMessage:
+    async def handle_message(self, msg: UniWorkerConsumerMessage[EnderAfterCronInputMessage]) -> EnderAfterCronAnswerMessage:
         return EnderAfterCronAnswerMessage(
             value=f'after_cron => {msg.payload.value}'
         )

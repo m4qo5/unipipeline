@@ -1,12 +1,12 @@
 from collections import deque
-from typing import Callable, Deque, Tuple, Optional, Dict
+from typing import Callable, Deque, Tuple, Optional, Dict, Awaitable
 
 from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta
 from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.brokers.uni_memory_broker_message_manager import UniMemoryBrokerMessageManager
 
-TConsumer = Callable[[UniMessageMeta, UniBrokerMessageManager], None]
+TConsumer = Callable[[UniMessageMeta, UniBrokerMessageManager], Awaitable[None]]
 
 
 class UniMemoryBrokerQueue:

@@ -28,12 +28,13 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
         self._worker = worker_type(self._worker_manager)
         self._uni_echo = mediator.echo.mk_child(f'worker[{definition.name}]')
 
-        self._input_message_type: Type[TInputMsgPayload] = mediator.get_message_type(self._definition.input_message.name)  # type: ignore
-        self._answer_message_type: Optional[Type[TAnswerMsgPayload]] = mediator.get_message_type(self._definition.answer_message.name) if self._definition.answer_message is not None else None  # type: ignore
+        self._input_message_type: Type[TInputMsgPayload] = mediator.config.get_message_type(self._definition.input_message.name)  # type: ignore
+        self._answer_message_type: Optional[Type[TAnswerMsgPayload]] = mediator.config.get_message_type(self._definition.answer_message.name) if self._definition.answer_message is not None else None  # type: ignore
 
         self._current_meta: Optional[UniMessageMeta] = None
+        self._uni_echo.log_info(f'initialized worker "{definition.name}"')
 
-    def send_to(self, worker: Union[Type['UniWorker[Any, Any]'], str], data: Union[Dict[str, Any], UniMessage], alone: bool = False, need_answer: bool = False) -> Optional[UniAnswerMessage[UniMessage]]:
+    async def send_to(self, worker: Union[Type['UniWorker[Any, Any]'], str], data: Union[Dict[str, Any], UniMessage], alone: bool = False, need_answer: bool = False) -> Optional[UniAnswerMessage[UniMessage]]:
         wd = self._mediator.config.get_worker_definition(worker)
         if wd.name not in self._definition.output_workers:
             raise UniSendingToWorkerError(f'worker {wd.name} is not defined in workers->{self._definition.name}->output_workers')
@@ -41,29 +42,29 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
             raise UniWorkFlowError(f'you will get no response form worker {wd.name}')
         if need_answer:
             answ_params = UniAnswerParams(topic=self._definition.answer_topic, id=self._worker_manager.id)
-            return self._mediator.send_to(wd.name, data, self._current_meta, answer_params=answ_params, alone=alone)
-        self._mediator.send_to(wd.name, data, self._current_meta, answer_params=None, alone=alone)
+            return await self._mediator.send_to(wd.name, data, self._current_meta, answer_params=answ_params, alone=alone)
+        await self._mediator.send_to(wd.name, data, self._current_meta, answer_params=None, alone=alone)
         return None
 
-    def process_message(self, meta: UniMessageMeta, manager: UniBrokerMessageManager) -> None:
+    async def process_message(self, meta: UniMessageMeta, manager: UniBrokerMessageManager) -> None:
         self._current_meta = meta
         msg = UniWorkerConsumerMessage[TInputMsgPayload](self._input_message_type, manager, meta)
 
         try:
-            result: Optional[Union[TAnswerMsgPayload, Dict[str, Any]]] = self._worker.handle_message(msg)
+            result: Optional[Union[TAnswerMsgPayload, Dict[str, Any]]] = await self._worker.handle_message(msg)
         except UniAnswerPayloadParsingError as e:
-            self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
+            await self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
         except UniPayloadParsingError as e:
-            self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR, e)
+            await self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR, e)
         except Exception as e:
-            self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
+            await self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
         else:
             if self._definition.need_answer:
                 try:
-                    self._mediator.answer_to(self._definition.name, meta, result, self._definition.answer_unwrapped)
+                    await self._mediator.answer_to(self._definition.name, meta, result, self._definition.answer_unwrapped)
                 except UniSendingToWorkerError:
                     pass
 
         if self._definition.ack_after_success:
-            msg.ack()
+            await msg.ack()
         self._current_meta = None

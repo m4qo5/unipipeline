@@ -138,7 +138,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
                     echo.log_debug(f'file {pi} was created')
 
             with open(path, 'wt') as fm:
-                print(class_type.__name__, create_template_params.input_message)
+                # print(class_type.__name__, create_template_params.input_message)
                 fm.writelines(util.template.template(tpl_map[class_type.__name__], data=create_template_params, name=self.object_name))
                 echo.log_info(f'file {path} was created')
 

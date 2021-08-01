@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional, Any, Dict, List, Set, TYPE_CHECKING
 
 from kafka import KafkaProducer, KafkaConsumer  # type: ignore
@@ -22,8 +23,8 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
     def get_security_conf(self) -> Dict[str, Any]:
         raise NotImplementedError(f'method get_security_conf must be implemented for {type(self).__name__}')
 
-    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition) -> None:
-        super().__init__(mediator, definition)
+    def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition, loop: asyncio.AbstractEventLoop) -> None:
+        super().__init__(mediator, definition, loop)
 
         self._bootstrap_servers = self.get_boostrap_servers()
 
@@ -38,10 +39,10 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
         self._interrupted = False
         self._in_processing = False
 
-    def stop_consuming(self) -> None:    # TODO
-        self._end_consuming()
+    async def stop_consuming(self) -> None:    # TODO
+        await self._end_consuming()
 
-    def _end_consuming(self) -> None:
+    async def _end_consuming(self) -> None:
         if not self._consuming_started:
             return
         self._interrupted = True
@@ -51,13 +52,13 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
             self._consuming_started = False
             self.echo.log_info('consumption stopped')
 
-    def get_topic_approximate_messages_count(self, topic: str) -> int:
+    async def get_topic_approximate_messages_count(self, topic: str) -> int:
         return 0  # TODO
 
-    def initialize(self, topics: Set[str], answer_topic: Set[str]) -> None:
+    async def initialize(self, topics: Set[str], answer_topic: Set[str]) -> None:
         pass  # TODO
 
-    def connect(self) -> None:
+    async def connect(self) -> None:
         if self._producer is not None:
             if self._producer._closed:
                 self._producer.close()
@@ -79,7 +80,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
 
         self.echo.log_info('connected')
 
-    def close(self) -> None:
+    async def close(self) -> None:
         if self._producer is not None:
             self._producer.close()
             self._producer = None
@@ -89,7 +90,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
     def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         self._consumers.append(consumer)
 
-    def start_consuming(self) -> None:
+    async def start_consuming(self) -> None:
         echo = self.echo.mk_child('consuming')
         if len(self._consumers) == 0:
             echo.log_warning('has no consumers to start consuming')
@@ -122,28 +123,28 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
         for consumer_record in kfk_consumer:
             self._in_processing = True
 
-            meta = self.parse_message_body(consumer_record.value, self.definition.compression, self.definition.content_type, consumer.unwrapped)
+            meta = await self.parse_message_body(consumer_record.value, self.definition.compression, self.definition.content_type, consumer.unwrapped)
 
             manager = UniKafkaBrokerMessageManager(commit)
-            consumer.message_handler(meta, manager)
+            await consumer.message_handler(meta, manager)
 
             self._in_processing = False
             if self._interrupted:
-                self._end_consuming()
+                await self._end_consuming()
                 break
 
         for kfk_consumer in self._kfk_active_consumers:
             kfk_consumer.close()
 
-    def _get_producer(self) -> KafkaProducer:
-        self.connect()
+    async def _get_producer(self) -> KafkaProducer:
+        await self.connect()
         assert self._producer is not None
         return self._producer
 
-    def publish(self, topic: str, meta_list: List[UniMessageMeta], ttl_s: Optional[int] = None) -> None:
+    async def publish(self, topic: str, meta_list: List[UniMessageMeta], ttl_s: Optional[int] = None) -> None:
         self.echo.log_debug(f'publishing the messages: {meta_list}')
 
-        p = self._get_producer()
+        p = await self._get_producer()
 
         for meta in meta_list:
             # TODO: retry

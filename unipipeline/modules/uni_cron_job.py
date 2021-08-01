@@ -45,5 +45,5 @@ class UniCronJob(NamedTuple):
 
         return min_delay, notification_list
 
-    def send(self) -> None:
-        self.mediator.send_to(self.task.worker.name, self.message, alone=self.task.alone)
+    async def send(self) -> None:
+        await self.mediator.send_to(self.task.worker.name, self.message, alone=self.task.alone)

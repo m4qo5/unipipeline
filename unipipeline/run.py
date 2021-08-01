@@ -29,13 +29,11 @@ def run_init(u: Uni, args) -> None:  # type: ignore
 def run_consume(u: Uni, args) -> None:  # type: ignore
     for wn in args.consume_workers:
         u.init_consumer_worker(wn)
-    u.initialize()
     u.start_consuming()
 
 
 def run_produce(u: Uni, args) -> None:  # type: ignore
     u.init_producer_worker(args.produce_worker)
-    u.initialize()
     u.send_to(args.produce_worker, args.produce_data, alone=args.produce_alone)
 
 

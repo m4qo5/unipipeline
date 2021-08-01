@@ -1,4 +1,4 @@
-from time import sleep
+import asyncio
 from uuid import UUID
 
 from unipipeline.definitions.uni_definition import UniDefinition
@@ -17,7 +17,7 @@ class UniWaitingDefinition(UniDefinition):
     def __hash__(self) -> int:
         return hash(self.id)
 
-    def wait(self, echo: UniEcho) -> None:
+    async def wait(self, echo: UniEcho) -> None:
         waiting_type = self.type.import_class(UniWaiting, echo)
         for try_count in range(self.retry_max_count):
             try:
@@ -27,6 +27,6 @@ class UniWaitingDefinition(UniDefinition):
                 return
             except ConnectionError:
                 echo.log_debug(f'retry wait for {self.name} [{try_count}/{self.retry_max_count}]')
-                sleep(self.retry_delay_s)
+                await asyncio.sleep(self.retry_delay_s)
                 continue
         raise ConnectionError('unavailable connection to %s', waiting_type.__name__)
