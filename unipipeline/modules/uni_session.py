@@ -107,7 +107,7 @@ class UniSession:
         self._worker_init_list = set()
 
         for waiting_name in self._waiting_init_list:
-            self._config.waitings[waiting_name].wait(echo)
+            await self._config.waitings[waiting_name].wait(echo)
             echo.log_info(f'waiting "{waiting_name}"')
             self._waiting_initialized_list.add(waiting_name)
         self._waiting_init_list = set()
