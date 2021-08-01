@@ -1,6 +1,5 @@
 import asyncio
 import time
-from asyncio import Future
 from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING, Awaitable, Dict, Any, Tuple
 
 from aio_pika import connect_robust, IncomingMessage, Channel, Queue, Exchange, Message, DeliveryMode, Connection
@@ -115,10 +114,9 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 name=topic,
                 durable=self.config.durable,
                 auto_delete=self.config.auto_delete,
-                passive=True,
+                passive=False,
             )
-
-            await q.bind(exchange=self.config.exchange_name, routing_key=topic)
+            await q.bind(exchange=self._default_exchange, routing_key=topic)
 
     async def stop_consuming(self) -> None:
         await self._end_consuming()
@@ -159,7 +157,6 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
 
     async def close(self) -> None:
         if self._connection is not None and not self._connection.is_closed:
-            print('connection closed')
             await self._connection.close()
         self._connection = None
         self._channel = None
@@ -204,7 +201,6 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
 
             async def consumer_wrapper(im: IncomingMessage) -> None:
                 self._in_processing = True
-                print('>>>', 111)
                 async with im.process(requeue=True, ignore_processed=True):
                     meta = await self.parse_message_body(im.body, im.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None), im.content_type, c.unwrapped)
                     manager = UniAmqpBrokerMessageManager(im)
@@ -212,7 +208,6 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 self._in_processing = False
                 if self._interrupted:
                     await self._end_consuming()
-                print('>>>', 222, self._in_processing, self._interrupted)
 
             f = q.consume(consumer_wrapper, consumer_tag=c.id)
             consume_futures.append(f)
@@ -239,7 +234,6 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
 
     async def get_answer(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
         answ_topic = f'{answer_params.topic}.{answer_params.id}'
-        exchange = self.config.answer_exchange_name
 
         ch = await self._get_channel(True)
 
@@ -251,19 +245,24 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             passive=False,
         )
 
-        await q.bind(exchange=exchange, routing_key=answ_topic)
+        await q.bind(exchange=self._answer_exchange, routing_key=answ_topic)
 
         started = time.time()
-        while True:
+        im: Optional[IncomingMessage] = None
+        delay_s = 1
+        max_retry_times = int(int(max_delay_s) / int(delay_s))
+        for i in range(max_retry_times):
             im = await q.get(timeout=max_delay_s, fail=False)
-            if (time.time() - started) > max_delay_s:
-                raise UniAnswerDelayError(f'answer for {exchange}->{answ_topic} reached delay limit {max_delay_s} seconds')
-            self.echo.log_debug(f'no answer {int(time.time() - started + 1)}s in {exchange}->{answ_topic}')
-            await asyncio.sleep(1)
-            continue
+            if im is not None:
+                break
+            self.echo.log_debug(f'{i + 1}/{max_retry_times} no answer {int(time.time() - started + 1)}s in {answ_topic}')
+            await asyncio.sleep(delay_s)
+
+        if im is None:
+            raise UniAnswerDelayError(f'answer for {answ_topic} reached delay limit {max_delay_s} seconds')
 
         async with im.process(requeue=True, ignore_processed=True):
-            self.echo.log_debug(f'took answer from {exchange}->{answ_topic}')
+            self.echo.log_debug(f'took answer from {answ_topic}')
             return await self.parse_message_body(
                 im.body,
                 compression=im.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),

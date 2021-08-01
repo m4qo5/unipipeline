@@ -1,15 +1,16 @@
 import asyncio
-import signal
-from asyncio import Future
-from time import time, sleep
-from typing import Dict, Any, Union, Optional
+from typing import Dict, Any, Union, Optional, Iterable
+from uuid import uuid4
 
-from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
 from unipipeline.brokers.uni_broker import UniBroker
+from unipipeline.brokers.uni_broker import UniBrokerConsumer
 from unipipeline.config.uni_config import UniConfig, UniConfigError
-from unipipeline.utils.uni_echo import UniEcho
-from unipipeline.modules.uni_mediator import UniMediator
+from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
 from unipipeline.message.uni_message import UniMessage
+from unipipeline.modules.uni_cron_job import UniCronJob
+from unipipeline.modules.uni_mediator import UniMediator
+from unipipeline.modules.uni_session import UniSession
+from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.utils.uni_util import UniUtil
 from unipipeline.waiting.uni_wating import UniWaiting
 from unipipeline.worker.uni_worker import UniWorker
@@ -33,9 +34,8 @@ class Uni:
             config = UniConfig(self._util, self._echo, config)
         if not isinstance(config, UniConfig):
             raise ValueError(f'invalid config type. {type(config).__name__} was given')
-        self._mediator = UniMediator(self._util, self._echo, config, loop)
-
-        self._interrupted = False
+        self._session = UniSession(config, self._echo, self._util)
+        self._mediator = UniMediator(self._util, self._echo, config, self._session, loop)
 
     @property
     def echo(self) -> UniEcho:
@@ -92,33 +92,8 @@ class Uni:
         except UniConfigError as e:
             self.echo.exit_with_error(str(e))
 
-    def start_cron(self) -> None:
-        try:
-            self._mediator.start_cron()
-        except KeyboardInterrupt:
-            self.echo.log_warning('interrupted')
-            exit(0)
-
-    def initialize_cron_producer_workers(self) -> None:
-        for t in self._mediator.config.cron_tasks.values():
-            self.init_producer_worker(t.worker.name)
-
     def initialize(self, everything: bool = False) -> None:
-        if everything:
-            for wn in self._mediator.config.workers.keys():
-                self._mediator.add_worker_to_init_list(wn, no_related=True)
-        self._loop.run_until_complete(self._mediator.initialize(create=True))
-
-    def init_cron(self) -> None:
-        for task in self._mediator.config.cron_tasks.values():
-            self._mediator.add_worker_to_init_list(task.worker.name, no_related=True)
-
-    def init_producer_worker(self, name: str) -> None:
-        self._mediator.add_worker_to_init_list(name, no_related=True)
-
-    def init_consumer_worker(self, name: str) -> None:
-        self._mediator.add_worker_to_init_list(name, no_related=False)
-        self._mediator.add_worker_to_consume_list(name)
+        self._loop.run_until_complete(self._session.initialize(self._mediator, everything=everything, create=True))
 
     async def _send_to(self, name: str, data: Union[Dict[str, Any], UniMessage], alone: bool) -> None:
         try:
@@ -127,50 +102,87 @@ class Uni:
             self.echo.exit_with_error(f'invalid props in message: {e}')
 
     def send_to(self, name: str, data: Union[Dict[str, Any], UniMessage], alone: bool = False) -> None:
+        self._session.init_producer_worker(name)
+        self.initialize()
         return self._loop.run_until_complete(self._send_to(name, data, alone))
 
-    def _sync_interrupt(self, future: Future) -> None:
-        future.set_result('interrupt')
-        pass
+    async def _start_cron(self) -> None:
+        cron_jobs = UniCronJob.mk_jobs_list(self.config.cron_tasks.values(), self._mediator)
+        self.echo.log_debug(f'cron jobs defined: {", ".join(cj.task.name for cj in cron_jobs)}')
+        while True:
+            delay, jobs = UniCronJob.search_next_tasks(cron_jobs)
+            if delay is None:
+                return
+            self.echo.log_debug(f"sleep {delay} seconds before running the tasks: {[cj.task.name for cj in jobs]}")
+            if delay > 0:
+                await asyncio.sleep(delay)
+            self.echo.log_info(f"run the tasks: {[cj.task.name for cj in jobs]}")
 
-    async def _async_interrupt(self, f) -> None:
-        print('>>>', f)
-        pass
+            sending_f = []
+            for cj in jobs:
+                sending_f.append(cj.send())
+            await asyncio.gather(*sending_f)
+            await asyncio.sleep(1.1)  # delay for correct next iteration
 
-    def start_consuming(self) -> None:
+    def start_cron(self) -> None:
+        self._session.init_cron_producers()
+        self.initialize()
         try:
-            self._loop.run_until_complete(self._mediator.start_consuming())
+            self._loop.run_until_complete(self._start_cron())
+        except KeyboardInterrupt:
+            self.echo.log_warning('interrupted')
+            exit(0)
 
-            interrupted = []
+    def start_consuming(self, worker_group: Optional[str] = None, workers: Optional[Iterable[str]] = None, ) -> None:
+        if worker_group is None and not workers:
+            return
+        if workers:
+            for wn in workers:
+                self._session.init_consumer_worker(wn)
+        if worker_group:
+            self._session.init_consumer_worker_group(worker_group)
+        self.initialize()
+        try:
+            # TODO: interrupted
 
-            future = self._loop.create_future()
-            future.add_done_callback(self._async_interrupt)
+            brokers = set()
+            bf = list()
+            for wn in self._session.get_consumer_worker_names():
+                wd = self._mediator.config.workers[wn]
+                wc = self._mediator.get_worker_consumer(wn)
+                bn = wd.broker.name
 
-            self._loop.add_signal_handler(signal.SIGINT, self._sync_interrupt, future)
+                b = self._mediator.get_broker(bn)
 
-            future = asyncio.wait([future], return_when=asyncio.)
+                self.echo.log_info(f"worker {wn} start consuming")
+                b.add_consumer(UniBrokerConsumer(
+                    topic=wd.topic,
+                    id=f'{wn}__{uuid4()}',
+                    group_id=wn,
+                    unwrapped=wd.input_unwrapped,
+                    message_handler=wc.process_message
+                ))
 
-            done, pending = self._loop.run_until_complete(future)
+                self.echo.log_info(f'consumer {wn} initialized')
+                if bn in brokers:
+                    continue
+                brokers.add(bn)
 
-            if interrupted:
-                # Do whatever cleanup you want here and/or get the stacktrace
-                # of the interrupted main task.
-                sig = done.pop().result()
-                task = pending.pop()
-                msg = get_message(sig, task)
+                self._session.add_broker_with_active_consumption(b)
+                self.echo.log_info(f'broker {bn} consuming start')
+                bf.append(b.start_consuming())
 
-                task.cancel()
-                raise KeyboardInterrupt(msg)
+            self._loop.run_until_complete(asyncio.gather(*bf))
 
             self._loop.run_forever()
         except KeyboardInterrupt:
             self.echo.log_warning('interrupted')
-            self._loop.run_until_complete(self._mediator.interrupt())
+            self._loop.run_until_complete(self._session.interrupt())
         except Exception as e:
             self.echo.log_error(str(e))
-            self._loop.run_until_complete(self._mediator.interrupt())
+            self._loop.run_until_complete(self._session.interrupt())
         else:
-            self._loop.run_until_complete(self._mediator.interrupt())
+            self._loop.run_until_complete(self._session.interrupt())
         finally:
             try:
                 self._loop.run_until_complete(self._loop.shutdown_asyncgens())

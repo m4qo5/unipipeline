@@ -4,7 +4,7 @@ from unipipeline import UniWorker, UniWorkerConsumerMessage
 
 
 class EnderAfterInputWorker(UniWorker[EnderAfterInputMessage, EnderAfterAnswerMessage]):
-    def handle_message(self, msg: UniWorkerConsumerMessage[EnderAfterInputMessage]) -> EnderAfterAnswerMessage:
+    async def handle_message(self, msg: UniWorkerConsumerMessage[EnderAfterInputMessage]) -> EnderAfterAnswerMessage:
         return EnderAfterAnswerMessage(
             value=f'EnderAfterInputWorker answer on >>> {msg.payload.value}'
         )

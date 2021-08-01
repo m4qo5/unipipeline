@@ -28,10 +28,11 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
         self._worker = worker_type(self._worker_manager)
         self._uni_echo = mediator.echo.mk_child(f'worker[{definition.name}]')
 
-        self._input_message_type: Type[TInputMsgPayload] = mediator.get_message_type(self._definition.input_message.name)  # type: ignore
-        self._answer_message_type: Optional[Type[TAnswerMsgPayload]] = mediator.get_message_type(self._definition.answer_message.name) if self._definition.answer_message is not None else None  # type: ignore
+        self._input_message_type: Type[TInputMsgPayload] = mediator.config.get_message_type(self._definition.input_message.name)  # type: ignore
+        self._answer_message_type: Optional[Type[TAnswerMsgPayload]] = mediator.config.get_message_type(self._definition.answer_message.name) if self._definition.answer_message is not None else None  # type: ignore
 
         self._current_meta: Optional[UniMessageMeta] = None
+        self._uni_echo.log_info(f'initialized worker "{definition.name}"')
 
     async def send_to(self, worker: Union[Type['UniWorker[Any, Any]'], str], data: Union[Dict[str, Any], UniMessage], alone: bool = False, need_answer: bool = False) -> Optional[UniAnswerMessage[UniMessage]]:
         wd = self._mediator.config.get_worker_definition(worker)

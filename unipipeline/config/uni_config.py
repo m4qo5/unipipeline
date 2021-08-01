@@ -1,24 +1,30 @@
-from typing import Dict, Any, Set, Union, Type, Iterator, Tuple
+from typing import Dict, Any, Set, Union, Type, Iterator, Tuple, List, TypeVar, Callable
 from uuid import uuid4
 
 import yaml
 
-from unipipeline.errors.uni_config_error import UniConfigError
-from unipipeline.errors.uni_definition_not_found_error import UniDefinitionNotFoundError
+from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_codec_definition import UniCodecDefinition
 from unipipeline.definitions.uni_cron_task_definition import UniCronTaskDefinition
-from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.definitions.uni_external_definition import UniExternalDefinition
 from unipipeline.definitions.uni_message_definition import UniMessageDefinition
 from unipipeline.definitions.uni_module_definition import UniModuleDefinition
 from unipipeline.definitions.uni_service_definition import UniServiceDefinition
-from unipipeline.utils.uni_util import UniUtil
 from unipipeline.definitions.uni_waiting_definition import UniWaitingDefinition
-from unipipeline.worker.uni_worker import UniWorker
 from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
+from unipipeline.definitions.uni_worker_group import UniWorkerGroupDefinition
+from unipipeline.errors.uni_config_error import UniConfigError
+from unipipeline.errors.uni_definition_not_found_error import UniDefinitionNotFoundError
+from unipipeline.message.uni_message import UniMessage
+from unipipeline.utils.uni_echo import UniEcho
+from unipipeline.utils.uni_util import UniUtil
+from unipipeline.worker.uni_worker import UniWorker
 
 UNI_CRON_MESSAGE = "uni_cron_message"
+
+
+T = TypeVar('T')
 
 
 class UniConfig:
@@ -30,6 +36,7 @@ class UniConfig:
         self._config: Dict[str, Any] = dict()
         self._parsed = False
         self._config_loaded = False
+        self._worker_groups_index: Dict[str, UniWorkerGroupDefinition] = dict()
         self._compression_index: Dict[str, UniCodecDefinition] = dict()
         self._codecs_index: Dict[str, UniCodecDefinition] = dict()
         self._waiting_index: Dict[str, UniWaitingDefinition] = dict()
@@ -40,6 +47,12 @@ class UniConfig:
         self._workers_by_class_index: Dict[str, UniWorkerDefinition] = dict()
         self._cron_tasks_index: Dict[str, UniCronTaskDefinition] = dict()
         self._service: UniServiceDefinition = None  # type: ignore
+
+        self._types_cache: Dict[str, Any] = dict()
+        self._decompression_modules: Dict[str, Callable[[bytes], bytes]] = dict()
+        self._compression_modules: Dict[str, Callable[[bytes], bytes]] = dict()
+        self._content_type_serializers: Dict[str, Callable[[Dict[str, Any]], Union[str, bytes]]] = dict()
+        self._content_type_parsers: Dict[str, Callable[[Union[str, bytes]], Dict[str, Any]]] = dict()
 
     @property
     def file(self) -> str:
@@ -198,6 +211,9 @@ class UniConfig:
         self._workers_by_name_index = self._parse_workers(cfg, self._service, self._brokers_index, self._messages_index, self._waiting_index, self._external)
         self._echo.log_info(f'workers: {",".join(self._workers_by_name_index.keys())}')
 
+        self._worker_groups_index = self._parse_worker_groups(cfg, self._workers_by_name_index)
+        self._echo.log_info(f'worker_groups: {",".join(self._worker_groups_index.keys())}')
+
         for wd in self._workers_by_name_index.values():
             if wd.marked_as_external:
                 continue
@@ -210,6 +226,31 @@ class UniConfig:
     COMPRESSION_GZIP = "application/x-gzip"
     COMPRESSION_BZ2 = "application/x-bz2"
     COMPRESSION_LZMA = "application/x-lzma"
+
+    def _parse_worker_groups(self, config: Dict[str, Any], worker_index: Dict[str, UniWorkerDefinition]) -> Dict[str, UniWorkerGroupDefinition]:
+        cfg = config.get('worker_groups', dict())
+        if not isinstance(cfg, dict):
+            raise UniConfigError(f'invalid type of worker_groups. must be dict. "{type(cfg).__name__}" was given')
+
+        result = dict()
+        for name, worker_list in cfg.items():
+            if not isinstance(worker_list, list):
+                raise UniConfigError(f'worker_group "{name}" has invalid type of content. must be list. {type(worker_list).__name__} was given')
+            if len(worker_list) == 0:
+                raise UniConfigError(f'worker_group "{name}" has no items')
+
+            for wn in worker_list:
+                if not isinstance(wn, str):
+                    raise UniConfigError(f'worker_group "{name}" has invalid type in item. must be str. {type(wn).__name__} was given')
+                if wn not in worker_index:
+                    raise UniConfigError(f'worker_group "{name}" has invalid worker_name "{wn}"')
+
+            result[name] = UniWorkerGroupDefinition(
+                name=name,
+                worker_names=worker_list,
+                dynamic_props_=dict(),
+            )
+        return result
 
     def _parse_compression(self, config: Dict[str, Any]) -> Dict[str, UniCodecDefinition]:
         result = {
@@ -287,7 +328,7 @@ class UniConfig:
             UNI_CRON_MESSAGE: UniMessageDefinition(
                 name=UNI_CRON_MESSAGE,
                 type=UniModuleDefinition(
-                    module="unipipeline.messages.uni_cron_message",
+                    module="unipipeline.message.uni_cron_message",
                     object_name="UniCronMessage",
                 ),
                 dynamic_props_=dict(),
@@ -495,3 +536,64 @@ class UniConfig:
             raise UniConfigError(f'workers worker_definition has invalid worker_names (in output_workers prop): {", ".join(out_intersection_workers)}')
 
         return result
+
+    def get_worker_names_by_group(self, name: str) -> List[str]:
+        wg = self._worker_groups_index.get(name, None)
+        if wg is None:
+            raise KeyError(f'worker_group "{name}" doesn\'t exist')
+        return wg.worker_names
+
+    def get_content_type_serializer(self, name: str) -> Callable[[Dict[str, Any]], Union[bytes, str]]:
+        if name in self._content_type_serializers:
+            return self._content_type_serializers[name]
+        if name in self.codecs:
+            c = self.codecs[name]
+            self._content_type_serializers[name] = c.encoder_type.import_function()
+            return self._content_type_serializers[name]
+        raise ValueError(f'content_type "{name}" is not supported')
+
+    def get_content_type_parser(self, name: str) -> Callable[[Union[bytes, str]], Dict[str, Any]]:
+        if name in self._content_type_parsers:
+            return self._content_type_parsers[name]
+        if name in self.codecs:
+            c = self.codecs[name]
+            self._content_type_parsers[name] = c.decoder_type.import_function()
+            return self._content_type_parsers[name]
+        raise ValueError(f'content_type "{name}" is not supported')
+
+    def get_compressor(self, name: str) -> Callable[[bytes], bytes]:
+        if name in self._compression_modules:
+            return self._compression_modules[name]
+        if name in self.compression:
+            c = self.compression[name]
+            self._compression_modules[name] = c.encoder_type.import_function()
+            return self._compression_modules[name]
+        raise ValueError(f'compression of "{name}" is not supported')
+
+    def get_decompressor(self, name: str) -> Callable[[bytes], bytes]:
+        if name in self._decompression_modules:
+            return self._decompression_modules[name]
+        if name in self.compression:
+            c = self.compression[name]
+            self._decompression_modules[name] = c.decoder_type.import_function()
+            return self._decompression_modules[name]
+        raise ValueError(f'decompression of "{name}" is not supported')
+
+    def _load_type(self, name: str, type_class: Type[T], index_from: Dict[str, Any]) -> Type[T]:
+        t_name = type_class.__name__
+        cache_key = f'{t_name}::{name}'
+        if name not in index_from:
+            raise KeyError(f'"{name}" not found in index of "{t_name}"')
+        df = index_from[name]
+        result = df.type.import_class(type_class, echo=self._echo, util=self._util)
+        self._types_cache[cache_key] = result
+        return result  # type: ignore
+
+    def get_message_type(self, name: str) -> Type[UniMessage]:
+        return self._load_type(name, UniMessage, self._messages_index)
+
+    def get_worker_type(self, name: str) -> Type[UniWorker[Any, Any]]:
+        return self._load_type(name, UniWorker, self._workers_by_name_index)
+
+    def get_broker_type(self, name: str) -> Type[UniBroker[Any]]:
+        return self._load_type(name, UniBroker, self._brokers_index)
