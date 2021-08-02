@@ -245,6 +245,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             passive=False,
         )
 
+        assert self._answer_exchange is not None
         await q.bind(exchange=self._answer_exchange, routing_key=answ_topic)
 
         started = time.time()

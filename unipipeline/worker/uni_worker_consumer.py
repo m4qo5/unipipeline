@@ -24,7 +24,7 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
         self._definition = definition
         self._mediator = mediator
 
-        self._worker_manager = UniWorkerConsumerManager(self.send_to)
+        self._worker_manager = UniWorkerConsumerManager(mediator.pool, self.send_to)
         self._worker = worker_type(self._worker_manager)
         self._uni_echo = mediator.echo.mk_child(f'worker[{definition.name}]')
 

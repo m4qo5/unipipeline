@@ -15,25 +15,18 @@ def run_scaffold(u: Uni, args) -> None:  # type: ignore
 
 
 def run_cron(u: Uni, args) -> None:  # type: ignore
-    u.init_cron()
-    u.initialize()
     u.start_cron()
 
 
 def run_init(u: Uni, args) -> None:  # type: ignore
-    for wn in args.init_workers:
-        u.init_producer_worker(wn)
-    u.initialize(everything=len(args.init_workers) == 0)
+    u.initialize(everything=True)
 
 
 def run_consume(u: Uni, args) -> None:  # type: ignore
-    for wn in args.consume_workers:
-        u.init_consumer_worker(wn)
-    u.start_consuming()
+    u.start_consuming(workers=list(args.consume_workers))
 
 
 def run_produce(u: Uni, args) -> None:  # type: ignore
-    u.init_producer_worker(args.produce_worker)
     u.send_to(args.produce_worker, args.produce_data, alone=args.produce_alone)
 
 

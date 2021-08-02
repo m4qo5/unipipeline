@@ -9,6 +9,7 @@ from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.modules.uni_cron_job import UniCronJob
 from unipipeline.modules.uni_mediator import UniMediator
+from unipipeline.modules.uni_thread_pool import UniThreadPool
 from unipipeline.modules.uni_session import UniSession
 from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.utils.uni_util import UniUtil
@@ -21,7 +22,7 @@ def camel_case(snake_cased: str) -> str:
 
 
 class Uni:
-    def __init__(self, config: Union[UniConfig, str], echo_level: Optional[Union[str, int]] = None, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+    def __init__(self, config: Union[UniConfig, str], echo_level: Optional[Union[str, int]] = None, loop: Optional[asyncio.AbstractEventLoop] = None, threads: int = 12) -> None:
         if loop is None:
             loop = asyncio.get_event_loop()
         self._loop = loop
@@ -29,13 +30,14 @@ class Uni:
         self._util.template.set_filter('camel', camel_case)
 
         self._echo = UniEcho('UNI', level=echo_level, colors=self._util.color)
+        self._pool = UniThreadPool(self._loop, max_threads=threads)
 
         if isinstance(config, str):
             config = UniConfig(self._util, self._echo, config)
         if not isinstance(config, UniConfig):
             raise ValueError(f'invalid config type. {type(config).__name__} was given')
         self._session = UniSession(config, self._echo, self._util)
-        self._mediator = UniMediator(self._util, self._echo, config, self._session, loop)
+        self._mediator = UniMediator(self._util, self._pool, self._echo, config, self._session, loop)
 
     @property
     def echo(self) -> UniEcho:

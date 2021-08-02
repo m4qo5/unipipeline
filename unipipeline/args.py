@@ -67,12 +67,10 @@ scaffold_parser.usage = f'''
 
 init_help = 'initialize broker topics for workers'
 init_parser = subparsers.add_parser(CMD_INIT, help=init_help)
-init_parser.add_argument('--workers', '-w', type=str, nargs='+', default=[], required=False, dest='init_workers', help='workers list for initialization (default: [])')
 init_parser.description = init_help
 init_parser.usage = f'''
     unipipeline -f {DEFAULT_CONFIG_FILE} {CMD_INIT}
     unipipeline -f {DEFAULT_CONFIG_FILE} --verbose=yes {CMD_INIT}
-    unipipeline -f {DEFAULT_CONFIG_FILE} --verbose=yes {CMD_INIT} --workers some_worker_name_01 some_worker_name_02
 '''
 
 consume_help = 'start consuming workers. connect to brokers and waiting for messages'

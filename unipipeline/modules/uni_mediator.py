@@ -9,6 +9,7 @@ from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
 from unipipeline.errors.uni_work_flow_error import UniWorkFlowError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic, UniAnswerParams
+from unipipeline.modules.uni_thread_pool import UniThreadPool
 from unipipeline.modules.uni_session import UniSession
 from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.utils.uni_util import UniUtil
@@ -19,7 +20,7 @@ TWorker = TypeVar('TWorker', bound=UniWorker[Any, Any])
 
 
 class UniMediator:
-    def __init__(self, util: UniUtil, echo: UniEcho, config: UniConfig, session: UniSession, loop: asyncio.AbstractEventLoop) -> None:
+    def __init__(self, util: UniUtil, pool: UniThreadPool, echo: UniEcho, config: UniConfig, session: UniSession, loop: asyncio.AbstractEventLoop) -> None:
         self._config = config
         self._echo = echo
         self._util = util
@@ -28,10 +29,15 @@ class UniMediator:
 
         self._worker_instance_indexes: Dict[str, UniWorkerConsumer[Any, Any]] = dict()
         self._broker_instance_indexes: Dict[str, UniBroker[Any]] = dict()
+        self._pool = pool
 
     @property
     def echo(self) -> UniEcho:
         return self._echo
+
+    @property
+    def pool(self) -> UniThreadPool:
+        return self._pool
 
     def set_echo_level(self, level: int) -> None:
         self.echo.level = level
