@@ -351,13 +351,11 @@ optional arguments:
 ### TODO LIST
 0. [ ] RPC Gateways: http, tcp, udp
 1. [ ] Close/Exit uni by call method
-2. [ ] Async producer
-3. [ ] Common Error Handling
-4. [ ] Async get_answer
-5. [ ] Server of Message layout
-6. [ ] Prometheus api
-7. [ ] req/res Sdk
-8. [ ] request tasks result registry
-9. [ ] Async consumer
-10. [ ] Async by default
-11. [ ] Multi-threading start with run-groups
+2. [ ] Common Error Handling
+3. [ ] Server of Message layout
+4. [ ] Prometheus api
+5. [ ] OpenTracing integration
+6. [ ] Middlewares
+7. [ ] transaction exit (wait for stopping each working worker)
+8. [ ] Robust pipelines
+9. [ ] Logging provider
