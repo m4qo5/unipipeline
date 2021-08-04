@@ -2,7 +2,6 @@ import asyncio
 
 
 async def echo(data):
-    #external lib emulator
     data = b'>'+data
     await asyncio.sleep(1)
     return data

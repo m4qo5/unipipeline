@@ -13,6 +13,7 @@ kafka-python = "==2.*"
 crontab = "==0.23.*"
 psycopg2-binary = "==2.8.6"
 types-pyyaml = "*"
+aiohttp = "==3.7.4"
 
 [dev-packages]
 wheel = "*"
