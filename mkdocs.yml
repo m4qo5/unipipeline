@@ -37,10 +37,10 @@ theme:
 extra: {}
 
 plugins:
-    - markmap
-    - redirects:
-        redirect_maps: {}
-    - markdownextradata: {}
+#    - markmap
+#    - redirects:
+#        redirect_maps: {}
+#    - markdownextradata: {}
     - search:
         separator: '[\s\-\.]+'
         lang: 'ru'
