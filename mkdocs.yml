@@ -1,0 +1,82 @@
+site_name: UniPipelines
+repo_url: https://github.com/aliaksandr-master/unipipeline
+repo_name: unipipeline
+edit_uri: "tree/main/docs"
+
+site_dir: compiled-docs
+
+strict: true
+
+theme:
+  name: material
+  language: ru
+  logo: images/icon.png
+  favicon: images/icon.png
+  highlightjs: true
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - navigation.sections
+    - toc.integrate
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - header.autohide
+  icon:
+    repo: fontawesome/brands/gitlab
+  palette:
+    primary: indigo
+  font:
+    text: Open Sans
+    code: Ubuntu Mono
+
+extra: {}
+
+plugins:
+    - markmap
+    - redirects:
+        redirect_maps: {}
+    - markdownextradata: {}
+    - search:
+        separator: '[\s\-\.]+'
+        lang: 'ru'
+        prebuild_index: python
+        min_search_length: 2
+    - minify:
+        minify_html: true
+    - git-revision-date
+    - table-reader
+    # - pdf-export
+
+markdown_extensions:
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.highlight:
+      linenums: false
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.details
+  - pymdownx.snippets
+  - pymdownx.tabbed
+  - pymdownx.caret
+  - pymdownx.mark
+  - pymdownx.tilde
+  - admonition
+  - abbr
+  - toc:
+      permalink: true
+      # slugify: !!python/name:pymdownx.slugs.uslugify
+  - attr_list
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+      clickable_checkbox: true
+  - pymdownx.arithmatex:
+      generic: true
+  - meta
+
+copyright: Copyright &copy;
