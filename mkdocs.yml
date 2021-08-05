@@ -3,7 +3,8 @@ repo_url: https://github.com/aliaksandr-master/unipipeline
 repo_name: unipipeline
 edit_uri: "tree/main/docs"
 
-site_dir: compiled-docs
+docs_dir: docs
+site_dir: site
 
 strict: true
 
@@ -25,9 +26,10 @@ theme:
     - navigation.tabs.sticky
     - header.autohide
   icon:
-    repo: fontawesome/brands/gitlab
-  palette:
-    primary: indigo
+    repo: fontawesome/brands/github
+  palette::
+    primary: 'green'
+    accent: 'purple'
   font:
     text: Open Sans
     code: Ubuntu Mono
