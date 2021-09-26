@@ -288,7 +288,7 @@ class UniConfig:
         result = {
             self.APPLICATION_JSON: UniCodecDefinition(
                 name=self.APPLICATION_JSON,
-                encoder_type=UniModuleDefinition.parse("unipipeline:complex_serializer_json_dumps"),
+                encoder_type=UniModuleDefinition.parse("unipipeline.utils.complex_serializer:complex_serializer_json_dumps"),
                 decoder_type=UniModuleDefinition.parse("json:loads"),
                 dynamic_props_={}
             ),
@@ -327,10 +327,7 @@ class UniConfig:
         result = {
             UNI_CRON_MESSAGE: UniMessageDefinition(
                 name=UNI_CRON_MESSAGE,
-                type=UniModuleDefinition(
-                    module="unipipeline.message.uni_cron_message",
-                    object_name="UniCronMessage",
-                ),
+                type=UniModuleDefinition(module="unipipeline.message.uni_cron_message", object_name="UniCronMessage"),
                 dynamic_props_=dict(),
             )
         }

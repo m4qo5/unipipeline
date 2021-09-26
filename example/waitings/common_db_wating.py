@@ -1,4 +1,4 @@
-from unipipeline import UniWaiting
+from unipipeline.waiting.uni_wating import UniWaiting
 
 
 class CommonDbWaiting(UniWaiting):

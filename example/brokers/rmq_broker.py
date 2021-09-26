@@ -1,4 +1,4 @@
-from unipipeline import UniAmqpBroker
+from unipipeline.brokers.uni_amqp_broker import UniAmqpBroker
 
 
 class RmqBroker(UniAmqpBroker):

@@ -1,4 +1,4 @@
-from unipipeline import UniMessage
+from unipipeline.message.uni_message import UniMessage
 
 
 class EnderAfterAnswerMessage(UniMessage):
