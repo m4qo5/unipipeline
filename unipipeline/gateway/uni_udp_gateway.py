@@ -1,4 +1,3 @@
-from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
 from unipipeline.modules.uni_mediator import UniMediator
 
 
@@ -8,7 +7,8 @@ class UniUdpGateway:
         self._mediator = mediator
 
     async def recived(self) -> None:
-        self._mediator.send_to(worker_name)
+        # self._mediator.send_to(worker_name)
+        pass
 
     async def start(self) -> None:
         pass

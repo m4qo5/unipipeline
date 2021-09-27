@@ -1,7 +1,7 @@
 
 from typing import List, Dict, Any
 
-from unipipeline import UniKafkaBroker
+from unipipeline.brokers.uni_kafka_broker import UniKafkaBroker
 
 
 class KafkaBroker(UniKafkaBroker):

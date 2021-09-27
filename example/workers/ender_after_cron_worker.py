@@ -1,6 +1,7 @@
 from example.messages.ender_after_cron_answer_message import EnderAfterCronAnswerMessage
 from example.messages.ender_after_cron_input_message import EnderAfterCronInputMessage
-from unipipeline import UniWorker, UniWorkerConsumerMessage
+from unipipeline.worker.uni_worker import UniWorker
+from unipipeline.worker.uni_worker_consumer_message import UniWorkerConsumerMessage
 
 
 class EnderAfterCronWorker(UniWorker[EnderAfterCronInputMessage, EnderAfterCronAnswerMessage]):
