@@ -146,25 +146,18 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             self.echo.log_info('consumption stopped')
 
     def connect(self) -> None:
-        if self._connection is not None:
-            if self._connection.is_closed:
-                self._connection = None
-            else:
-                return
-
-        if self._channel is not None:
-            if self._channel.is_closed:
-                self._channel = None
-            else:
-                return
-
+        connected = False
         try:
-            self._connection = BlockingConnection(self._params)
-            self._channel = self._connection.channel()
+            if self._connection is None or self._connection.is_closed:
+                self._connection = BlockingConnection(self._params)
+                connected = True
+            if self._channel is None or self._channel.is_closed:
+                self._channel = self._connection.channel()
+                connected = True
         except (AMQPError, AMQPConnectionError) as e:
             raise ConnectionError(str(e))
-
-        self.echo.log_info('connected')
+        if connected:
+            self.echo.log_info('connected')
 
     def close(self) -> None:
         try:
@@ -252,10 +245,31 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 retry_counter += 1
                 sleep(self.config.retry_delay_s)
 
+    def _publish(self, exchange: str, topic: str, meta: UniMessageMeta, props: BasicProperties) -> None:
+        sent = False
+        retry_count = max(self.config.retry_max_count, 1)
+        for i in range(retry_count):
+            try:
+                ch = self._get_channel()
+                ch.basic_publish(
+                    exchange=exchange,
+                    routing_key=topic,
+                    body=self.serialize_message_body(meta),
+                    properties=props
+                )
+                sent = True
+                break
+            except ConnectionError as e:
+                self._uni_echo.log_warning(f'retry {i + 1}/{retry_count} :: {e}')
+                continue
+
+        if not sent:
+            raise ConnectionError("connection problems. retry doesn't help us")
+
+        self.echo.log_debug(f'sent message to {exchange}->{topic}')
+
     def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
-        ch = self._get_channel()
         for meta in meta_list:  # TODO: package sending
-            # TODO: retry
             headers = {
                 BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.compression,
                 # **({'x-message-ttl': ttl_s * 1000} if ttl_s is not None else {}),
@@ -277,13 +291,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                     delivery_mode=2 if self.config.is_persistent else 0,
                     headers=headers
                 )
-            ch.basic_publish(
-                exchange=self.config.exchange_name,
-                routing_key=topic,
-                body=self.serialize_message_body(meta),
-                properties=props
-            )
-        self.echo.log_debug(f'sent messages ({len(meta_list)}) to {self.config.exchange_name}->{topic}')
+            self._publish(self.config.exchange_name, topic, meta, props)
 
     def get_answer(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
         answ_topic = f'{answer_params.topic}.{answer_params.id}'
@@ -314,20 +322,13 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             )
 
     def publish_answer(self, answer_params: UniAnswerParams, meta: UniMessageMeta) -> None:
-        ch = self._get_channel()
-        answ_topic = f'{answer_params.topic}.{answer_params.id}'
-        ch.basic_publish(
-            exchange=self.config.answer_exchange_name,
-            routing_key=answ_topic,
-            body=self.serialize_message_body(meta),
-            properties=BasicProperties(
-                content_type=self.definition.content_type,
-                content_encoding='utf-8',
-                delivery_mode=1,
-                headers={
-                    BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.compression,
-                    # **({'x-message-ttl': ttl_s * 1000} if ttl_s is not None else {}),
-                }
-            )
+        props = BasicProperties(
+            content_type=self.definition.content_type,
+            content_encoding='utf-8',
+            delivery_mode=1,
+            headers={
+                BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.compression,
+                # **({'x-message-ttl': ttl_s * 1000} if ttl_s is not None else {}),
+            }
         )
-        self.echo.log_debug(f'sent message to {self.config.answer_exchange_name}->{answ_topic}')
+        self._publish(self.config.answer_exchange_name, f'{answer_params.topic}.{answer_params.id}', meta, props)
