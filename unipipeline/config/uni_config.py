@@ -287,7 +287,7 @@ class UniConfig:
             UNI_CRON_MESSAGE: UniMessageDefinition(
                 name=UNI_CRON_MESSAGE,
                 type=UniModuleDefinition(
-                    module="unipipeline.messages.uni_cron_message",
+                    module="unipipeline.message.uni_cron_message",
                     object_name="UniCronMessage",
                 ),
                 dynamic_props_=dict(),
