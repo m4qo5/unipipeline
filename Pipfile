@@ -4,14 +4,14 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pyyaml = "==5.*"
 jinja2 = "==3.*"
+pyyaml = "==5.*"
+kafka-python = "==2.*"
 pika = "==1.*"
 pydantic = "==1.*"
-kafka-python = "==2.*"
 crontab = "==0.23.*"
-psycopg2-binary = "==2.8.6"
-types-pyyaml = "*"
+psycopg2-binary = "==2.*"
+types-pyyaml = "==5.*"
 
 [dev-packages]
 wheel = "*"

@@ -26,7 +26,9 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
-        "Operating System :: OS Independent"
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Operating System :: OS Independent",
     ],
     entry_points={
         "console_scripts": [
@@ -35,5 +37,13 @@ setup(
     },
     packages=find_packages(),
     include_package_data=True,
-    install_requires=["jinja2", "pyyaml", "kafka-python", "pika", "pydantic", "crontab"]
+    install_requires=[
+        "jinja2==3.*",
+        "pyyaml==5.*",
+        "kafka-python==2.*",
+        "pika==1.*",
+        "pydantic==1.*",
+        "crontab==0.23.*",
+        "psycopg2-binary==2.*",
+    ]
 )
