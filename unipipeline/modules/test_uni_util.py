@@ -1,4 +1,4 @@
-import pytest
+import pytest  # type: ignore
 
 from unipipeline.utils.uni_util_color import UniUtilColor
 
