@@ -9,9 +9,10 @@ from unipipeline import UniWorker, UniWorkerConsumerMessage
 
 class InputWorker(UniWorker[InputMessage, None]):
     def handle_message(self, msg: UniWorkerConsumerMessage[InputMessage]) -> None:
-        answ = self.manager.get_answer_from(EnderAfterInputWorker, EnderAfterInputMessage(
-            value=f'from input_worker {datetime.now()}'
-        ))
+        answ = '!!!'
+        # answ = self.manager.get_answer_from(EnderAfterInputWorker, EnderAfterInputMessage(
+        #     value=f'from input_worker {datetime.now()}'
+        # ))
 
         self.manager.send_to('some_external_worker', SomeExternalMessage(
             value=f'answ: {answ} ==> from input_worker {datetime.now()}'
