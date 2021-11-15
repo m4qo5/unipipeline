@@ -55,8 +55,8 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
             self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
         except UniPayloadParsingError as e:
             self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR, e)
-        except Exception as e:
-            self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
+        # except Exception as e:  # TODO: correct error handling
+        #     self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.HANDLE_MESSAGE_ERR, e)
         else:
             if self._definition.need_answer:
                 try:

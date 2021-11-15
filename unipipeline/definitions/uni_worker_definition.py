@@ -14,6 +14,7 @@ class UniWorkerDefinition(UniDefinition):
     broker: UniBrokerDefinition
     type: Optional[UniModuleDefinition]
     topic: str
+    prefetch_count: int
     error_topic: str
     error_payload_topic: str
     answer_topic: str

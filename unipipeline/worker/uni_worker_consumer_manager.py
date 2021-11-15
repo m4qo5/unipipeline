@@ -22,10 +22,10 @@ class UniWorkerConsumerManager:
         return self._id
 
     def stop_consuming(self) -> None:
-        pass  # TODO
+        raise NotImplementedError(f'{type(self).__name__}.stop_consuming was not implemented')  # TODO
 
     def exit(self) -> None:
-        pass  # TODO
+        raise NotImplementedError(f'{type(self).__name__}.exit was not implemented')  # TODO
 
     def get_answer_from(self, worker: Union[Type['UniWorker[TInputMessage, TAnswMessage]'], str], data: Union[Dict[str, Any], TInputMessage]) -> UniAnswerMessage[TAnswMessage]:
         return self._send(worker, data, False, True)  # type: ignore

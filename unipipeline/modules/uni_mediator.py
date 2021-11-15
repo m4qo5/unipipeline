@@ -206,7 +206,8 @@ class UniMediator:
                 id=f'{wn}__{uuid4()}',
                 group_id=wn,
                 unwrapped=wd.input_unwrapped,
-                message_handler=wc.process_message
+                message_handler=wc.process_message,
+                prefetch_count=wd.prefetch_count,
             ))
 
             self.echo.log_info(f'consumer {wn} initialized')

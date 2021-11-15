@@ -119,11 +119,11 @@ class UniConfig:
         return self._config
 
     def _parse_definition(
-            self,
-            conf_name: str,
-            definitions: Dict[str, Any],
-            defaults: Dict[str, Any],
-            required_keys: Set[str]
+        self,
+        conf_name: str,
+        definitions: Dict[str, Any],
+        defaults: Dict[str, Any],
+        required_keys: Set[str]
     ) -> Iterator[Tuple[str, Dict[str, Any], Dict[str, Any]]]:
         if not isinstance(definitions, dict):
             raise UniConfigError(f'worker_definition of {conf_name} has invalid type. must be dict')
@@ -418,6 +418,7 @@ class UniConfig:
             external=None,
             answer_message=None,
             answer_avg_delay_s=3,
+            prefetch_count=1,
 
             input_unwrapped=False,
             answer_unwrapped=False,

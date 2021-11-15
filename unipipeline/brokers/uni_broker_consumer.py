@@ -9,4 +9,5 @@ class UniBrokerConsumer(NamedTuple):
     id: str
     group_id: str
     unwrapped: bool
+    prefetch_count: int
     message_handler: Callable[[UniMessageMeta, UniBrokerMessageManager], None]
