@@ -16,15 +16,16 @@ kafka-python = ">=2.0.2"
 [dev-packages]
 wheel = "*"
 twine = "*"
-setuptools = "==59.1.1 "
+setuptools = "*"
+
 mypy = "==0.910"
 pytest = "==6.2.5"
-flake8 = "==4.0.1"
+flake8 = ">=4.0.1"
 flake8-blind-except = "==0.2.0"
 flake8-logging-format = "==0.6.0"
 flake8-self = "==0.2.2"
 flake8-super-call = "==1.0.0"
-flake8-bugbear = "==20.11.1"
+#flake8-bugbear = "==20.11.1"   # has bug
 flake8-print = "==4.0.0"
 pep8-naming = "==0.12.1"  # flask plugin
 pycodestyle = "==2.8.0"

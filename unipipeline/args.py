@@ -28,7 +28,7 @@ def file(v: str) -> str:
 def json_data(v: str) -> Dict[str, Any]:
     try:
         return json.loads(v)  # type: ignore
-    except Exception as e:
+    except Exception as e:  # noqa
         raise ArgumentTypeError(f'INVALID JSON: {e}')
 
 

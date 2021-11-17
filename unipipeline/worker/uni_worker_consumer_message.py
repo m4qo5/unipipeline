@@ -48,7 +48,7 @@ class UniWorkerConsumerMessage(Generic[TInputMsgPayload]):
 
         try:
             self._message_payload_cache = self._message_input_payload_type(**self._meta.payload)  # type: ignore
-        except Exception as e:
+        except Exception as e:  # noqa
             raise UniPayloadParsingError(str(e))
 
         return self._message_payload_cache

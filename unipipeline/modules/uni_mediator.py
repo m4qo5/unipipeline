@@ -115,7 +115,7 @@ class UniMediator:
             elif isinstance(payload, dict):
                 try:
                     payload_msg = answ_message_type(**payload)  # type: ignore
-                except Exception as e:
+                except Exception as e:  # noqa
                     raise UniPayloadSerializationError(str(e))
             else:
                 raise UniPayloadSerializationError(f'output message has invalid type. {type(payload).__name__} was given')
@@ -149,7 +149,7 @@ class UniMediator:
                 payload_data = message_type(**payload).dict()  # type: ignore
             else:
                 raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
-        except Exception as e:
+        except Exception as e:  # noqa
             raise UniPayloadSerializationError(str(e))
 
         br = self.get_broker(wd.broker.name)

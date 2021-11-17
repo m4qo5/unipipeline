@@ -7,4 +7,4 @@ class MySuperCronWorker(UniWorker[UniCronMessage, None]):
     def handle_message(self, msg: UniWorkerConsumerMessage[UniCronMessage]) -> None:
         answ: UniAnswerMessage[EnderAfterCronAnswerMessage] = self.manager.get_answer_from('ender_after_cron_worker', EnderAfterCronInputMessage(value=f'cron>>>{msg.payload.task_name}'))
 
-        print(answ.payload.value)
+        print(answ.payload.value)  # noqa
