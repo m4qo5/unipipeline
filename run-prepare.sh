@@ -17,8 +17,8 @@ export PYTHONPATH=$CWD
 
 ./run-check.sh
 
-python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose=yes scaffold
-python3 ./unipipeline/main.py --config-file ./example/dag.yml --verbose=yes check
+python3 ./unipipeline/main.py --config-file ./example/dag-mem.yml --verbose=yes scaffold
+python3 ./unipipeline/main.py --config-file ./example/dag-mem.yml --verbose=yes check
 
 rm -rf ./build
 
