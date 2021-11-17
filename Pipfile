@@ -4,22 +4,30 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-jinja2 = "==3.*"
-pyyaml = "==5.*"
-kafka-python = "==2.*"
-pika = "==1.*"
-pydantic = "==1.*"
-crontab = "==0.23.*"
-psycopg2-binary = "==2.*"
-types-pyyaml = "==5.*"
+jinja2 = ">=3.0.3"
+pyyaml = ">=5.4.1"
+types-pyyaml = ">=5.4.12"
+pydantic = ">=1.8.2"
+psycopg2-binary = ">=2.9.2"
+pika = ">=1.2.0"
+crontab = ">=0.23.0"
+kafka-python = ">=2.0.2"
 
 [dev-packages]
 wheel = "*"
 twine = "*"
-setuptools = "*"
+setuptools = "==59.1.1 "
 mypy = "==0.910"
-pytest = "==6.2.4"
-flake8 = "==3.9.2"
+pytest = "==6.2.5"
+flake8 = "==4.0.1"
+flake8-blind-except = "==0.2.0"
+flake8-logging-format = "==0.6.0"
+flake8-self = "==0.2.2"
+flake8-super-call = "==1.0.0"
+flake8-bugbear = "==20.11.1"
+flake8-print = "==4.0.0"
+pep8-naming = "==0.12.1"  # flask plugin
+pycodestyle = "==2.8.0"
 
 [requires]
 python_version = "3.8"

@@ -33,17 +33,18 @@ setup(
     entry_points={
         "console_scripts": [
             'unipipeline=unipipeline.main:main',
-        ]
+        ],
     },
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
-        "jinja2==3.*",
-        "pyyaml==5.*",
-        "kafka-python==2.*",
-        "pika==1.*",
-        "pydantic==1.*",
-        "crontab==0.23.*",
-        "psycopg2-binary==2.*",
-    ]
+        "jinja2>=3.0.3",
+        "pyyaml>=5.4.12",
+        "types-pyyaml>=5.4.12",
+        "pydantic>=1.8.2",
+        "psycopg2-binary>=2.9.2",
+        "pika>=1.2.0",
+        "crontab>=0.23.0",
+        "kafka-python>=2.0.2",
+    ],
 )
