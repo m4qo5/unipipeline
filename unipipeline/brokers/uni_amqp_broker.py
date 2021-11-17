@@ -8,12 +8,12 @@ from pika import ConnectionParameters, PlainCredentials, BlockingConnection, Bas
 from pika.adapters.blocking_connection import BlockingChannel  # type: ignore
 from pika.exceptions import AMQPConnectionError, AMQPError, ConnectionClosedByBroker, AMQPChannelError  # type: ignore
 
-from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
-from unipipeline.errors.uni_answer_delay_error import UniAnswerDelayError
 from unipipeline.brokers.uni_broker import UniBroker
-from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
+from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
 from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
+from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_definition import UniDynamicDefinition
+from unipipeline.errors.uni_answer_delay_error import UniAnswerDelayError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
 from unipipeline.utils.uni_echo import UniEcho
@@ -68,11 +68,44 @@ class UniAmqpBrokerConsumer(NamedTuple):
     prefetch_count: int
 
 
+class AmqpChannelObj:
+    def __init__(self, name: str, ttl: int, broker: 'UniAmqpBroker') -> None:
+        self._name = name
+        self._broker = broker
+        self._ch: Optional[BlockingChannel] = None
+        self._ttl = ttl
+        self._ch_time: float = 0
+
+    def close_channel(self) -> None:
+        if self._ch is None or self._ch.is_closed:
+            return
+        self._ch.close()
+        self._broker.echo.log_info(f'channel {self._name} closed')
+
+    def get_channel(self, *, force_recreate: bool = False, force_current: bool = False) -> BlockingChannel:
+        if force_recreate and not force_current:
+            self.close_channel()
+            return self.get_channel(force_recreate=False)
+
+        if self._ch is None or self._ch.is_closed:
+            self._broker.connect()
+            conn = self._broker._connection
+            assert conn is not None
+            self._ch = conn.channel()
+            self._ch_time = time.time()
+            self._broker.echo.log_info(f'channel {self._name} established')
+        else:
+            if not force_current and (time.time() - self._ch_time > self._ttl):
+                return self.get_channel(force_recreate=True)
+            self._broker.echo.log_debug(f'channel {self._name} reused')
+        return self._ch
+
+
 class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
     config_type = UniAmqpBrokerConfig
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:
-        res = self._get_channel_publisher().queue_declare(queue=topic, passive=True)
+        res = self._ch_stat.get_channel().queue_declare(queue=topic, passive=True)
         return int(res.method.message_count)
 
     @classmethod
@@ -100,10 +133,13 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
         self._consumers: List[UniAmqpBrokerConsumer] = list()
 
         self._connection: Optional[BlockingConnection] = None
-        self._ch_publisher: Optional[BlockingChannel] = None
-        self._ch_answ_publisher: Optional[BlockingChannel] = None
-        self._ch_consumer: Optional[BlockingChannel] = None
-        self._ch_answ_consumer: Optional[BlockingChannel] = None
+
+        self._ch_initializer = AmqpChannelObj('initializer', int(self.config.heartbeat / 2), self)
+        self._ch_stat = AmqpChannelObj('stat', int(self.config.heartbeat / 2), self)
+        self._ch_publisher = AmqpChannelObj('publisher', int(self.config.heartbeat / 2), self)
+        self._ch_answ_publisher = AmqpChannelObj('answer_publisher', int(self.config.heartbeat / 2), self)
+        self._ch_consumer = AmqpChannelObj('consumer', int(self.config.heartbeat / 2), self)
+        self._ch_answ_consumer = AmqpChannelObj('answer_consumer', int(self.config.heartbeat / 2), self)
 
         self._consuming_started = False
         self._in_processing = False
@@ -155,7 +191,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             return
         self._interrupted = True
         if not self._in_processing:
-            self._get_channel_publisher().stop_consuming()
+            self._ch_consumer.get_channel(force_current=True).stop_consuming()
             self.close()
             self._consuming_started = False
             self.echo.log_info('consumption stopped')
@@ -168,47 +204,19 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
         except (*CONNECTION_ERRORS, AMQPError) as e:
             raise ConnectionError(str(e))
 
-    def _get_channel_publisher(self) -> BlockingChannel:
-        self.connect()
-        assert self._connection is not None
-        if self._ch_publisher is None or self._ch_publisher.is_closed:
-            self._ch_publisher = self._connection.channel()
-            self.echo.log_info('channel_publisher created')
-        return self._ch_publisher
-
-    def _get_channel_consumer(self) -> BlockingChannel:
-        self.connect()
-        assert self._connection is not None
-        if self._ch_consumer is None or self._ch_consumer.is_closed:
-            self._ch_consumer = self._connection.channel()
-            self.echo.log_info('channel_consumer created')
-        return self._ch_consumer
-
-    def _get_channel_answ_consumer(self) -> BlockingChannel:
-        self.connect()
-        assert self._connection is not None
-        if self._ch_answ_consumer is None or self._ch_answ_consumer.is_closed:
-            self._ch_answ_consumer = self._connection.channel()
-            self.echo.log_info('channel_answ_consumer created')
-        return self._ch_answ_consumer
-
-    def _get_channel_answ_publisher(self) -> BlockingChannel:
-        self.connect()
-        assert self._connection is not None
-        if self._ch_answ_publisher is None or self._ch_answ_publisher.is_closed:
-            self._ch_answ_publisher = self._connection.channel()
-            self.echo.log_info('channel_answ_publisher created')
-        return self._ch_answ_publisher
-
     def close(self) -> None:
+        if self._connection is None:
+            return
+
+        if self._connection.is_closed:
+            self._connection = None
+            return
+
         try:
-            if self._connection is not None and not self._connection.is_closed:
-                self._connection.close()
+            self._connection.close()
+            self._connection = None
         except AMQPError:
             pass
-
-        self._connection = None
-        self._ch_publisher = None
 
     def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         echo = self.echo.mk_child(f'topic[{consumer.topic}]')
@@ -245,16 +253,16 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
         if len(self._consumers) == 0:
             echo.log_warning('has no consumers to start consuming')
             return
-        with self._get_channel_consumer() as ch:
-            prefetch_count: int = self.config.prefetch
-            for c in self._consumers:
-                topic = self._init_topic(ch, self.config.exchange_name, c.queue)
-                ch.basic_consume(queue=topic, on_message_callback=c.on_message_callback, consumer_tag=c.consumer_tag)
-                echo.log_debug(f'added consumer {c.consumer_tag} on {self.config.exchange_name}->{topic}')
-                prefetch_count = max(prefetch_count, c.prefetch_count)
-            echo.log_info(f'consumers count is {len(self._consumers)}')
-            ch.basic_qos(prefetch_count=prefetch_count)
-            ch.start_consuming()  # blocking operation
+        ch = self._ch_consumer.get_channel()
+        prefetch_count: int = self.config.prefetch
+        for c in self._consumers:
+            topic = self._init_topic(ch, self.config.exchange_name, c.queue)
+            ch.basic_consume(queue=topic, on_message_callback=c.on_message_callback, consumer_tag=c.consumer_tag)
+            echo.log_debug(f'added consumer {c.consumer_tag} on {self.config.exchange_name}->{topic}')
+            prefetch_count = max(prefetch_count, c.prefetch_count)
+        echo.log_info(f'consumers count is {len(self._consumers)}')
+        ch.basic_qos(prefetch_count=prefetch_count)
+        ch.start_consuming()  # blocking operation
 
     def _retry_run(self, echo: UniEcho, fn: Callable[[], T]) -> T:
         retry_counter = 0
@@ -289,6 +297,7 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
         self._retry_run(echo, self._start_consuming)
 
     def _publish(self, ch: BlockingChannel, exchange: str, topic: str, meta: UniMessageMeta, props: BasicProperties) -> None:
+        self.echo.log_debug(f'message start publishing to {exchange}->{topic}')
         topic = self._init_topic(ch, exchange, topic)
         ch.basic_publish(
             exchange=exchange,
@@ -296,37 +305,38 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             body=self.serialize_message_body(meta),
             properties=props
         )
-        self.echo.log_debug(f'sent message to {exchange}->{topic}')
+        self.echo.log_debug(f'message published to {exchange}->{topic}')
 
     def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
-        with self._get_channel_publisher() as ch:
-            echo = self.echo.mk_child('publish')
-            for meta in meta_list:  # TODO: package sending
-                headers = {
-                    BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.compression,
-                    # **({'x-message-ttl': ttl_s * 1000} if ttl_s is not None else {}),
-                }
-                if meta.need_answer:
-                    assert meta.answer_params is not None
-                    props = BasicProperties(
-                        content_type=self.definition.content_type,
-                        content_encoding='utf-8',
-                        reply_to=f'{meta.answer_params.topic}.{meta.answer_params.id}',
-                        correlation_id=str(meta.id),
-                        delivery_mode=2 if self.config.persistent_message else 0,
-                        headers=headers,
-                    )
-                else:
-                    props = BasicProperties(
-                        content_type=self.definition.content_type,
-                        content_encoding='utf-8',
-                        delivery_mode=2 if self.config.persistent_message else 0,
-                        headers=headers,
-                    )
-                self._retry_run(echo, functools.partial(self._publish, ch=ch, exchange=self.config.exchange_name, topic=topic, meta=meta, props=props))
+        ch = self._ch_publisher.get_channel()
+        echo = self.echo.mk_child('publish')
+        for meta in meta_list:  # TODO: package sending
+            headers = {
+                BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.compression,
+                # **({'x-message-ttl': ttl_s * 1000} if ttl_s is not None else {}),
+            }
+            if meta.need_answer:
+                assert meta.answer_params is not None
+                props = BasicProperties(
+                    content_type=self.definition.content_type,
+                    content_encoding='utf-8',
+                    reply_to=f'{meta.answer_params.topic}.{meta.answer_params.id}',
+                    correlation_id=str(meta.id),
+                    delivery_mode=2 if self.config.persistent_message else 0,
+                    headers=headers,
+                )
+            else:
+                props = BasicProperties(
+                    content_type=self.definition.content_type,
+                    content_encoding='utf-8',
+                    delivery_mode=2 if self.config.persistent_message else 0,
+                    headers=headers,
+                )
+            self._retry_run(echo, functools.partial(self._publish, ch=ch, exchange=self.config.exchange_name, topic=topic, meta=meta, props=props))
+        self.echo.log_info(f'{list(meta_list)} messages published to {self.config.exchange_name}->{topic}')
 
     def _get_answ(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
-        ch = self._get_channel_answ_consumer()
+        ch = self._ch_answ_consumer.get_channel(force_recreate=True)
         topic = self._init_topic(ch, self.config.answer_exchange_name, f'{answer_params.topic}.{answer_params.id}')
 
         started = time.time()
@@ -363,5 +373,5 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 # **({'x-message-ttl': ttl_s * 1000} if ttl_s is not None else {}),
             },
         )
-        with self._get_channel_answ_publisher() as ch:
-            self._retry_run(echo, functools.partial(self._publish, ch=ch, exchange=self.config.answer_exchange_name, topic=f'{answer_params.topic}.{answer_params.id}', meta=meta, props=props))
+        ch = self._ch_answ_publisher.get_channel()
+        self._retry_run(echo, functools.partial(self._publish, ch=ch, exchange=self.config.answer_exchange_name, topic=f'{answer_params.topic}.{answer_params.id}', meta=meta, props=props))
