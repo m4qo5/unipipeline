@@ -1,5 +1,5 @@
 from unipipeline.answer.uni_answer_message import UniAnswerMessage
-from unipipeline.brokers.uni_amqp_broker import UniAmqpBroker, UniAmqpBrokerMessageManager, UniAmqpBrokerConfig
+from unipipeline.brokers.uni_amqp_pika_broker import UniAmqpPikaBroker, UniAmqpPikaBrokerMessageManager, UniAmqpPikaBrokerConfig
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
 from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
@@ -71,9 +71,9 @@ __all__ = (
     "UniBrokerConsumer",
     "UniBrokerDefinition",
 
-    "UniAmqpBroker",
-    "UniAmqpBrokerConfig",
-    "UniAmqpBrokerMessageManager",
+    "UniAmqpPikaBroker",
+    "UniAmqpPikaBrokerConfig",
+    "UniAmqpPikaBrokerMessageManager",
 
     "UniLogBroker",
 

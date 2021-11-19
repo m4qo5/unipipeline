@@ -1,7 +1,7 @@
-from unipipeline import UniAmqpBroker
+from unipipeline import UniAmqpPikaBroker
 
 
-class RmqBroker(UniAmqpBroker):
+class RmqBroker(UniAmqpPikaBroker):
 
     @classmethod
     def get_connection_uri(cls) -> str:

@@ -31,7 +31,7 @@ TMessage = TypeVar('TMessage', bound=UniMessage)
 T = TypeVar('T')
 
 
-class UniAmqpBrokerMessageManager(UniBrokerMessageManager):
+class UniAmqpPikaBrokerMessageManager(UniBrokerMessageManager):
 
     def __init__(self, channel: BlockingChannel, method_frame: spec.Basic.Deliver) -> None:
         self._channel = channel
@@ -48,7 +48,7 @@ class UniAmqpBrokerMessageManager(UniBrokerMessageManager):
         self._channel.basic_ack(delivery_tag=self._method_frame.delivery_tag)
 
 
-class UniAmqpBrokerConfig(UniDynamicDefinition):
+class UniAmqpPikaBrokerConfig(UniDynamicDefinition):
     exchange_name: str = "communication"
     answer_exchange_name: str = "communication_answer"
     heartbeat: int = 600
@@ -61,15 +61,15 @@ class UniAmqpBrokerConfig(UniDynamicDefinition):
     persistent_message: bool = True
 
 
-class UniAmqpBrokerConsumer(NamedTuple):
+class UniAmqpPikaBrokerConsumer(NamedTuple):
     queue: str
     on_message_callback: Callable[[BlockingChannel, spec.Basic.Deliver, BasicProperties, bytes], None]
     consumer_tag: str
     prefetch_count: int
 
 
-class AmqpChannelObj:
-    def __init__(self, name: str, ttl: int, broker: 'UniAmqpBroker') -> None:
+class AmqpPikaChannelObj:
+    def __init__(self, name: str, ttl: int, broker: 'UniAmqpPikaBroker') -> None:
         self._name = name
         self._broker = broker
         self._ch: Optional[BlockingChannel] = None
@@ -101,8 +101,8 @@ class AmqpChannelObj:
         return self._ch
 
 
-class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
-    config_type = UniAmqpBrokerConfig
+class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
+    config_type = UniAmqpPikaBrokerConfig
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:
         res = self._ch_stat.get_channel().queue_declare(queue=topic, passive=True)
@@ -130,16 +130,16 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
             credentials=PlainCredentials(url_params_pr.username, url_params_pr.password, erase_on_connect=False),
         )
 
-        self._consumers: List[UniAmqpBrokerConsumer] = list()
+        self._consumers: List[UniAmqpPikaBrokerConsumer] = list()
 
         self._connection: Optional[BlockingConnection] = None
 
-        self._ch_initializer = AmqpChannelObj('initializer', int(self.config.heartbeat / 2), self)
-        self._ch_stat = AmqpChannelObj('stat', int(self.config.heartbeat / 2), self)
-        self._ch_publisher = AmqpChannelObj('publisher', int(self.config.heartbeat / 2), self)
-        self._ch_answ_publisher = AmqpChannelObj('answer_publisher', int(self.config.heartbeat / 2), self)
-        self._ch_consumer = AmqpChannelObj('consumer', int(self.config.heartbeat / 2), self)
-        self._ch_answ_consumer = AmqpChannelObj('answer_consumer', int(self.config.heartbeat / 2), self)
+        self._ch_initializer = AmqpPikaChannelObj('initializer', int(self.config.heartbeat / 2), self)
+        self._ch_stat = AmqpPikaChannelObj('stat', int(self.config.heartbeat / 2), self)
+        self._ch_publisher = AmqpPikaChannelObj('publisher', int(self.config.heartbeat / 2), self)
+        self._ch_answ_publisher = AmqpPikaChannelObj('answer_publisher', int(self.config.heartbeat / 2), self)
+        self._ch_consumer = AmqpPikaChannelObj('consumer', int(self.config.heartbeat / 2), self)
+        self._ch_answ_consumer = AmqpPikaChannelObj('answer_consumer', int(self.config.heartbeat / 2), self)
 
         self._consuming_started = False
         self._in_processing = False
@@ -233,13 +233,13 @@ class UniAmqpBroker(UniBroker[UniAmqpBrokerConfig]):
                 unwrapped=consumer.unwrapped,
             )
 
-            manager = UniAmqpBrokerMessageManager(channel, method_frame)
+            manager = UniAmqpPikaBrokerMessageManager(channel, method_frame)
             consumer.message_handler(meta, manager)
             self._in_processing = False
             if self._interrupted:
                 self._end_consuming()
 
-        self._consumers.append(UniAmqpBrokerConsumer(
+        self._consumers.append(UniAmqpPikaBrokerConsumer(
             queue=consumer.topic,
             on_message_callback=consumer_wrapper,
             consumer_tag=consumer.id,
