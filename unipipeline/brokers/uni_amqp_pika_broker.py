@@ -311,10 +311,12 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
         ch = self._ch_publisher.get_channel()
         echo = self.echo.mk_child('publish')
         for meta in meta_list:  # TODO: package sending
-            headers = {
-                BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.compression,
-                # **({'x-message-ttl': ttl_s * 1000} if ttl_s is not None else {}),
-            }
+            headers = dict()
+            if self.definition.compression is not None:
+                headers[BASIC_PROPERTIES__HEADER__COMPRESSION_KEY] = self.definition.compression
+            if meta.ttl_s:
+                headers['x-message-ttl'] = str(meta.ttl_s * 1000)
+
             if meta.need_answer:
                 assert meta.answer_params is not None
                 props = BasicProperties(
@@ -368,10 +370,6 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
             content_type=self.definition.content_type,
             content_encoding='utf-8',
             delivery_mode=1,
-            headers={
-                BASIC_PROPERTIES__HEADER__COMPRESSION_KEY: self.definition.compression,
-                # **({'x-message-ttl': ttl_s * 1000} if ttl_s is not None else {}),
-            },
         )
         ch = self._ch_answ_publisher.get_channel()
         self._retry_run(echo, functools.partial(self._publish, ch=ch, exchange=self.config.answer_exchange_name, topic=f'{answer_params.topic}.{answer_params.id}', meta=meta, props=props))

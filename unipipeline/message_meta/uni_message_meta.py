@@ -23,6 +23,8 @@ class UniMessageMeta(BaseModel):
 
     worker_creator: Optional[str]  # name of worker who created it
 
+    ttl_s: Optional[int] = None
+
     class Config:
         frozen = True
         extra = 'forbid'
