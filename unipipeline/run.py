@@ -2,8 +2,8 @@ import logging
 import os
 import sys
 
-from unipipeline import Uni
 from unipipeline.args import CMD_INIT, CMD_CHECK, CMD_CRON, CMD_PRODUCE, CMD_CONSUME, parse_args, CMD_SCAFFOLD
+from unipipeline.modules.uni import Uni
 
 
 def run_check(u: Uni, args) -> None:  # type: ignore
