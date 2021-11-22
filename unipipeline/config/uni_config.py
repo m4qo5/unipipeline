@@ -247,7 +247,7 @@ class UniConfig:
         result = {
             self.APPLICATION_JSON: UniCodecDefinition(
                 name=self.APPLICATION_JSON,
-                encoder_type=UniModuleDefinition.parse("unipipeline:complex_serializer_json_dumps"),
+                encoder_type=UniModuleDefinition.parse("unipipeline.utils.complex_serializer:complex_serializer_json_dumps"),
                 decoder_type=UniModuleDefinition.parse("json:loads"),
                 dynamic_props_={}
             ),
