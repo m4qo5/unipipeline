@@ -13,7 +13,7 @@ TAnswMessage = TypeVar('TAnswMessage', bound=UniMessage)
 
 
 class UniWorkerConsumerManager:
-    def __init__(self, send: Callable[[Union[Type['UniWorker[Any, Any]'], str], Union[Dict[str, Any], UniMessage], bool, bool], Optional[UniAnswerMessage[UniMessage]]]) -> None:
+    def __init__(self, send: Callable[[Union[Type['UniWorker[Any, Any]'], str], Union[Dict[str, Any], UniMessage]], Optional[UniAnswerMessage[UniMessage]]]) -> None:
         self._send = send
         self._id = uuid4()
 
@@ -28,7 +28,7 @@ class UniWorkerConsumerManager:
         raise NotImplementedError(f'{type(self).__name__}.exit was not implemented')  # TODO
 
     def get_answer_from(self, worker: Union[Type['UniWorker[TInputMessage, TAnswMessage]'], str], data: Union[Dict[str, Any], TInputMessage]) -> UniAnswerMessage[TAnswMessage]:
-        return self._send(worker, data, False, True)  # type: ignore
+        return self._send(worker, data, alone=False, need_answer=True)  # type: ignore
 
     def send_to(self, worker: Union[Type['UniWorker[Any, Any]'], str], data: Union[Dict[str, Any], UniMessage], alone: bool = False) -> None:
-        self._send(worker, data, alone, False)
+        self._send(worker, data, alone=alone, need_answer=False)  # type: ignore

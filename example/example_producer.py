@@ -16,5 +16,5 @@ u.init_producer_worker('input_worker')
 u.initialize()
 
 for i in range(args.produce_count):
-    u.send_to("input_worker", dict(value=i))
+    u.send_to("input_worker", dict(value=i, some="Привет World"))
     sleep(1)

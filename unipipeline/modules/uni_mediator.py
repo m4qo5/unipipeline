@@ -93,7 +93,7 @@ class UniMediator:
 
         return self._message_types[name]
 
-    def answer_to(self, worker_name: str, req_meta: UniMessageMeta, payload: Optional[Union[Dict[str, Any], UniMessageMeta, UniMessage]], unwrapped: bool) -> None:
+    def answer_to(self, worker_name: str, req_meta: UniMessageMeta, payload: Optional[Union[Dict[str, Any], UniMessageMeta, UniMessage]], *, unwrapped: bool) -> None:
         wd = self._config.workers[worker_name]
         if not wd.need_answer:
             if payload is not None:
@@ -132,9 +132,10 @@ class UniMediator:
         self,
         worker_name: str,
         payload: Union[Dict[str, Any], UniMessage],
+        *,
         parent_meta: Optional[UniMessageMeta] = None,
         answer_params: Optional[UniAnswerParams] = None,
-        alone: bool = False
+        alone: bool = False,
     ) -> Optional[UniAnswerMessage[UniMessage]]:
         if worker_name not in self._worker_initialized_list:
             raise OverflowError(f'worker {worker_name} was not initialized')
@@ -391,7 +392,7 @@ class UniMediator:
                     self._brokers_with_topics_initialized[bn].answer_topics.add(topic)
             self._brokers_with_topics_to_init = dict()
 
-    def get_worker_consumer(self, worker: Union[Type['UniWorker[Any, Any]'], str], singleton: bool = True) -> UniWorkerConsumer[Any, Any]:
+    def get_worker_consumer(self, worker: Union[Type['UniWorker[Any, Any]'], str], *, singleton: bool = True) -> UniWorkerConsumer[Any, Any]:
         wd = self._config.get_worker_definition(worker)
         if wd.marked_as_external:
             raise OverflowError(f'worker "{worker}" is external. you could not get it')
