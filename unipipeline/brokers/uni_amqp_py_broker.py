@@ -1,5 +1,4 @@
 import functools
-import logging
 import time
 import urllib.parse
 from time import sleep
@@ -29,7 +28,7 @@ RECOVERABLE_ERRORS = (AqmpConnectionError, RecoverableChannelError)
 
 TMessage = TypeVar('TMessage', bound=UniMessage)
 
-logging.getLogger('amqp').setLevel(logging.DEBUG)
+# logging.getLogger('amqp').setLevel(logging.DEBUG)
 
 T = TypeVar('T')
 
