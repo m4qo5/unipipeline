@@ -117,6 +117,10 @@ class Uni:
         except UniPayloadSerializationError as e:
             self.echo.exit_with_error(f'invalid props in message: {e}')
 
+    def exit(self) -> None:
+        self.echo.log_info('exit!')
+        self._mediator.exit()
+
     def start_consuming(self) -> None:
         try:
             self._mediator.start_consuming()

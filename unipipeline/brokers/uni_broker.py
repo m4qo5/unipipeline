@@ -1,6 +1,7 @@
 from typing import Set, List, TYPE_CHECKING, Generic, TypeVar, Type, Optional, Dict, Any
 
 from pydantic import ValidationError
+from atexit import register as on_exit_app
 
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
@@ -27,6 +28,8 @@ class UniBroker(Generic[TConf]):
             self._uni_conf = self._uni_definition.configure_dynamic(self.config_type)  # type: ignore
         except ValidationError as e:
             self._uni_echo.exit_with_error(str(e))
+
+        on_exit_app(self.close)
 
     @property
     def config(self) -> TConf:

@@ -45,6 +45,7 @@ class UniMediator:
 
         self._message_types: Dict[str, Type[UniMessage]] = dict()
 
+        self._connected_brokers: List[UniBroker[Any]] = list()
         self._brokers_with_active_consumption: List[UniBroker[Any]] = list()
 
         self._decompression_modules: Dict[str, Callable[[bytes], bytes]] = dict()
@@ -192,6 +193,11 @@ class UniMediator:
             for cj in jobs:
                 cj.send()
             sleep(1.1)  # delay for correct next iteration
+
+    def exit(self) -> None:
+        for b in self._connected_brokers:
+            b.close()
+        self._connected_brokers = list()
 
     def start_consuming(self) -> None:
         brokers = set()
@@ -416,6 +422,7 @@ class UniMediator:
             try:
                 br.connect()
                 self.echo.log_info(f'wait_for_broker_connection :: broker {br.definition.name} connected')
+                self._connected_brokers.append(br)
                 return br
             except ConnectionError as e:
                 self.echo.log_info(f'wait_for_broker_connection :: broker {br.definition.name} retry to connect [{try_count}/{br.definition.retry_max_count}] : {e}')

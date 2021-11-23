@@ -3,17 +3,11 @@ import threading
 import time
 import urllib.parse
 from time import sleep
-from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING, Dict
+from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING, Dict, Tuple, Any, cast, Type
 from urllib.parse import urlparse
 
-
 import amqp  # type: ignore
-from amqp.exceptions import ConnectionError as AqmpConnectionError, RecoverableChannelError, AMQPError  # type: ignore
-
-# import logging
-# logging.getLogger('amqp').setLevel(logging.DEBUG)
-# logging.getLogger('amqp.connection.Connection.heartbeat_tick').setLevel(logging.DEBUG)
-# logging.basicConfig(level=logging.DEBUG)
+from amqp.exceptions import ConnectionError as AqmpConnectionError, RecoverableChannelError, AMQPError, ConnectionForced  # type: ignore
 
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
@@ -24,6 +18,11 @@ from unipipeline.errors.uni_answer_delay_error import UniAnswerDelayError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
 from unipipeline.utils.uni_echo import UniEcho
+
+import logging
+logging.getLogger('amqp').setLevel(logging.DEBUG)
+logging.getLogger('amqp.connection.Connection.heartbeat_tick').setLevel(logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
@@ -63,7 +62,7 @@ class UniPyPikaBrokerMessageManager(UniBrokerMessageManager):
 class UniAmqpPyBrokerConfig(UniDynamicDefinition):
     exchange_name: str = "communication"
     answer_exchange_name: str = "communication_answer"
-    heartbeat: int = 60
+    heartbeat: int = 10
     blocked_connection_timeout: int = 300
     prefetch: int = 1
     retry_max_count: int = 100
@@ -97,6 +96,44 @@ class UniAmqpPyBrokerConsumer(NamedTuple):
     on_message_callback: Callable[[amqp.Channel, 'amqp.Message'], None]
     consumer_tag: str
     prefetch_count: int
+
+
+TFn = TypeVar('TFn', bound=Callable[..., Any])
+
+
+def retryable(
+    fn: TFn,
+    echo: UniEcho,
+    *,
+    retryable_errors: Tuple[Type[Exception], ...],
+    on_retries_ends: Optional[Callable[[], None]] = None,
+    retry_max_count: int = 3,
+    retry_delay_s: int = 1,
+) -> TFn:
+    max_retries = max(retry_max_count, 1)
+    retry_threshold_s = retry_delay_s * max_retries
+    assert retry_delay_s >= 0
+
+    @functools.wraps(fn)
+    def fn_wrapper(*args: Any, **kwargs: Any) -> Any:
+        retry_counter = 0
+        while True:
+            starts_at = time.time()
+            try:
+                return fn(*args, **kwargs)
+            except retryable_errors as e:
+                echo.log_warning(f'found error :: {e}')
+                if int(time.time() - starts_at) >= retry_threshold_s:
+                    retry_counter = 0
+                if retry_counter >= max_retries:
+                    if on_retries_ends is not None:
+                        on_retries_ends()
+                    return
+                retry_counter += 1
+                if retry_delay_s > 0:
+                    sleep(retry_delay_s)
+                echo.log_warning(f'retry {retry_counter}/{max_retries} :: {e}')
+    return cast(TFn, fn_wrapper)
 
 
 class AmqpPyChannelObj:
@@ -164,7 +201,54 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
         self._initialized_exchanges: Set[str] = set()
         self._initialized_topics: Set[str] = set()
+
+        def raise_connection_err() -> None:
+            raise ConnectionError()
+
+        self._retry_publish = retryable(
+            self._publish,
+            self.echo.mk_child('publishing'),
+            retry_max_count=self.config.retry_max_count,
+            retry_delay_s=self.config.retry_delay_s,
+            retryable_errors=RECOVERABLE_ERRORS,
+            on_retries_ends=raise_connection_err,
+        )
+        self._retry_publish_answ = retryable(
+            self._publish,
+            self.echo.mk_child('publishing_answer'),
+            retry_max_count=self.config.retry_max_count,
+            retry_delay_s=self.config.retry_delay_s,
+            retryable_errors=RECOVERABLE_ERRORS,
+            on_retries_ends=raise_connection_err,
+        )
+        self._retry_get_answer = retryable(
+            self._get_answ,
+            self.echo.mk_child('get_answer'),
+            retry_max_count=self.config.retry_max_count,
+            retry_delay_s=self.config.retry_delay_s,
+            retryable_errors=RECOVERABLE_ERRORS,
+            on_retries_ends=raise_connection_err,
+        )
+        self._retry_consuming = retryable(
+            self._consuming,
+            self.echo.mk_child('consuming'),
+            retry_max_count=self.config.retry_max_count,
+            retry_delay_s=self.config.retry_delay_s,
+            retryable_errors=RECOVERABLE_ERRORS,
+            on_retries_ends=raise_connection_err,
+        )
+
+        self._heartbeat_enabled = False
         self._heartbeat_lock = threading.Lock()
+        self._heartbeat_delay = 1
+        self._heartbeat_thread: threading.Thread = threading.Thread(
+            name=f'broker-{self.definition.name}-heartbeat',
+            target=self._heartbeat_tick_loop,
+            daemon=False,
+            kwargs=dict(
+                delay_s=self._heartbeat_delay,
+            )
+        )
 
     @property
     def connected_connection(self) -> amqp.Connection:
@@ -172,45 +256,39 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         assert self._connection is not None
         return self._connection
 
-    def _init_exchange(self, ch: amqp.Channel, exchange: str) -> None:
-        if exchange in self._initialized_topics:
-            return
-        self._initialized_exchanges.add(exchange)
-        ch.exchange_declare(
-            exchange=exchange,
-            type="direct",
-            passive=False,
-            durable=True,
-            auto_delete=False,
-        )
-        self.echo.log_info(f'exchange "{exchange}" initialized')
-
     def _init_topic(self, ch: amqp.Channel, exchange: str, topic: str) -> str:
         q_key = f'{exchange}->{topic}'
         if q_key in self._initialized_topics:
             return topic
-        self._initialized_topics.add(q_key)
+        with self._heartbeat_lock:
+            self._initialized_topics.add(q_key)
 
-        self._init_exchange(ch, exchange)
+            if exchange not in self._initialized_topics:
+                self._initialized_exchanges.add(exchange)
+                ch.exchange_declare(
+                    exchange=exchange,
+                    type="direct",
+                    passive=False,
+                    durable=True,
+                    auto_delete=False,
+                )
+                self.echo.log_info(f'exchange "{exchange}" initialized')
 
-        if exchange == self.config.exchange_name:
-            ch.queue_declare(queue=topic, durable=True, auto_delete=False, passive=False)
-        elif exchange == self.config.answer_exchange_name:
-            ch.queue_declare(queue=topic, durable=False, auto_delete=True, exclusive=False, passive=False)
-        else:
-            raise TypeError(f'invalid exchange name "{exchange}"')
+            if exchange == self.config.exchange_name:
+                ch.queue_declare(queue=topic, durable=True, auto_delete=False, passive=False)
+            elif exchange == self.config.answer_exchange_name:
+                ch.queue_declare(queue=topic, durable=False, auto_delete=True, exclusive=False, passive=False)
+            else:
+                raise TypeError(f'invalid exchange name "{exchange}"')
 
-        ch.queue_bind(queue=topic, exchange=self.config.exchange_name, routing_key=topic)
-        self.echo.log_info(f'queue "{q_key}" initialized')
+            ch.queue_bind(queue=topic, exchange=self.config.exchange_name, routing_key=topic)
+            self.echo.log_info(f'queue "{q_key}" initialized')
         return topic
 
     def initialize(self, topics: Set[str], answer_topic: Set[str]) -> None:
         return
 
     def stop_consuming(self) -> None:
-        self._end_consuming()
-
-    def _end_consuming(self) -> None:
         if not self._consuming_enabled:
             return
         self._interrupted = True
@@ -228,16 +306,22 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                     userid=self.parsed_connection_uri.username,
                     heartbeat=self.config.heartbeat,
                 )
-                self._connection.connect()
+                with self._heartbeat_lock:
+                    self._connection.connect()
                 self.echo.log_info('connected')
+                self._start_heartbeat_tick()
         except RECOVERABLE_ERRORS as e:
             raise ConnectionError(str(e))
 
     def close(self) -> None:
+        self.echo.log_info('closing')
+        self._stop_heartbeat_tick()
         if self._connection is None:
+            self.echo.log_info('already closed')
             return
 
         if not self._connection.connected:
+            self.echo.log_info('already closed')
             self._connection = None
             return
 
@@ -246,6 +330,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             self._connection = None
         except AMQPError:
             pass
+        self.echo.log_info('closed')
 
     def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         echo = self.echo.mk_child(f'topic[{consumer.topic}]')
@@ -267,7 +352,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
             self._in_processing = False
             if self._interrupted:
-                self._end_consuming()
+                self.stop_consuming()
 
         self._consumers.append(UniAmqpPyBrokerConsumer(
             queue=consumer.topic,
@@ -278,16 +363,55 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
         echo.log_info(f'added consumer :: tag="{consumer.id}" group_id={consumer.group_id}')
 
-    def _timer_consumer_heartbeat(self) -> None:
-        if self.config.heartbeat <= 0 or not self._consuming_enabled:
+    def _stop_heartbeat_tick(self) -> None:
+        if not self._heartbeat_enabled:
             return
-        assert self._connection is not None
-        threading.Timer(max(self._connection.heartbeat / 5, 1.0), self._timer_consumer_heartbeat).start()
-        if self._heartbeat_lock.locked():
-            return
-        self._connection.heartbeat_tick(rate=5)
+        with self._heartbeat_lock:
+            self._heartbeat_enabled = False
+            if self._heartbeat_thread.is_alive():
+                self._heartbeat_thread.join()
 
-    def _start_consuming(self) -> None:
+    def _start_heartbeat_tick(self) -> None:
+        if self._heartbeat_enabled:
+            return
+        self._heartbeat_enabled = self.config.heartbeat > 0
+
+        if not self._heartbeat_enabled:
+            self.echo.log_info('heartbeat disabled')
+            return
+
+        self.echo.log_info(f'heartbeat enabled :: delay {self._heartbeat_delay}s')
+        self._heartbeat_enabled = True
+        self._heartbeat_thread.start()
+
+    def _heartbeat_tick_loop(self, delay_s: int) -> None:
+        ping_rate = 10
+        delay_part_s = delay_s / ping_rate
+        counter = 0
+        while self._heartbeat_enabled:
+            counter += 1
+            sleep(delay_part_s)
+            if counter != ping_rate:
+                continue
+            counter = 0
+            with self._heartbeat_lock:
+                try:
+                    self._connection.heartbeat_tick()
+                except ConnectionForced as e:
+                    self.echo.log_error(str(e))
+                    self._heartbeat_enabled = False
+                    return
+                except RECOVERABLE_ERRORS as e:
+                    self.echo.log_warning(f'ignored heartbeat error :: {e}')
+                    continue
+                except AMQPError as e:
+                    self.echo.log_error(str(e))
+                    self._heartbeat_enabled = False
+                    return
+                else:
+                    self.echo.log_debug('heartbeat tick')
+
+    def _consuming(self) -> None:
         echo = self.echo.mk_child('consuming')
         if len(self._consumers) == 0:
             echo.log_warning('has no consumers to start consuming')
@@ -303,52 +427,25 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
         echo.log_info(f'starting consuming :: consumers_count={len(self._consumers)}')
 
-        self._timer_consumer_heartbeat()
         while self._consuming_enabled:  # blocking operation
             echo.log_debug('wait for next message ...')
             conn.drain_events()
 
-    def _retry_run(self, echo: UniEcho, fn: Callable[[], T]) -> T:
-        retry_counter = 0
-        max_retries = max(self.config.retry_max_count, 1)
-        retry_threshold_s = self.config.retry_delay_s * max_retries
-        while True:
-            start = time.time()
-            try:
-                return fn()
-            except RECOVERABLE_ERRORS as e:
-                echo.log_error(f'connection closed {e}')
-                if int(time.time() - start) >= retry_threshold_s:
-                    retry_counter = 0
-                if retry_counter >= max_retries:
-                    raise ConnectionError()
-                retry_counter += 1
-                sleep(self.config.retry_delay_s)
-                echo.log_warning(f'retry {retry_counter}/{max_retries} :: {e}')
-            except AMQPError as e:
-                echo.log_warning(f"Caught a channel error: {e}, stopping...")
-                raise
-
     def start_consuming(self) -> None:
-        echo = self.echo.mk_child('consuming')
         if self._consuming_enabled:
-            echo.log_warning('consuming has already started. ignored')
             return
         self._consuming_enabled = True
         self._interrupted = False
         self._in_processing = False
 
-        self._retry_run(echo, self._start_consuming)
+        self._retry_consuming()
 
     def _publish(self, ch: amqp.Channel, exchange: str, topic: str, meta: UniMessageMeta, props: UniAmqpPyBrokerMsgProps) -> None:
         self.echo.log_debug(f'message start publishing to {exchange}->{topic}')
         topic = self._init_topic(ch, exchange, topic)
         with self._heartbeat_lock:
             ch.basic_publish(
-                amqp.Message(
-                    body=self.serialize_message_body(meta),
-                    **props._asdict(),
-                ),
+                amqp.Message(body=self.serialize_message_body(meta), **props._asdict()),
                 exchange=exchange,
                 routing_key=topic,
                 mandatory=self.config.mandatory_publishing,
@@ -358,7 +455,6 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
     def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
         ch = self._ch_publisher.get_channel()
-        echo = self.echo.mk_child('publish')
         for meta in meta_list:  # TODO: package sending
             headers = dict()
             if self.definition.compression is not None:
@@ -383,7 +479,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                     delivery_mode=2 if self.config.persistent_message else 0,
                     application_headers=headers,
                 )
-            self._retry_run(echo, functools.partial(self._publish, ch=ch, exchange=self.config.exchange_name, topic=topic, meta=meta, props=props))
+            self._retry_publish(ch, exchange=self.config.exchange_name, topic=topic, meta=meta, props=props)
         self.echo.log_info(f'{list(meta_list)} messages published to {self.config.exchange_name}->{topic}')
 
     def _get_answ(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
@@ -410,15 +506,13 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             )
 
     def get_answer(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
-        echo = self.echo.mk_child('get_answer')
-        return self._retry_run(echo, functools.partial(self._get_answ, answer_params=answer_params, max_delay_s=max_delay_s, unwrapped=unwrapped))
+        return self._retry_get_answer(answer_params=answer_params, max_delay_s=max_delay_s, unwrapped=unwrapped)
 
     def publish_answer(self, answer_params: UniAnswerParams, meta: UniMessageMeta) -> None:
-        echo = self.echo.mk_child('publish_answer')
         props = UniAmqpPyBrokerMsgProps(
             content_type=self.definition.content_type,
             content_encoding='utf-8',
             delivery_mode=1,
         )
         ch = self._ch_answ_publisher.get_channel()
-        self._retry_run(echo, functools.partial(self._publish, ch=ch, exchange=self.config.answer_exchange_name, topic=f'{answer_params.topic}.{answer_params.id}', meta=meta, props=props))
+        self._retry_publish_answ(ch=ch, exchange=self.config.answer_exchange_name, topic=f'{answer_params.topic}.{answer_params.id}', meta=meta, props=props)
