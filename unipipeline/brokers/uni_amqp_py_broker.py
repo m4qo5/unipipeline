@@ -309,7 +309,6 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                 with self._heartbeat_lock:
                     self._connection.connect()
                 self.echo.log_info('connected')
-                self._start_heartbeat_tick()
         except RECOVERABLE_ERRORS as e:
             raise ConnectionError(str(e))
 
@@ -427,9 +426,11 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
         echo.log_info(f'starting consuming :: consumers_count={len(self._consumers)}')
 
-        while self._consuming_enabled:  # blocking operation
+        self._start_heartbeat_tick()
+        while self._consuming_enabled:
             echo.log_debug('wait for next message ...')
             conn.drain_events()
+        self._stop_heartbeat_tick()
 
     def start_consuming(self) -> None:
         if self._consuming_enabled:
