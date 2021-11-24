@@ -43,6 +43,6 @@ class UniLogBroker(UniBroker[UniDynamicDefinition]):
     def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         self._logger.info(f'{self._logging_prefix} add consumer "{consumer.id}" to topic "{consumer.topic}" :: {consumer.group_id}')
 
-    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
+    def publish(self, topic: str, meta_list: List[UniMessageMeta], alone: bool = False) -> None:
         for meta in meta_list:
             self._logger.info(f'{self._logging_prefix} publish {json.dumps(meta.dict())}')

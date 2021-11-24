@@ -239,7 +239,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             retryable_errors=RECOVERABLE_ERRORS,
             on_retries_ends=raise_connection_err,
         )
-        self.get_topic_approximate_messages_count = retryable(
+        self.get_topic_approximate_messages_count = retryable(  # type: ignore
             self.get_topic_approximate_messages_count,
             self.echo.mk_child('get_topic_approximate_messages_count'),
             retry_max_count=self.config.retry_max_count,
@@ -271,7 +271,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             retryable_errors=RECOVERABLE_ERRORS,
             on_retries_ends=raise_connection_err,
         )
-        self._ack = retryable(
+        self._ack = retryable(  # type: ignore
             self._ack,
             self.echo.mk_child('ack'),
             retry_max_count=self.config.retry_max_count,
@@ -279,7 +279,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             retryable_errors=RECOVERABLE_ERRORS,
             on_retries_ends=raise_connection_err,
         )
-        self._reject = retryable(
+        self._reject = retryable(  # type: ignore
             self._reject,
             self.echo.mk_child('reject'),
             retry_max_count=self.config.retry_max_count,
@@ -369,13 +369,13 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             pass
         self.echo.log_info('closed')
 
-    def _ack(self, ch: amqp.Channel, delivery_tag: str):
+    def _ack(self, ch: amqp.Channel, delivery_tag: str) -> None:
         if not ch.is_open or ch.is_closing:
             ch = self.connected_connection.channel()
         ch.basic_ack(delivery_tag=delivery_tag)
         self.echo.log_info(f'message "{delivery_tag}" ACK')
 
-    def _reject(self, ch: amqp.Channel, delivery_tag: str):
+    def _reject(self, ch: amqp.Channel, delivery_tag: str) -> None:
         if not ch.is_open or ch.is_closing:
             ch = self.connected_connection.channel()
         ch.basic_reject(delivery_tag=delivery_tag, requeue=True)

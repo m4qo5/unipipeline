@@ -66,7 +66,7 @@ class UniMemoryBroker(UniBroker[UniDynamicDefinition]):
         for ql in self._queues_by_topic.values():
             ql.process_all()
 
-    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
+    def publish(self, topic: str, meta_list: List[UniMessageMeta], alone: bool = False) -> None:
         ql = self._queues_by_topic[topic]
         for meta in meta_list:
             ql.add(meta)
