@@ -296,8 +296,13 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
 
         self._retry_run(echo, self._start_consuming)
 
-    def _publish(self, ch: BlockingChannel, exchange: str, topic: str, meta: UniMessageMeta, props: BasicProperties) -> None:
+    def _publish(self, ch: BlockingChannel, exchange: str, topic: str, meta: UniMessageMeta, props: BasicProperties, alone: bool = False) -> None:
         self.echo.log_debug(f'message start publishing to {exchange}->{topic}')
+        if alone:
+            size = self.get_topic_approximate_messages_count(topic)
+            if size != 0:
+                self.echo.log_info(f'sending was skipped, because topic {topic} has messages: {size}>0')
+                return
         topic = self._init_topic(ch, exchange, topic)
         ch.basic_publish(
             exchange=exchange,
@@ -307,7 +312,7 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
         )
         self.echo.log_debug(f'message published to {exchange}->{topic}')
 
-    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
+    def publish(self, topic: str, meta_list: List[UniMessageMeta], alone: bool = False) -> None:
         ch = self._ch_publisher.get_channel()
         echo = self.echo.mk_child('publish')
         for meta in meta_list:  # TODO: package sending
@@ -334,7 +339,7 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
                     delivery_mode=2 if self.config.persistent_message else 0,
                     headers=headers,
                 )
-            self._retry_run(echo, functools.partial(self._publish, ch=ch, exchange=self.config.exchange_name, topic=topic, meta=meta, props=props))
+            self._retry_run(echo, functools.partial(self._publish, ch=ch, exchange=self.config.exchange_name, topic=topic, meta=meta, props=props, alone=alone))
         self.echo.log_info(f'{list(meta_list)} messages published to {self.config.exchange_name}->{topic}')
 
     def _get_answ(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:

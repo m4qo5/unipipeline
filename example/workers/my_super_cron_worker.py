@@ -8,6 +8,7 @@ from unipipeline.worker.uni_worker_consumer_message import UniWorkerConsumerMess
 
 class MySuperCronWorker(UniWorker[UniCronMessage, None]):
     def handle_message(self, msg: UniWorkerConsumerMessage[UniCronMessage]) -> None:
-        answ: UniAnswerMessage[EnderAfterCronAnswerMessage] = self.manager.get_answer_from('ender_after_cron_worker', EnderAfterCronInputMessage(value=f'cron>>>{msg.payload.task_name}'))
-
-        print(answ.payload.value)  # noqa
+        # answ: UniAnswerMessage[EnderAfterCronAnswerMessage] = self.manager.get_answer_from('ender_after_cron_worker', EnderAfterCronInputMessage(value=f'cron>>>{msg.payload.task_name}'))
+        #
+        # print(answ.payload.value)  # noqa
+        print(f'!!!!! CRON MESSAGE {msg.payload}')

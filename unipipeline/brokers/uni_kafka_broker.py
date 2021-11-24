@@ -140,7 +140,8 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
         assert self._producer is not None
         return self._producer
 
-    def publish(self, topic: str, meta_list: List[UniMessageMeta], ttl_s: Optional[int] = None) -> None:
+    def publish(self, topic: str, meta_list: List[UniMessageMeta], ttl_s: Optional[int] = None, alone: bool = False) -> None:
+        # TODO: alone
         self.echo.log_debug(f'publishing the messages: {meta_list}')
 
         p = self._get_producer()

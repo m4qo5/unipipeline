@@ -63,7 +63,7 @@ class UniBroker(Generic[TConf]):
     def start_consuming(self) -> None:
         raise NotImplementedError(f'method start_consuming must be implemented for {type(self).__name__}')
 
-    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
+    def publish(self, topic: str, meta_list: List[UniMessageMeta], alone: bool = False) -> None:
         raise NotImplementedError(f'method publish must be implemented for {type(self).__name__}')
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:

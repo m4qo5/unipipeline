@@ -156,19 +156,13 @@ class UniMediator:
 
         br = self.get_broker(wd.broker.name)
 
-        if alone:
-            size = br.get_topic_approximate_messages_count(wd.topic)
-            if size != 0:
-                self.echo.log_info(f'sending to worker "{wd.name}" was skipped, because topic {wd.topic} has messages: {size}>0')
-                return None
-
         if parent_meta is not None:
             meta = parent_meta.create_child(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
         else:
             meta = UniMessageMeta.create_new(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
 
         meta_list = [meta]
-        br.publish(wd.topic, meta_list)  # TODO: make it list by default
+        br.publish(wd.topic, meta_list, alone=alone)  # TODO: make it list by default
         self.echo.log_info(f"worker {wd.name} sent message to topic '{wd.topic}':: {meta_list}")
 
         if meta.need_answer and wd.need_answer:
