@@ -205,9 +205,6 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         '_interrupted',
         '_initialized_exchanges',
         '_initialized_topics',
-        '_retry_publish',
-        '_retry_publish_answ',
-        '_retry_get_answer',
         '_retry_consuming',
         '_heartbeat_enabled',
         '_heartbeat_delay',
@@ -231,7 +228,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         def raise_connection_err() -> None:
             raise ConnectionError()
 
-        self._retry_publish = retryable(
+        self._publish = retryable(  # type: ignore
             self._publish,
             self.echo.mk_child('publishing'),
             retry_max_count=self.config.retry_max_count,
@@ -247,17 +244,9 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             retryable_errors=RECOVERABLE_ERRORS,
             on_retries_ends=raise_connection_err,
         )
-        self._retry_publish_answ = retryable(
-            self._publish,
-            self.echo.mk_child('publishing_answer'),
-            retry_max_count=self.config.retry_max_count,
-            retry_delay_s=self.config.retry_delay_s,
-            retryable_errors=RECOVERABLE_ERRORS,
-            on_retries_ends=raise_connection_err,
-        )
-        self._retry_get_answer = retryable(
-            self._get_answ,
-            self.echo.mk_child('get_answer'),
+        self.rpc_call = retryable(  # type: ignore
+            self.rpc_call,
+            self.echo.mk_child('rpc_call'),
             retry_max_count=self.config.retry_max_count,
             retry_delay_s=self.config.retry_delay_s,
             retryable_errors=RECOVERABLE_ERRORS,
@@ -282,6 +271,14 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self._reject = retryable(  # type: ignore
             self._reject,
             self.echo.mk_child('reject'),
+            retry_max_count=self.config.retry_max_count,
+            retry_delay_s=self.config.retry_delay_s,
+            retryable_errors=RECOVERABLE_ERRORS,
+            on_retries_ends=raise_connection_err,
+        )
+        self.publish_answer = retryable(  # type: ignore
+            self.publish_answer,
+            self.echo.mk_child('publish_answer'),
             retry_max_count=self.config.retry_max_count,
             retry_delay_s=self.config.retry_delay_s,
             retryable_errors=RECOVERABLE_ERRORS,
@@ -324,11 +321,11 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         if exchange == self.config.exchange_name:
             ch.queue_declare(queue=topic, durable=True, auto_delete=False, passive=False)
         elif exchange == self.config.answer_exchange_name:
-            ch.queue_declare(queue=topic, durable=False, auto_delete=True, exclusive=False, passive=False)
+            ch.queue_declare(queue=topic, durable=False, auto_delete=True, exclusive=True, passive=False)
         else:
             raise TypeError(f'invalid exchange name "{exchange}"')
 
-        ch.queue_bind(queue=topic, exchange=self.config.exchange_name, routing_key=topic)
+        ch.queue_bind(queue=topic, exchange=exchange, routing_key=topic)
         self.echo.log_info(f'queue "{q_key}" initialized')
         return topic
 
@@ -488,24 +485,32 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
         self._retry_consuming()
 
+    def _alone(self, ch: amqp.Channel, topic: str, alone: bool) -> bool:
+        if alone:
+            size = self._get_topic_approximate_messages_count(ch, topic)
+            if size > 0:
+                self.echo.log_info(f'sending was skipped, because topic {topic} has messages: {size}>0')
+                return True
+        return False
+
+    def _publish_ch(self, ch: amqp.Channel, exchange: str, topic: str, meta: UniMessageMeta, props: UniAmqpPyBrokerMsgProps, alone: bool = False) -> None:
+        if self._alone(ch, topic, alone):
+            return
+
+        self.echo.log_debug(f'message start publishing to {exchange}->{topic}')
+        topic = self._init_topic(ch, exchange, topic)
+        ch.basic_publish(
+            amqp.Message(body=self.serialize_message_body(meta), **props._asdict()),
+            exchange=exchange,
+            routing_key=topic,
+            mandatory=self.config.mandatory_publishing,
+            # immediate=self.config.immediate_publishing,
+        )
+        self.echo.log_debug(f'message published to {exchange}->{topic}')
+
     def _publish(self, exchange: str, topic: str, meta: UniMessageMeta, props: UniAmqpPyBrokerMsgProps, alone: bool = False) -> None:
         with self.connected_connection.channel() as ch:
-            if alone:
-                size = self._get_topic_approximate_messages_count(ch, topic)
-                if size > 0:
-                    self.echo.log_info(f'sending was skipped, because topic {topic} has messages: {size}>0')
-                    return
-
-            self.echo.log_debug(f'message start publishing to {exchange}->{topic}')
-            topic = self._init_topic(ch, exchange, topic)
-            ch.basic_publish(
-                amqp.Message(body=self.serialize_message_body(meta), **props._asdict()),
-                exchange=exchange,
-                routing_key=topic,
-                mandatory=self.config.mandatory_publishing,
-                # immediate=self.config.immediate_publishing,
-            )
-        self.echo.log_debug(f'message published to {exchange}->{topic}')
+            return self._publish_ch(ch, exchange, topic, meta, props, alone)
 
     def _mk_mesg_props_by_meta(self, meta: UniMessageMeta) -> UniAmqpPyBrokerMsgProps:
         headers = dict()
@@ -534,34 +539,41 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
     def publish(self, topic: str, meta_list: List[UniMessageMeta], alone: bool = False) -> None:
         for meta in meta_list:  # TODO: package sending
             props = self._mk_mesg_props_by_meta(meta)
-            self._retry_publish(exchange=self.config.exchange_name, topic=topic, meta=meta, props=props, alone=alone)
+            self._publish(self.config.exchange_name, topic, meta, props, alone)
         self.echo.log_info(f'{list(meta_list)} messages published to {self.config.exchange_name}->{topic}')
 
-    def _get_answ(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
+    def rpc_call(self, topic: str, meta: UniMessageMeta, *, alone: bool = False, max_delay_s: int = 1, unwrapped: bool = False) -> Optional[UniMessageMeta]:
+        assert meta.answer_params is not None
         with self.connected_connection.channel() as ch:
-            topic = self._init_topic(ch, self.config.answer_exchange_name, f'{answer_params.topic}.{answer_params.id}')
+            if alone:
+                size = self._get_topic_approximate_messages_count(ch, topic)
+                if size > 0:
+                    self.echo.log_info(f'sending was skipped, because topic {topic} has messages: {size}>0')
+                    return None
+
+            answ_topic = self._init_topic(ch, self.config.answer_exchange_name, f'{meta.answer_params.topic}.{meta.answer_params.id}')
+            self._publish_ch(ch, self.config.exchange_name, topic, meta, self._mk_mesg_props_by_meta(meta), alone)
 
             started = time.time()
+            self.echo.log_info(f'waiting for message from {self.config.answer_exchange_name}->{answ_topic}')
             while True:
-                msg: Optional[amqp.Message] = ch.basic_get(queue=topic, no_ack=True)
+                msg: Optional[amqp.Message] = ch.basic_get(queue=answ_topic)
 
                 if msg is None:
                     if (time.time() - started) > max_delay_s:
-                        raise UniAnswerDelayError(f'answer for {self.config.answer_exchange_name}->{topic} reached delay limit {max_delay_s} seconds')
-                    self.echo.log_debug(f'no answer {int(time.time() - started + 1)}s in {self.config.answer_exchange_name}->{topic}')
+                        raise UniAnswerDelayError(f'answer for {self.config.answer_exchange_name}->{answ_topic} reached delay limit {max_delay_s} seconds')
+                    self.echo.log_debug(f'no answer {int(time.time() - started + 1)}s in {self.config.answer_exchange_name}->{answ_topic}')
                     sleep(0.1)
                     continue
 
-                self.echo.log_debug(f'took answer from {self.config.answer_exchange_name}->{topic}')
+                self.echo.log_debug(f'got answer from {self.config.answer_exchange_name}->{answ_topic}')
+
                 return self.parse_message_body(
                     msg.body,
-                    compression=msg.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
+                    compression=(msg.headers or dict()).get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
                     content_type=msg.content_type,
                     unwrapped=unwrapped,
                 )
-
-    def get_answer(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
-        return self._retry_get_answer(answer_params=answer_params, max_delay_s=max_delay_s, unwrapped=unwrapped)
 
     def publish_answer(self, answer_params: UniAnswerParams, meta: UniMessageMeta) -> None:
         props = UniAmqpPyBrokerMsgProps(
@@ -569,4 +581,5 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             content_encoding='utf-8',
             delivery_mode=1,
         )
-        self._retry_publish_answ(exchange=self.config.answer_exchange_name, topic=f'{answer_params.topic}.{answer_params.id}', meta=meta, props=props)
+        with self.connected_connection.channel() as ch:
+            self._publish_ch(ch, self.config.answer_exchange_name, f'{answer_params.topic}.{answer_params.id}', meta, props, alone=False)

@@ -161,16 +161,18 @@ class UniMediator:
         else:
             meta = UniMessageMeta.create_new(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
 
+        if meta.need_answer and wd.need_answer:
+            assert wd.answer_message is not None
+            answ_meta = br.rpc_call(wd.topic, meta, alone=alone, max_delay_s=wd.answer_avg_delay_s * 3, unwrapped=wd.answer_unwrapped)
+            if answ_meta is None:
+                if alone:
+                    return None
+                raise OverflowError('system error. answer object must be specified')
+            return UniAnswerMessage(answ_meta, self.get_message_type(wd.answer_message.name))
+
         meta_list = [meta]
         br.publish(wd.topic, meta_list, alone=alone)  # TODO: make it list by default
         self.echo.log_info(f"worker {wd.name} sent message to topic '{wd.topic}':: {meta_list}")
-
-        if meta.need_answer and wd.need_answer:
-            assert wd.answer_message is not None
-            assert answer_params is not None
-            answ_meta = br.get_answer(answer_params, max_delay_s=wd.answer_avg_delay_s * 3, unwrapped=wd.answer_unwrapped)
-            answ_message_type = self.get_message_type(wd.answer_message.name)
-            return UniAnswerMessage(answ_meta, answ_message_type)
         return None
 
     def start_cron(self) -> None:

@@ -66,13 +66,13 @@ class UniBroker(Generic[TConf]):
     def publish(self, topic: str, meta_list: List[UniMessageMeta], alone: bool = False) -> None:
         raise NotImplementedError(f'method publish must be implemented for {type(self).__name__}')
 
+    def rpc_call(self, topic: str, meta: UniMessageMeta, *, alone: bool = False, max_delay_s: int = 1, unwrapped: bool = False) -> Optional[UniMessageMeta]:
+        raise NotImplementedError(f'method rpc_call must be implemented for {type(self).__name__}')
+
     def get_topic_approximate_messages_count(self, topic: str) -> int:
         raise NotImplementedError(f'method get_topic_size must be implemented for {type(self).__name__}')
 
     def initialize(self, topics: Set[str], answer_topics: Set[str]) -> None:
-        raise NotImplementedError(f'method initialize must be implemented for {type(self).__name__}')
-
-    def get_answer(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
         raise NotImplementedError(f'method initialize must be implemented for {type(self).__name__}')
 
     def publish_answer(self, answer_params: UniAnswerParams, meta: UniMessageMeta) -> None:
