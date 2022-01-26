@@ -35,7 +35,8 @@ cron:
 
   my_mega_task:
     worker: my_super_cron_worker
-    when: 0/2 * * * *
+    every_sec: 10
+#    when: 0/2 * * * *
 
   my_puper_task:
     worker: my_super_cron_worker
