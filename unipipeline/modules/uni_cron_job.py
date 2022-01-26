@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import NamedTuple, List, Tuple, Optional, Iterable, TYPE_CHECKING
 
 from crontab import CronTab  # type: ignore
@@ -12,9 +13,17 @@ if TYPE_CHECKING:
 class UniCronJob(NamedTuple):
     id: int
     task: UniCronTaskDefinition
-    crontab: CronTab
+    crontab: Optional[CronTab]
+    every_sec: Optional[int]
     mediator: 'UniMediator'
     message: UniCronMessage
+
+    def next_sec(self) -> int:
+        if self.crontab is not None:
+            return int(self.crontab.next(default_utc=False))
+        sec = datetime.now().second
+        mod = sec % self.every_sec
+        return 0 if mod == 0 else (self.every_sec - mod)
 
     @staticmethod
     def mk_jobs_list(tasks: Iterable[UniCronTaskDefinition], mediator: 'UniMediator') -> List['UniCronJob']:
@@ -23,7 +32,8 @@ class UniCronJob(NamedTuple):
             res.append(UniCronJob(
                 id=i,
                 task=task,
-                crontab=CronTab(task.when),
+                crontab=CronTab(task.when) if task.when is not None else None,
+                every_sec=task.every_sec,
                 mediator=mediator,
                 message=UniCronMessage(task_name=task.name)
             ))
@@ -34,7 +44,7 @@ class UniCronJob(NamedTuple):
         min_delay: Optional[int] = None
         notification_list: List[UniCronJob] = []
         for cj in all_tasks:
-            sec = int(cj.crontab.next(default_utc=False))
+            sec = cj.next_sec()
             if min_delay is None:
                 min_delay = sec
             if sec < min_delay:

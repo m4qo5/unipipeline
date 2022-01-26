@@ -1,4 +1,4 @@
-from time import sleep
+from time import sleep, time
 from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List, NamedTuple, Callable
 from uuid import uuid4
 
@@ -178,17 +178,24 @@ class UniMediator:
     def start_cron(self) -> None:
         cron_jobs = UniCronJob.mk_jobs_list(self.config.cron_tasks.values(), self)
         self.echo.log_debug(f'cron jobs defined: {", ".join(cj.task.name for cj in cron_jobs)}')
+
+        prev_time = time()
         while True:
+            now = time()
+            if (now - prev_time) < 0.8:
+                sleep(.1)  # delay for correct next iteration
+                continue
             delay, jobs = UniCronJob.search_next_tasks(cron_jobs)
             if delay is None:
+                self.echo.log_warning(f"no active cron tasks found")
                 return
             self.echo.log_debug(f"sleep {delay} seconds before running the tasks: {[cj.task.name for cj in jobs]}")
             if delay > 0:
                 sleep(delay)
             self.echo.log_info(f"run the tasks: {[cj.task.name for cj in jobs]}")
+            prev_time = time()
             for cj in jobs:
                 cj.send()
-            sleep(1.1)  # delay for correct next iteration
 
     def exit(self) -> None:
         for b in self._connected_brokers:

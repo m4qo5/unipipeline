@@ -267,8 +267,10 @@ class UniConfig:
         result = dict()
         defaults = dict(
             alone=True,
+            every_sec=None,
+            when=None,
         )
-        for name, definition, other_props in self._parse_definition("cron", config.get("cron", dict()), defaults, {"when", "worker"}):
+        for name, definition, other_props in self._parse_definition("cron", config.get("cron", dict()), defaults, {"worker"}):
             worker_def = workers[definition["worker"]]
             if worker_def.input_message.name != UNI_CRON_MESSAGE:
                 raise ValueError(f"input_message of worker '{worker_def.name}' must be '{UNI_CRON_MESSAGE}'. '{worker_def.input_message.name}' was given")
@@ -276,7 +278,8 @@ class UniConfig:
                 id=definition["id"],
                 name=name,
                 worker=worker_def,
-                when=definition["when"],
+                every_sec=definition.get('every_sec', None),
+                when=definition.get('when', None),
                 alone=definition["alone"],
                 dynamic_props_=other_props,
             )
