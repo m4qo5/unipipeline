@@ -187,7 +187,7 @@ class UniMediator:
                 continue
             delay, jobs = UniCronJob.search_next_tasks(cron_jobs)
             if delay is None:
-                self.echo.log_warning(f"no active cron tasks found")
+                self.echo.log_warning("no active cron tasks found")
                 return
             self.echo.log_debug(f"sleep {delay} seconds before running the tasks: {[cj.task.name for cj in jobs]}")
             if delay > 0:

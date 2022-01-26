@@ -22,8 +22,8 @@ class UniCronJob(NamedTuple):
         if self.crontab is not None:
             return int(self.crontab.next(default_utc=False))
         sec = datetime.now().second
-        mod = sec % self.every_sec
-        return 0 if mod == 0 else (self.every_sec - mod)
+        mod = sec % self.every_sec  # type: ignore
+        return 0 if mod == 0 else (self.every_sec - mod)  # type: ignore
 
     @staticmethod
     def mk_jobs_list(tasks: Iterable[UniCronTaskDefinition], mediator: 'UniMediator') -> List['UniCronJob']:
