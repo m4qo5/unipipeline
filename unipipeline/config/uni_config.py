@@ -1,30 +1,29 @@
 from typing import Dict, Any, Set, Union, Type, Iterator, Tuple
 from uuid import uuid4
 
-import yaml
-
-from unipipeline.errors.uni_config_error import UniConfigError
-from unipipeline.errors.uni_definition_not_found_error import UniDefinitionNotFoundError
+from unipipeline.config.uni_config_loader import UniConfigLoader
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_codec_definition import UniCodecDefinition
 from unipipeline.definitions.uni_cron_task_definition import UniCronTaskDefinition
-from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.definitions.uni_external_definition import UniExternalDefinition
 from unipipeline.definitions.uni_message_definition import UniMessageDefinition
 from unipipeline.definitions.uni_module_definition import UniModuleDefinition
 from unipipeline.definitions.uni_service_definition import UniServiceDefinition
-from unipipeline.utils.uni_util import UniUtil
 from unipipeline.definitions.uni_waiting_definition import UniWaitingDefinition
-from unipipeline.worker.uni_worker import UniWorker
 from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
+from unipipeline.errors.uni_config_error import UniConfigError
+from unipipeline.errors.uni_definition_not_found_error import UniDefinitionNotFoundError
+from unipipeline.utils.uni_echo import UniEcho
+from unipipeline.utils.uni_util import UniUtil
+from unipipeline.worker.uni_worker import UniWorker
 
 UNI_CRON_MESSAGE = "uni_cron_message"
 
 
 class UniConfig:
-    def __init__(self, util: UniUtil, echo: UniEcho, file_path: str) -> None:
+    def __init__(self, util: UniUtil, echo: UniEcho, loader: UniConfigLoader) -> None:
         self._util = util
-        self._file_path = file_path
+        self._loader = loader
         self._echo = echo
 
         self._config: Dict[str, Any] = dict()
@@ -40,10 +39,6 @@ class UniConfig:
         self._workers_by_class_index: Dict[str, UniWorkerDefinition] = dict()
         self._cron_tasks_index: Dict[str, UniCronTaskDefinition] = dict()
         self._service: UniServiceDefinition = None  # type: ignore
-
-    @property
-    def file(self) -> str:
-        return self._file_path
 
     @property
     def brokers(self) -> Dict[str, UniBrokerDefinition]:
@@ -108,16 +103,6 @@ class UniConfig:
                 raise UniDefinitionNotFoundError(f'worker {worker.__name__} is not defined in workers')
         raise UniDefinitionNotFoundError(f'invalid type of worker. must be subclass of UniWorker OR str name. "{type(worker).__name__}" was given')
 
-    def _load_config(self) -> Dict[str, Any]:
-        if self._config_loaded:
-            return self._config
-        self._config_loaded = True
-        with open(self._file_path, "rt") as f:
-            self._config = yaml.safe_load(f)
-        if not isinstance(self._config, dict):
-            raise UniConfigError('config must be dict')
-        return self._config
-
     def _parse_definition(
         self,
         conf_name: str,
@@ -172,7 +157,7 @@ class UniConfig:
             return
         self._parsed = True
 
-        cfg = self._load_config()
+        cfg = self._loader.load()
 
         self._service = self._parse_service(cfg)
         self._echo.log_info(f'service: {self._service.name}')
@@ -354,28 +339,6 @@ class UniConfig:
                 dynamic_props_=other_def,
             )
         return result
-
-    def _parse_service(self, config: Dict[str, Any]) -> UniServiceDefinition:
-        if "service" not in config:
-            raise UniConfigError('service is not defined in config')
-
-        service_conf = config["service"]
-
-        if "name" not in service_conf:
-            raise UniConfigError('service->name is not defined')
-
-        clrs = service_conf.get('echo_colors', True)
-        lvl = service_conf.get('echo_level', 'warning')
-
-        self._echo.level = lvl  # TODO: enable verbose if set
-        self._util.color.enabled = clrs
-
-        return UniServiceDefinition(
-            name=service_conf["name"],
-            id=uuid4(),
-            colors=clrs,
-            echo_level=lvl,
-        )
 
     def _parse_external_services(self, config: Dict[str, Any]) -> Dict[str, UniExternalDefinition]:
         if "external" not in config:
