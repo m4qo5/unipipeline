@@ -1,5 +1,6 @@
 from typing import Dict, Any, Union, Optional
 
+from unipipeline.config.uni_config_loader import UniConfigLoader, UniYamlFileConfigLoader
 from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.config.uni_config import UniConfig, UniConfigError
@@ -16,17 +17,16 @@ def camel_case(snake_cased: str) -> str:
 
 
 class Uni:
-    def __init__(self, config: Union[UniConfig, str], echo_level: Optional[Union[str, int]] = None) -> None:
+    def __init__(self, config: Union[UniConfigLoader, str], *, echo_level: Optional[Union[str, int]] = None) -> None:
+        config_loader = config if isinstance(config, UniConfigLoader) else UniYamlFileConfigLoader(config)
         self._util = UniUtil()
         self._util.template.set_filter('camel', camel_case)
 
         self._echo = UniEcho('UNI', level=echo_level, colors=self._util.color)
 
-        if isinstance(config, str):
-            config = UniConfig(self._util, self._echo, config)
-        if not isinstance(config, UniConfig):
-            raise ValueError(f'invalid config type. {type(config).__name__} was given')
-        self._mediator = UniMediator(self._util, self._echo, config)
+        uni_config = UniConfig(self._util, self._echo, config_loader)
+
+        self._mediator = UniMediator(self._util, self._echo, uni_config)
 
     @property
     def echo(self) -> UniEcho:

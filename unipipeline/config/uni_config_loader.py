@@ -34,7 +34,9 @@ class UniYamlFileConfigLoader(UniConfigLoader):
         '_file_cache',
     )
 
-    def __init__(self, file_path) -> None:
+    def __init__(self, file_path: str) -> None:
+        if not isinstance(file_path, str):
+            TypeError(f'file_path must be string. {type(file_path).__name__} was given')
         self._file_path = file_path
         self._file_cache: Optional[UniConfigDefinition] = None
 
@@ -42,8 +44,6 @@ class UniYamlFileConfigLoader(UniConfigLoader):
         if self._file_cache is not None:
             return self._file_cache
         with open(self._file_path, "rt") as f:
-            content = yaml.safe_load(f)
-            if not isinstance(content, dict):
-                raise ValidationError(f'invalid format of file. must be dict. {type(content).__name__} was given')
+            content = dict(yaml.safe_load(f))
             self._file_cache = UniConfigDefinition(**content)
         return self._file_cache
