@@ -13,7 +13,7 @@ from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
 from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_definition import UniDynamicDefinition
-from unipipeline.errors.uni_answer_delay_error import UniAnswerDelayError
+from unipipeline.errors import UniAnswerDelayError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
 from unipipeline.utils.uni_echo import UniEcho
@@ -174,7 +174,7 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
         elif exchange == self.config.answer_exchange_name:
             ch.queue_declare(queue=topic, durable=False, auto_delete=True, exclusive=True, passive=False)
         else:
-            raise TypeError(f'invalid exchange name "{exchange}"')
+            raise ValueError(f'invalid exchange name "{exchange}"')
 
         ch.queue_bind(queue=topic, exchange=self.config.exchange_name, routing_key=topic)
         self.echo.log_info(f'queue "{q}" initialized')
@@ -226,15 +226,16 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
         def consumer_wrapper(channel: BlockingChannel, method_frame: spec.Basic.Deliver, properties: BasicProperties, body: bytes) -> None:
             self._in_processing = True
 
-            meta = self.parse_message_body(
-                body,
+            get_meta = functools.partial(
+                self.parse_message_body,
+                content=body,
                 compression=properties.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
                 content_type=properties.content_type,
                 unwrapped=consumer.unwrapped,
             )
 
             manager = UniAmqpPikaBrokerMessageManager(channel, method_frame)
-            consumer.message_handler(meta, manager)
+            consumer.message_handler(get_meta, manager)
             self._in_processing = False
             if self._interrupted:
                 self._end_consuming()

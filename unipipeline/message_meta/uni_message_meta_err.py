@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra
 
 from unipipeline.message_meta.uni_message_meta_error_topic import UniMessageMetaErrTopic
 
@@ -10,5 +10,5 @@ class UniMessageMetaErr(BaseModel):
     retry_times: int
 
     class Config:
+        extra = Extra.ignore
         frozen = True
-        extra = 'forbid'

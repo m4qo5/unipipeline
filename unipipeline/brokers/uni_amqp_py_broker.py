@@ -7,22 +7,18 @@ from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHEC
 from urllib.parse import urlparse
 
 import amqp  # type: ignore
-from amqp.exceptions import ConnectionError as AqmpConnectionError, RecoverableChannelError, AMQPError, ConnectionForced  # type: ignore
+from amqp import Channel
+from amqp.exceptions import ConnectionError as AqmpConnectionError, RecoverableChannelError, AMQPError  # type: ignore
 
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
 from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_definition import UniDynamicDefinition
-from unipipeline.errors.uni_answer_delay_error import UniAnswerDelayError
+from unipipeline.errors import UniAnswerDelayError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
 from unipipeline.utils.uni_echo import UniEcho
-
-import logging
-logging.getLogger('amqp').setLevel(logging.DEBUG)
-logging.getLogger('amqp.connection.Connection.heartbeat_tick').setLevel(logging.DEBUG)
-logging.basicConfig(level=logging.DEBUG)
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
@@ -44,17 +40,20 @@ class UniPyPikaBrokerMessageManager(UniBrokerMessageManager):
     def __init__(self, channel: amqp.Channel, delivery_tag: str, reject: Callable[[amqp.Channel, str], None], ack: Callable[[amqp.Channel, str], None]) -> None:
         self._channel = channel
         self._delivery_tag = delivery_tag
-        self._acknowledged = False
+        self._reacted = False
         self._reject = reject
         self._ack = ack
 
     def reject(self) -> None:
+        if self._reacted:
+            return
+        self._reacted = True
         self._reject(self._channel, self._delivery_tag)
 
     def ack(self) -> None:
-        if self._acknowledged:
+        if self._reacted:
             return
-        self._acknowledged = True
+        self._reacted = True
         self._ack(self._channel, self._delivery_tag)
 
 
@@ -88,6 +87,7 @@ class UniAmqpPyBrokerMsgProps(NamedTuple):
 
 
 class UniAmqpPyBrokerConsumer(NamedTuple):
+    id: str
     queue: str
     on_message_callback: Callable[[amqp.Channel, 'amqp.Message'], None]
     consumer_tag: str
@@ -136,39 +136,6 @@ def retryable(
     return cast(TFn, fn_wrapper)
 
 
-class AmqpPyChannelObj:
-    def __init__(self, name: str, ttl: int, broker: 'UniAmqpPyBroker') -> None:
-        self._name = name
-        self._broker = broker
-        self._ch: Optional[amqp.Channel] = None
-        self._ttl = ttl
-        self._ch_time: float = 0
-
-    def close_channel(self) -> None:
-        if self._ch is None or not self._ch.is_open:
-            return
-        self._ch.close()
-        self._broker.echo.log_info(f'channel {self._name} closed')
-
-    def get_channel(self, *, force_recreate: bool = False, force_current: bool = False) -> amqp.Channel:
-        if force_recreate and not force_current:
-            self.close_channel()
-            return self.get_channel(force_recreate=False)
-
-        if self._ch is None:
-            self._ch_time = time.time()
-            self._ch = self._broker.connected_connection.channel()
-        elif not self._ch.is_open:
-            self._ch.open()
-            self._ch_time = time.time()
-            self._broker.echo.log_info(f'channel {self._name} established')
-        else:
-            if not force_current and (time.time() - self._ch_time > self._ttl):
-                return self.get_channel(force_recreate=True)
-            self._broker.echo.log_debug(f'channel {self._name} reused')
-        return self._ch
-
-
 class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
     config_type = UniAmqpPyBrokerConfig
 
@@ -209,12 +176,14 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         '_heartbeat_enabled',
         '_heartbeat_delay',
         '_heartbeat_thread',
+        '_last_received',
     )
 
     def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition) -> None:
         super().__init__(mediator, definition)
 
         self._consumers: List[UniAmqpPyBrokerConsumer] = list()
+        self._current_ch: Optional[int] = None
 
         self._connection = self._connection_instance()
 
@@ -225,12 +194,22 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self._initialized_exchanges: Set[str] = set()
         self._initialized_topics: Set[str] = set()
 
+        self._last_received = time.time()
+
         def raise_connection_err() -> None:
             raise ConnectionError()
 
-        self._publish = retryable(  # type: ignore
-            self._publish,
+        self._publish_ch_publishing_r = retryable(
+            self._publish_ch,
             self.echo.mk_child('publishing'),
+            retry_max_count=self.config.retry_max_count,
+            retry_delay_s=self.config.retry_delay_s,
+            retryable_errors=RECOVERABLE_ERRORS,
+            on_retries_ends=raise_connection_err,
+        )
+        self._new_channel = retryable(  # type: ignore
+            self._new_channel,
+            self.echo.mk_child('new_channel'),
             retry_max_count=self.config.retry_max_count,
             retry_delay_s=self.config.retry_delay_s,
             retryable_errors=RECOVERABLE_ERRORS,
@@ -286,7 +265,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         )
 
         self._heartbeat_enabled = False
-        self._heartbeat_delay = self.config.heartbeat / 2
+        self._heartbeat_delay = max(self.config.heartbeat / 4, 0.2)
         self._heartbeat_thread: threading.Thread = threading.Thread(
             name=f'broker-{self.definition.name}-heartbeat',
             target=self._heartbeat_tick_loop,
@@ -341,6 +320,8 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             self._consuming_enabled = False
             self.echo.log_info('consumption stopped')
 
+        self._stop_heartbeat_tick()
+
     def connect(self) -> None:
         try:
             if not self._connection.connected:
@@ -348,6 +329,8 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                 self._connection.connect()
                 self._connection.send_heartbeat()
                 self.echo.log_info('connected')
+            # else:
+            #     self.echo.log_debug(f'connection is alive')
         except RECOVERABLE_ERRORS as e:
             self.echo.log_error(f'connection problem :: {e}')
             raise ConnectionError(str(e))
@@ -384,24 +367,36 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             raise OverflowError(f'you cannot add consumer dynamically :: tag="{consumer.id}" group_id={consumer.group_id}')
 
         def consumer_wrapper(ch: amqp.Channel, message: amqp.Message) -> None:
+            self._last_received = time.time()
+            self._current_ch = ch.channel_id
             self.echo.log_info(f'message "{message.delivery_tag}" received from topic "{consumer.topic}" (in consumer {consumer.id})')
             self._in_processing = True
 
-            meta = self.parse_message_body(
-                message.body,
-                compression=message.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
-                content_type=message.content_type,
-                unwrapped=consumer.unwrapped,
-            )
-
             manager = UniPyPikaBrokerMessageManager(ch, message.delivery_tag, reject=self._reject, ack=self._ack)
-            consumer.message_handler(meta, manager)
+
+            try:
+                get_meta = functools.partial(
+                    self.parse_message_body,
+                    content=message.body,
+                    compression=message.headers.get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
+                    content_type=message.content_type,
+                    unwrapped=consumer.unwrapped,
+                )
+                consumer.message_handler(get_meta, manager)
+            except Exception as e: # noqa
+                self.echo.log_error(f'message "{message.delivery_tag}" :: {e}')
+                manager.reject()
+                self._current_ch = None
+                raise
 
             self._in_processing = False
             if self._interrupted:
                 self.stop_consuming()
+            self.echo.log_info(f'message "{message.delivery_tag}" :: processing finished')
+            self._current_ch = None
 
         self._consumers.append(UniAmqpPyBrokerConsumer(
+            id=consumer.id,
             queue=consumer.topic,
             on_message_callback=consumer_wrapper,
             consumer_tag=consumer.id,
@@ -429,22 +424,12 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self.echo.log_info(f'heartbeat enabled :: delay {self._heartbeat_delay}s')
         self._heartbeat_thread.start()
 
-    def _heartbeat_tick_loop(self, delay_s: float, ping_rate: int = 10) -> None:
-        delay_part_s = delay_s / ping_rate
-        counter = 0
+    def _heartbeat_tick_loop(self, delay_s: float) -> None:
         while self._heartbeat_enabled:
-            counter += 1
-            sleep(delay_part_s)
-            if counter != ping_rate:  # each ping_rate-1
-                continue
-            counter = 0
+            sleep(delay_s)
             try:
-                self._connection.heartbeat_tick()
-                self.echo.log_debug('heartbeat tick')
-            except ConnectionForced as e:
-                self.echo.log_error(str(e))
-                self._heartbeat_enabled = False
-                return
+                self._connection.send_heartbeat()
+                self.echo.log_debug(f'heartbeat tick :: waiting for messages {time.time() - self._last_received:0.2f}s')
             except RECOVERABLE_ERRORS as e:
                 self.echo.log_warning(f'ignored heartbeat error :: {e}')
                 continue
@@ -459,22 +444,20 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             echo.log_warning('has no consumers to start consuming')
             return
 
+        if len(self._consumers) != 1:
+            echo.exit_with_error(f'consumer must be only one. {len(self._consumers)} was given')
+
+        c = self._consumers[0]
+
         self.connect()
 
-        for c in self._consumers:
-            ch = self._connection.channel()
-            topic = self._init_topic(ch, self.config.exchange_name, c.queue)
-            ch.basic_consume(queue=topic, callback=functools.partial(c.on_message_callback, ch), consumer_tag=c.consumer_tag)
-            ch.basic_qos(prefetch_count=self.config.prefetch, a_global=False, prefetch_size=0)
-            echo.log_debug(f'added consumer {c.consumer_tag} on {self.config.exchange_name}->{topic}')
-
-        echo.log_info(f'starting consuming :: consumers_count={len(self._consumers)}')
-
+        ch = self._connection.channel()
+        topic = self._init_topic(ch, self.config.exchange_name, c.queue)
+        echo.log_debug(f'added consumer {c.consumer_tag} on {self.config.exchange_name}->{topic}. prefetch: {self.config.prefetch}')
+        ch.basic_qos(prefetch_count=self.config.prefetch, a_global=False, prefetch_size=0)
         self._start_heartbeat_tick()
-        while self._consuming_enabled:
-            echo.log_debug('wait for next message ...')
-            self._connection.drain_events()
-        self._stop_heartbeat_tick()
+        echo.log_info(f'starting consuming :: consumers_count={len(self._consumers)}')
+        ch.basic_consume(queue=topic, callback=functools.partial(c.on_message_callback, ch), consumer_tag=c.consumer_tag)
 
     def start_consuming(self) -> None:
         if self._consuming_enabled:
@@ -494,11 +477,16 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         return False
 
     def _publish_ch(self, ch: amqp.Channel, exchange: str, topic: str, meta: UniMessageMeta, props: UniAmqpPyBrokerMsgProps, alone: bool = False) -> None:
+        self.echo.log_debug(f'message start publishing to {exchange}->{topic}')
+
+        if not ch.is_open:
+            ch = self._new_channel()
+
+        topic = self._init_topic(ch, exchange, topic)
+
         if self._alone(ch, topic, alone):
             return
 
-        self.echo.log_debug(f'message start publishing to {exchange}->{topic}')
-        topic = self._init_topic(ch, exchange, topic)
         ch.basic_publish(
             amqp.Message(body=self.serialize_message_body(meta), **props._asdict()),
             exchange=exchange,
@@ -507,10 +495,6 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             # immediate=self.config.immediate_publishing,
         )
         self.echo.log_debug(f'message published to {exchange}->{topic}')
-
-    def _publish(self, exchange: str, topic: str, meta: UniMessageMeta, props: UniAmqpPyBrokerMsgProps, alone: bool = False) -> None:
-        with self.connected_connection.channel() as ch:
-            return self._publish_ch(ch, exchange, topic, meta, props, alone)
 
     def _mk_mesg_props_by_meta(self, meta: UniMessageMeta) -> UniAmqpPyBrokerMsgProps:
         headers = dict()
@@ -536,44 +520,70 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             application_headers=headers,
         )
 
+    def _new_channel(self) -> Channel:  # retryable
+        return self.connected_connection.channel()
+
     def publish(self, topic: str, meta_list: List[UniMessageMeta], alone: bool = False) -> None:
-        for meta in meta_list:  # TODO: package sending
+        ch = self._new_channel()
+        for meta in meta_list:
             props = self._mk_mesg_props_by_meta(meta)
-            self._publish(self.config.exchange_name, topic, meta, props, alone)
+            self._publish_ch_publishing_r(ch, self.config.exchange_name, topic, meta, props, alone)
+        if ch.is_open:
+            try:
+                ch.close()
+            except Exception:  # noqa: B902
+                pass  # TODO: handle it
         self.echo.log_info(f'{list(meta_list)} messages published to {self.config.exchange_name}->{topic}')
 
+    # def _consumer_channel_or_new(self) -> None:
+    #     if self._consumer_id:
+    #
+    #     return self.connected_connection.channel()
+
     def rpc_call(self, topic: str, meta: UniMessageMeta, *, alone: bool = False, max_delay_s: int = 1, unwrapped: bool = False) -> Optional[UniMessageMeta]:
+        self.echo.log_debug('rpc_call :: start')
         assert meta.answer_params is not None
-        with self.connected_connection.channel() as ch:
-            if alone:
-                size = self._get_topic_approximate_messages_count(ch, topic)
-                if size > 0:
-                    self.echo.log_info(f'sending was skipped, because topic {topic} has messages: {size}>0')
-                    return None
 
-            answ_topic = self._init_topic(ch, self.config.answer_exchange_name, f'{meta.answer_params.topic}.{meta.answer_params.id}')
-            self._publish_ch(ch, self.config.exchange_name, topic, meta, self._mk_mesg_props_by_meta(meta), alone)
+        active_ch = self._current_ch is not None
 
-            started = time.time()
-            self.echo.log_info(f'waiting for message from {self.config.answer_exchange_name}->{answ_topic}')
-            while True:
-                msg: Optional[amqp.Message] = ch.basic_get(queue=answ_topic)
+        if active_ch:
+            ch = self.connected_connection.channel(channel_id=self._current_ch)
+        else:
+            ch = self.connected_connection.channel()
 
-                if msg is None:
-                    if (time.time() - started) > max_delay_s:
-                        raise UniAnswerDelayError(f'answer for {self.config.answer_exchange_name}->{answ_topic} reached delay limit {max_delay_s} seconds')
-                    self.echo.log_debug(f'no answer {int(time.time() - started + 1)}s in {self.config.answer_exchange_name}->{answ_topic}')
-                    sleep(0.1)
-                    continue
+        self.echo.log_debug(f'rpc_call :: ch {ch.channel_id}')
 
-                self.echo.log_debug(f'got answer from {self.config.answer_exchange_name}->{answ_topic}')
+        if self._alone(ch, topic, alone):
+            return None
 
-                return self.parse_message_body(
-                    msg.body,
-                    compression=(msg.headers or dict()).get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
-                    content_type=msg.content_type,
-                    unwrapped=unwrapped,
-                )
+        self.echo.log_debug('rpc_call :: start init answer topic')
+        answ_topic = self._init_topic(ch, self.config.answer_exchange_name, f'{meta.answer_params.topic}.{meta.answer_params.id}')
+
+        self._publish_ch(ch, self.config.exchange_name, topic, meta, self._mk_mesg_props_by_meta(meta), alone)
+
+        started = time.time()
+        self.echo.log_info(f'waiting for message from {self.config.answer_exchange_name}->{answ_topic}')
+        while True:
+            msg: Optional[amqp.Message] = ch.basic_get(queue=answ_topic)
+
+            if msg is None:
+                if (time.time() - started) > max_delay_s:
+                    raise UniAnswerDelayError(f'answer for {self.config.answer_exchange_name}->{answ_topic} reached delay limit {max_delay_s} seconds')
+                self.echo.log_debug(f'no answer {int(time.time() - started + 1)}s in {self.config.answer_exchange_name}->{answ_topic}')
+                sleep(0.1)
+                continue
+
+            self.echo.log_debug(f'got answer from {self.config.answer_exchange_name}->{answ_topic}')
+
+            return self.parse_message_body(
+                msg.body,
+                compression=(msg.headers or dict()).get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
+                content_type=msg.content_type,
+                unwrapped=unwrapped,
+            )
+
+        if not active_ch and ch.is_open:
+            ch.close()
 
     def publish_answer(self, answer_params: UniAnswerParams, meta: UniMessageMeta) -> None:
         props = UniAmqpPyBrokerMsgProps(

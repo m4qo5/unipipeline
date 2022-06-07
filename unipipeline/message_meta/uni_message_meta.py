@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra
 
 from unipipeline.answer.uni_answer_params import UniAnswerParams
 from unipipeline.message_meta.uni_message_meta_err import UniMessageMetaErr
@@ -27,7 +27,7 @@ class UniMessageMeta(BaseModel):
 
     class Config:
         frozen = True
-        extra = 'forbid'
+        extra = Extra.ignore
 
     @property
     def need_answer(self) -> bool:

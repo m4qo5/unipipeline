@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra
 
 
 class UniMessage(BaseModel):
     class Config:
-        extra = 'ignore'
+        extra = Extra.ignore

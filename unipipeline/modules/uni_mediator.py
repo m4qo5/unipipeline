@@ -2,8 +2,7 @@ from time import sleep, time
 from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List, NamedTuple, Callable
 from uuid import uuid4
 
-from unipipeline.errors.uni_payload_error import UniPayloadSerializationError
-from unipipeline.errors.uni_work_flow_error import UniWorkFlowError
+from unipipeline.errors import UniRedundantAnswerError, UniEmptyAnswerError, UniPayloadSerializationError
 from unipipeline.answer.uni_answer_message import UniAnswerMessage
 from unipipeline.brokers.uni_broker import UniBroker, UniBrokerConsumer
 from unipipeline.config.uni_config import UniConfig
@@ -98,7 +97,7 @@ class UniMediator:
         wd = self._config.workers[worker_name]
         if not wd.need_answer:
             if payload is not None:
-                raise UniWorkFlowError(f'output message must be None because worker {wd.name} has no possibility to send output messages')
+                raise UniRedundantAnswerError(f'output message must be None because worker {wd.name} has no possibility to send output messages')
             return
 
         if payload is None:
@@ -115,7 +114,7 @@ class UniMediator:
                 payload_msg = payload
             elif isinstance(payload, dict):
                 try:
-                    payload_msg = answ_message_type(**payload)  # type: ignore
+                    payload_msg = answ_message_type(**payload)
                 except Exception as e:  # noqa
                     raise UniPayloadSerializationError(str(e))
             else:
@@ -129,10 +128,28 @@ class UniMediator:
         b.publish_answer(req_meta.answer_params, answ_meta)
         self.echo.log_info(f'worker {worker_name} answers to {req_meta.answer_params.topic}->{req_meta.answer_params.id} :: {answ_meta}')
 
+    def _to_meta(self, wd: UniWorkerDefinition, parent_meta: Optional[UniMessageMeta], payload: Union[Dict[str, Any], UniMessage], answer_params: Optional[UniAnswerParams]) -> UniMessageMeta:
+        message_type = self.get_message_type(wd.input_message.name)
+        try:
+            if isinstance(payload, message_type):
+                payload_data = payload.dict()
+            elif isinstance(payload, dict):
+                payload_data = message_type(**payload).dict()
+            else:
+                raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
+        except Exception as e:  # noqa
+            raise UniPayloadSerializationError(str(e))
+
+        if parent_meta is not None:
+            meta = parent_meta.create_child(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
+        else:
+            meta = UniMessageMeta.create_new(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
+        return meta
+
     def send_to(
         self,
         worker_name: str,
-        payload: Union[Dict[str, Any], UniMessage],
+        payload: Union[Dict[str, Any], UniMessage, List[Dict[str, Any]], List[UniMessage]],
         *,
         parent_meta: Optional[UniMessageMeta] = None,
         answer_params: Optional[UniAnswerParams] = None,
@@ -143,34 +160,21 @@ class UniMediator:
 
         wd = self._config.workers[worker_name]
 
-        message_type = self.get_message_type(wd.input_message.name)
-        try:
-            if isinstance(payload, message_type):
-                payload_data = payload.dict()
-            elif isinstance(payload, dict):
-                payload_data = message_type(**payload).dict()  # type: ignore
-            else:
-                raise TypeError(f'data has invalid type.{type(payload).__name__} was given')
-        except Exception as e:  # noqa
-            raise UniPayloadSerializationError(str(e))
+        meta_list = [self._to_meta(wd, parent_meta, payload, answer_params)] if not isinstance(payload, (list, tuple)) else [self._to_meta(wd, parent_meta, p, answer_params) for p in payload]
 
         br = self.get_broker(wd.broker.name)
 
-        if parent_meta is not None:
-            meta = parent_meta.create_child(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
-        else:
-            meta = UniMessageMeta.create_new(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
-
-        if meta.need_answer and wd.need_answer:
-            assert wd.answer_message is not None
-            answ_meta = br.rpc_call(wd.topic, meta, alone=alone, max_delay_s=wd.answer_avg_delay_s * 3, unwrapped=wd.answer_unwrapped)
+        if answer_params is not None and wd.need_answer:
+            if len(meta_list) != 1:
+                raise OverflowError(f'invalid messages length for rpc call. must be 1. {len(meta_list)} was given')
+            assert wd.answer_message is not None  # just for mypy
+            answ_meta = br.rpc_call(wd.topic, meta_list[0], alone=alone, max_delay_s=wd.answer_avg_delay_s * 3, unwrapped=wd.answer_unwrapped)
             if answ_meta is None:
                 if alone:
                     return None
-                raise OverflowError('system error. answer object must be specified')
+                raise UniEmptyAnswerError('system error. answer object must be not empty')
             return UniAnswerMessage(answ_meta, self.get_message_type(wd.answer_message.name))
 
-        meta_list = [meta]
         br.publish(wd.topic, meta_list, alone=alone)  # TODO: make it list by default
         self.echo.log_info(f"worker {wd.name} sent message to topic '{wd.topic}':: {meta_list}")
         return None

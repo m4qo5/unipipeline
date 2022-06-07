@@ -3,8 +3,7 @@ from uuid import uuid4
 
 import yaml
 
-from unipipeline.errors.uni_config_error import UniConfigError
-from unipipeline.errors.uni_definition_not_found_error import UniDefinitionNotFoundError
+from unipipeline.errors import UniConfigError, UniDefinitionNotFoundError
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_codec_definition import UniCodecDefinition
 from unipipeline.definitions.uni_cron_task_definition import UniCronTaskDefinition

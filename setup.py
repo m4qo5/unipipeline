@@ -39,7 +39,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "jinja2>=3.0.3",
-        "amqp>=5.0.6",
+        "amqp>=5.1.1",
         "pyyaml>=5.4.12",
         "types-pyyaml>=5.4.12",
         "pydantic>=1.8.2",

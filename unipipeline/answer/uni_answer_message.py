@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TypeVar, Generic, Type, Optional, Dict, Any
 from uuid import UUID
 
-from unipipeline.errors.uni_payload_error import UniAnswerPayloadParsingError
+from unipipeline.errors import UniAnswerMessagePayloadParsingError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta
 
@@ -38,10 +38,10 @@ class UniAnswerMessage(Generic[TMessage]):
             return self._message_payload_cache  # type: ignore
 
         try:
-            self._message_payload_cache = self._message_payload_type(**self._meta.payload)  # type: ignore
+            self._message_payload_cache = self._message_payload_type(**self._meta.payload)
         except Exception as e:  # noqa
-            raise UniAnswerPayloadParsingError(str(e))
+            raise UniAnswerMessagePayloadParsingError(str(e))
 
-        assert self._message_payload_cache is not None
+        assert self._message_payload_cache is not None  # just for mypy
 
         return self._message_payload_cache

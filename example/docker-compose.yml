@@ -9,6 +9,7 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin
+      RABBITMQ_LOGSL: '-'
 
   zookeeper:
     image: confluentinc/cp-zookeeper:5.3.0

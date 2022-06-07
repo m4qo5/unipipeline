@@ -114,7 +114,7 @@ class UniModuleDefinition(NamedTuple, Generic[T]):
             if util is None:
                 raise TypeError('util must be set')
 
-            mdl = None  # type: ignore
+            mdl = None
             echo = echo.mk_child(f'module[{self.module}::{self.object_name}]')
             hierarchy = self.module.split('.')
             path = os.path.abspath(f'{os.path.join("../modules/", *hierarchy)}.py')

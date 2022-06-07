@@ -1,8 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra
 
 
 class UniDynamicDefinition(BaseModel):
     class Config:
-        extra = 'ignore'
+        extra = Extra.ignore
         allow_mutation = False
         frozen = True

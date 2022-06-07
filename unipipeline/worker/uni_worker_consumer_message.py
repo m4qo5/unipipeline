@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TypeVar, Optional, Generic, Type
 from uuid import UUID
 
-from unipipeline.errors.uni_payload_error import UniPayloadParsingError
+from unipipeline.errors import UniMessagePayloadParsingError
 from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta
@@ -47,8 +47,8 @@ class UniWorkerConsumerMessage(Generic[TInputMsgPayload]):
             return self._message_payload_cache  # type: ignore
 
         try:
-            self._message_payload_cache = self._message_input_payload_type(**self._meta.payload)  # type: ignore
+            self._message_payload_cache = self._message_input_payload_type(**self._meta.payload)
         except Exception as e:  # noqa
-            raise UniPayloadParsingError(str(e))
+            raise UniMessagePayloadParsingError(str(e))
 
         return self._message_payload_cache

@@ -4,6 +4,7 @@ service:
   name: "example-rmq"
   echo_colors: true
   echo_level: debug
+  heartbeat: 1
 
 
 external:

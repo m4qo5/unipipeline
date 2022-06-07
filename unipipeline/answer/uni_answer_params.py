@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra
 
 
 class UniAnswerParams(BaseModel):
@@ -9,4 +9,4 @@ class UniAnswerParams(BaseModel):
 
     class Config:
         frozen = True
-        extra = 'forbid'
+        extra = Extra.ignore

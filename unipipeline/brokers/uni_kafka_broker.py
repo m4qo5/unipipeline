@@ -1,3 +1,4 @@
+import functools
 from typing import Optional, Any, Dict, List, Set, TYPE_CHECKING
 
 from kafka import KafkaProducer, KafkaConsumer  # type: ignore
@@ -122,10 +123,16 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
         for consumer_record in kfk_consumer:
             self._in_processing = True
 
-            meta = self.parse_message_body(consumer_record.value, self.definition.compression, self.definition.content_type, consumer.unwrapped)
+            get_meta = functools.partial(
+                self.parse_message_body,
+                content=consumer_record.value,
+                compression=self.definition.compression,
+                content_type=self.definition.content_type,
+                unwrapped=consumer.unwrapped,
+            )
 
             manager = UniKafkaBrokerMessageManager(commit)
-            consumer.message_handler(meta, manager)
+            consumer.message_handler(get_meta, manager)
 
             self._in_processing = False
             if self._interrupted:

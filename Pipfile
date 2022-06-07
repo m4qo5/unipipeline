@@ -5,30 +5,30 @@ name = "pypi"
 
 [packages]
 jinja2 = ">=3.0.3"
-pyyaml = ">=5.4.1"
+pyyaml = ">=5.4.12"
 types-pyyaml = ">=5.4.12"
 pydantic = ">=1.8.2"
 psycopg2-binary = ">=2.9.2"
-pika = ">=1.2.0"
+pika = ">=1.2.1"
 crontab = ">=0.23.0"
 kafka-python = ">=2.0.2"
-amqp = "5.0.6"
+amqp = "5.1.1"
 
 [dev-packages]
 wheel = "*"
 twine = "*"
 setuptools = "*"
 
-mypy = "==0.910"
+mypy = "==0.961"
 pytest = "==6.2.5"
 flake8 = ">=4.0.1"
-flake8-blind-except = "==0.2.0"
+flake8-blind-except = "==0.2.1"
 flake8-logging-format = "==0.6.0"
 flake8-self = "==0.2.2"
 flake8-super-call = "==1.0.0"
 #flake8-bugbear = "==20.11.1"   # has bug
-flake8-print = "==4.0.0"
-pep8-naming = "==0.12.1"  # flask plugin
+flake8-print = "==5.0.0"
+pep8-naming = "==0.13.0"  # flask plugin
 pycodestyle = "==2.8.0"
 
 [requires]
@@ -39,6 +39,7 @@ pack = "python3 setup.py sdist bdist_wheel"
 upload_pypi = "twine upload dist/*"
 check = "./run-check.sh"
 prepare = "./run-prepare.sh"
+
 example-mem-producer = "python3 ./example/example_producer.py --type mem"
 example-mem-consumer-input = "python3 ./example/example_consumer.py --type mem --worker input_worker"
 example-mem-consumer-after-cron = "python3 ./example/example_consumer.py --type mem --worker ender_after_cron_worker"
@@ -46,6 +47,7 @@ example-mem-consumer-after-input = "python3 ./example/example_consumer.py --type
 example-mem-consumer-cron = "python3 ./example/example_consumer.py --type mem --worker my_super_cron_worker"
 example-mem-cron = "python3 ./example/example_cron_producer.py --type mem"
 example-mem-csi = "python3 ./example/example_csi.py --type mem"
+
 example-kafka-producer = "python3 ./example/example_producer.py --type kafka"
 example-kafka-consumer-input = "python3 ./example/example_consumer.py --type kafka --worker input_worker"
 example-kafka-consumer-after-cron = "python3 ./example/example_consumer.py --type kafka --worker ender_after_cron_worker"
@@ -53,7 +55,9 @@ example-kafka-consumer-after-input = "python3 ./example/example_consumer.py --ty
 example-kafka-consumer-cron = "python3 ./example/example_consumer.py --type kafka --worker my_super_cron_worker"
 example-kafka-cron = "python3 ./example/example_cron_producer.py --type kafka"
 example-kafka-csi = "python3 ./example/example_csi.py --type kafka"
+
 example-rmq-producer = "python3 ./example/example_producer.py --type rmq"
+example-rmq-producer-dangerous-pack = "python3 ./example/example_producer.py --type rmq --count 100 --delay 0"
 example-rmq-consumer-input = "python3 ./example/example_consumer.py --type rmq --worker input_worker"
 example-rmq-consumer-after-cron = "python3 ./example/example_consumer.py --type rmq --worker ender_after_cron_worker"
 example-rmq-consumer-after-input = "python3 ./example/example_consumer.py --type rmq --worker ender_after_input_worker"

@@ -55,8 +55,8 @@ class soft_interruption:  # noqa
                 print(e)  # noqa
 
     def __enter__(self) -> None:
-        self._old_sig_int = signal.signal(signal.SIGINT, self._interruption_handler)
-        self._old_sig_term = signal.signal(signal.SIGTERM, self._term_handler)
+        self._old_sig_int = signal.signal(signal.SIGINT, self._interruption_handler)  # type: ignore
+        self._old_sig_term = signal.signal(signal.SIGTERM, self._term_handler)  # type: ignore
         return None
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:

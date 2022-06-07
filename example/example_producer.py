@@ -1,5 +1,6 @@
 import os.path
 import sys
+from datetime import datetime
 from time import sleep
 
 CWD = os.path.dirname(os.path.abspath(__file__))
@@ -17,6 +18,7 @@ u.initialize()
 
 for i in range(args.produce_count):
     u.send_to("input_worker", dict(value=i, some="Привет World"))
-    sleep(1)
+    print('>> SENT at', datetime.now())  # noqa
+    sleep(args.delay)
 
 # u.exit()
