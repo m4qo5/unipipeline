@@ -1,17 +1,38 @@
 import functools
-from typing import Optional, Any, Dict, List, Set, TYPE_CHECKING
+from typing import Optional, Any, Dict, List, Set, TYPE_CHECKING, Tuple, Callable
 
 from kafka import KafkaProducer, KafkaConsumer  # type: ignore
 
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
+from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
-from unipipeline.brokers.uni_kafka_broker_config import UniKafkaBrokerConfig
-from unipipeline.brokers.uni_kafka_broker_message_manager import UniKafkaBrokerMessageManager
+from unipipeline.definitions.uni_dynamic_definition import UniDynamicDefinition
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
+
+
+class UniKafkaBrokerConfig(UniDynamicDefinition):
+    api_version: Tuple[int, ...]
+    retry_max_count: int = 100
+    retry_delay_s: int = 3
+
+
+class UniKafkaBrokerMessageManager(UniBrokerMessageManager):
+    def __init__(self, commit: Callable[[], None]) -> None:
+        self._commit = commit
+        self._acknowledged = False
+
+    def reject(self) -> None:
+        pass
+
+    def ack(self) -> None:
+        if self._acknowledged:
+            return
+        self._acknowledged = True
+        self._commit()
 
 
 class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
