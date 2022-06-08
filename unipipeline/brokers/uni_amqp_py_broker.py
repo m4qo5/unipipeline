@@ -444,20 +444,22 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             echo.log_warning('has no consumers to start consuming')
             return
 
-        if len(self._consumers) != 1:
-            echo.exit_with_error(f'consumer must be only one. {len(self._consumers)} was given')
-
-        c = self._consumers[0]
-
         self.connect()
 
-        ch = self._connection.channel()
-        topic = self._init_topic(ch, self.config.exchange_name, c.queue)
-        echo.log_debug(f'added consumer {c.consumer_tag} on {self.config.exchange_name}->{topic}. prefetch: {self.config.prefetch}')
-        ch.basic_qos(prefetch_count=self.config.prefetch, a_global=False, prefetch_size=0)
-        self._start_heartbeat_tick()
-        echo.log_info(f'starting consuming :: consumers_count={len(self._consumers)}')
-        ch.basic_consume(queue=topic, callback=functools.partial(c.on_message_callback, ch), consumer_tag=c.consumer_tag)
+        for c in self._consumers:
+            ch = self._connection.channel()
+            topic = self._init_topic(ch, self.config.exchange_name, c.queue)
+            echo.log_debug(f'added consumer {c.consumer_tag} on {self.config.exchange_name}->{topic}. prefetch: {self.config.prefetch}')
+            ch.basic_qos(prefetch_count=self.config.prefetch, a_global=False, prefetch_size=0)
+            self._start_heartbeat_tick()
+            echo.log_info(f'starting consuming :: consumers_count={len(self._consumers)}')
+            ch.basic_consume(queue=topic, callback=functools.partial(c.on_message_callback, ch), consumer_tag=c.consumer_tag)
+
+        while self._consuming_enabled:
+            echo.log_debug('wait for next message ...')
+            self._connection.drain_events()
+
+        self._stop_heartbeat_tick()
 
     def start_consuming(self) -> None:
         if self._consuming_enabled:
