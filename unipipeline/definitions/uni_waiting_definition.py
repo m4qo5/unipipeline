@@ -2,8 +2,8 @@ from time import sleep
 from uuid import UUID
 
 from unipipeline.definitions.uni_definition import UniDefinition
-from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.definitions.uni_module_definition import UniModuleDefinition
+from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.waiting.uni_wating import UniWaiting
 
 

@@ -2,13 +2,14 @@ from typing import TypeVar, Generic, Optional, Type, Any, Union, Dict, TYPE_CHEC
 
 from unipipeline.answer.uni_answer_message import UniAnswerMessage
 from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
-from unipipeline.errors import UniRedundantAnswerError, UniMessagePayloadParsingError, UniAnswerMessagePayloadParsingError, UniSendingToUndefinedWorkerError
+from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
+from unipipeline.errors import UniRedundantAnswerError, UniMessagePayloadParsingError, \
+    UniAnswerMessagePayloadParsingError, UniSendingToUndefinedWorkerError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic, UniAnswerParams
 from unipipeline.worker.uni_worker import UniWorker
 from unipipeline.worker.uni_worker_consumer_manager import UniWorkerConsumerManager
 from unipipeline.worker.uni_worker_consumer_message import UniWorkerConsumerMessage
-from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator

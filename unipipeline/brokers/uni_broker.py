@@ -1,13 +1,13 @@
+from atexit import register as on_exit_app
 from typing import Set, List, TYPE_CHECKING, Generic, TypeVar, Type, Optional, Dict, Any
 
 from pydantic import ValidationError
-from atexit import register as on_exit_app
 
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_definition import UniDynamicDefinition
-from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
+from unipipeline.utils.uni_echo import UniEcho
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator

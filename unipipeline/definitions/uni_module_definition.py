@@ -1,10 +1,10 @@
-import os.path
 import importlib
+import os.path
 from time import sleep
-from typing import NamedTuple, Generic, Type, TypeVar, Any, Optional, Set, Callable
+from typing import NamedTuple, Type, TypeVar, Any, Optional, Set, Callable
 
-from unipipeline.utils.uni_util import UniUtil
 from unipipeline.utils.uni_echo import UniEcho
+from unipipeline.utils.uni_util import UniUtil
 
 T = TypeVar('T')
 
@@ -83,7 +83,7 @@ tpl_map = {
 CWD = str(os.getcwdb().decode('utf-8'))
 
 
-class UniModuleDefinition(NamedTuple, Generic[T]):
+class UniModuleDefinition(NamedTuple):
     module: str
     object_name: str
 
