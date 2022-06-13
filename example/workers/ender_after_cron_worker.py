@@ -7,5 +7,6 @@ from unipipeline.worker.uni_worker_consumer_message import UniWorkerConsumerMess
 class EnderAfterCronWorker(UniWorker[EnderAfterCronInputMessage, EnderAfterCronAnswerMessage]):
     def handle_message(self, msg: UniWorkerConsumerMessage[EnderAfterCronInputMessage]) -> EnderAfterCronAnswerMessage:
         return EnderAfterCronAnswerMessage(
-            value=f'after_cron => {msg.payload.value}'
+            value=f'after_cron => {msg.payload.value}',
+            result=msg.payload.count * 3,
         )

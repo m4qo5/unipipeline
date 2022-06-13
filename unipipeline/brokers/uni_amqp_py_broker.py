@@ -566,11 +566,12 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         started = time.time()
         self.echo.log_info(f'waiting for message from {self.config.answer_exchange_name}->{answ_topic}')
         while True:
-            msg: Optional[amqp.Message] = ch.basic_get(queue=answ_topic)
+            msg: Optional[amqp.Message] = ch.basic_get(queue=answ_topic, no_ack=True)
 
             if msg is None:
-                if (time.time() - started) > max_delay_s:
-                    raise UniAnswerDelayError(f'answer for {self.config.answer_exchange_name}->{answ_topic} reached delay limit {max_delay_s} seconds')
+                current_delay = time.time() - started
+                if current_delay > max_delay_s:
+                    raise UniAnswerDelayError(f'answer for {self.config.answer_exchange_name}->{answ_topic} reached delay limit. {current_delay}s > {max_delay_s}s')
                 self.echo.log_debug(f'no answer {int(time.time() - started + 1)}s in {self.config.answer_exchange_name}->{answ_topic}')
                 sleep(0.1)
                 continue
