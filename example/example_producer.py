@@ -17,7 +17,13 @@ u.init_producer_worker('input_worker')
 u.initialize()
 
 for i in range(args.produce_count):
-    u.send_to("input_worker", dict(value=i, some="Привет World"))
+    batch = []
+    for j in range(args.produce_batch_count):
+        some = "Привет World"  # * 1000000
+        batch.append(dict(value=i, some=some))
+    u.send_to("input_worker", batch)
+    # if i % 1000 == 0:
+    #     sleep(14)
     print('>> SENT at', datetime.now())  # noqa
     sleep(args.delay)
 
