@@ -128,7 +128,7 @@ class UniMediator:
 
         assert req_meta.answer_params is not None
         b.publish_answer(req_meta.answer_params, answ_meta)
-        self.echo.log_info(f'worker {worker_name} answers to {req_meta.answer_params.topic}->{req_meta.answer_params.id} :: {answ_meta}')
+        self.echo.log_info(f'worker {worker_name} answers to {req_meta.answer_params.topic}->{req_meta.answer_params.id} :: meta.id={answ_meta.id}')
 
     def _to_meta(self, wd: UniWorkerDefinition, parent_meta: Optional[UniMessageMeta], payload: Union[Dict[str, Any], UniMessage], answer_params: Optional[UniAnswerParams]) -> UniMessageMeta:
         message_type = self.get_message_type(wd.input_message.name)
