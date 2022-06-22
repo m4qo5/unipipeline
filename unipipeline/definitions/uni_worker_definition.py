@@ -26,7 +26,6 @@ class UniWorkerDefinition(UniDefinition):
     external: Optional[str]
     input_unwrapped: bool
     answer_unwrapped: bool
-    answer_avg_delay_s: int
 
     @property
     def marked_as_external(self) -> bool:

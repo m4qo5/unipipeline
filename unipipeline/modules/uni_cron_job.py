@@ -5,6 +5,7 @@ from crontab import CronTab  # type: ignore
 
 from unipipeline.definitions.uni_cron_task_definition import UniCronTaskDefinition
 from unipipeline.message.uni_cron_message import UniCronMessage
+from unipipeline.worker.uni_msg_params import UniSendingParams
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
@@ -56,4 +57,4 @@ class UniCronJob(NamedTuple):
         return min_delay, notification_list
 
     def send(self) -> None:
-        self.mediator.send_to(self.task.worker.name, self.message, alone=self.task.alone)
+        self.mediator.send_to(self.task.worker.name, self.message, params=UniSendingParams(alone=self.task.alone))

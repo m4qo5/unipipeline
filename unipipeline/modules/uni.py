@@ -1,4 +1,4 @@
-from typing import Dict, Any, Union, Optional
+from typing import Dict, Any, Union, Optional, List
 
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.config.uni_config import UniConfig
@@ -8,6 +8,7 @@ from unipipeline.modules.uni_mediator import UniMediator
 from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.utils.uni_util import UniUtil
 from unipipeline.waiting.uni_wating import UniWaiting
+from unipipeline.worker.uni_msg_params import default_sending_params, UniSendingParams
 from unipipeline.worker.uni_worker import UniWorker
 
 
@@ -111,9 +112,9 @@ class Uni:
         self._mediator.add_worker_to_init_list(name, no_related=False)
         self._mediator.add_worker_to_consume_list(name)
 
-    def send_to(self, name: str, data: Union[Dict[str, Any], UniMessage], alone: bool = False) -> None:
+    def send_to(self, name: str, data: Union[Dict[str, Any], UniMessage, List[Dict[str, Any]], List[UniMessage]], params: UniSendingParams = default_sending_params) -> None:
         try:
-            self._mediator.send_to(name, data, alone=alone)
+            self._mediator.send_to(name, data, params=params)
         except UniPayloadSerializationError as e:
             self.echo.exit_with_error(f'invalid props in message: {e}')
 

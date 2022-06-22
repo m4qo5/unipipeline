@@ -1,5 +1,5 @@
 from time import sleep, time
-from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List, NamedTuple, Callable
+from typing import Dict, TypeVar, Any, Set, Union, Optional, Type, List, NamedTuple, Callable, Tuple
 from uuid import uuid4
 
 from unipipeline.answer.uni_answer_message import UniAnswerMessage
@@ -13,10 +13,12 @@ from unipipeline.modules.uni_cron_job import UniCronJob
 from unipipeline.utils.sig import soft_interruption
 from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.utils.uni_util import UniUtil
+from unipipeline.worker.uni_msg_params import UniSendingParams, UniGettingAnswerParams, TUniSendingMessagePayloadUnion, TUniSendingWorkerUnion
 from unipipeline.worker.uni_worker import UniWorker
 from unipipeline.worker.uni_worker_consumer import UniWorkerConsumer
 
 TWorker = TypeVar('TWorker', bound=UniWorker[Any, Any])
+TUniOutputMessage = TypeVar('TUniOutputMessage', bound=UniMessage)
 
 
 class UniBrokerInitRecipe(NamedTuple):
@@ -146,37 +148,67 @@ class UniMediator:
             meta = UniMessageMeta.create_new(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
         return meta
 
-    def send_to(
+    def _prepare_sending(
         self,
-        worker_name: str,
-        payload: Union[Dict[str, Any], UniMessage, List[Dict[str, Any]], List[UniMessage]],
+        worker_name: TUniSendingWorkerUnion,
+        payload: TUniSendingMessagePayloadUnion,
         *,
-        parent_meta: Optional[UniMessageMeta] = None,
-        answer_params: Optional[UniAnswerParams] = None,
-        alone: bool = False,
-    ) -> Optional[UniAnswerMessage[UniMessage]]:
-        if worker_name not in self._worker_initialized_list:
-            raise OverflowError(f'worker {worker_name} was not initialized')
-
-        wd = self._config.workers[worker_name]
-
-        meta_list = [self._to_meta(wd, parent_meta, payload, answer_params)] if not isinstance(payload, (list, tuple)) else [self._to_meta(wd, parent_meta, p, answer_params) for p in payload]
-
+        parent_meta: Optional[UniMessageMeta],
+        answer_params: Optional[UniAnswerParams]
+    ) -> Tuple[UniWorkerDefinition, UniBroker[Any], List[UniMessageMeta]]:
+        wd = self.config.get_worker_definition(worker_name)
         br = self.get_broker(wd.broker.name)
+        meta_list = [self._to_meta(wd, parent_meta, payload, answer_params)] if not isinstance(payload, (list, tuple)) else [self._to_meta(wd, parent_meta, p, answer_params) for p in payload]
+        if wd.name not in self._worker_initialized_list:
+            raise OverflowError(f'worker {wd.name} was not initialized')
 
-        if answer_params is not None and wd.need_answer:
+        if answer_params is not None:
+            if not wd.need_answer:
+                raise UniRedundantAnswerError(f'you will get no response form worker {wd.name}')
             if len(meta_list) != 1:
                 raise OverflowError(f'invalid messages length for rpc call. must be 1. {len(meta_list)} was given')
-            assert wd.answer_message is not None  # just for mypy
-            answ_meta = br.rpc_call(wd.topic, meta_list[0], alone=alone, max_delay_s=wd.answer_avg_delay_s * 3, unwrapped=wd.answer_unwrapped)
-            if answ_meta is None:
-                if alone:
-                    return None
-                raise UniEmptyAnswerError('system error. answer object must be not empty')
-            return UniAnswerMessage(answ_meta, self.get_message_type(wd.answer_message.name))
 
-        br.publish(wd.topic, meta_list, alone=alone)  # TODO: make it list by default
-        self.echo.log_info(f"worker {wd.name} sent message to topic '{wd.topic}':: {meta_list}")
+        return wd, br, meta_list
+
+    def get_answer_from(
+        self,
+        worker: TUniSendingWorkerUnion,
+        payload: TUniSendingMessagePayloadUnion,
+        *,
+        params: UniGettingAnswerParams,
+        answer_params: UniAnswerParams,
+        parent_meta: Optional[UniMessageMeta] = None,
+    ) -> Optional[UniAnswerMessage[UniMessage]]:
+        wd, br, meta_list = self._prepare_sending(worker, payload, parent_meta=parent_meta, answer_params=answer_params)
+        assert wd.answer_message is not None  # just for mypy
+
+        answer_meta = br.rpc_call(
+            topic=wd.topic,
+            meta=meta_list[0],
+            alone=params.alone,
+            max_delay_s=answer_params.ttl_s,
+            unwrapped=wd.answer_unwrapped,
+        )
+
+        if answer_meta is None:
+            if params.alone:
+                return None
+            raise UniEmptyAnswerError('system error. answer object must be not empty')
+
+        return UniAnswerMessage(answer_meta, self.get_message_type(wd.answer_message.name))
+
+    def send_to(
+        self,
+        worker: TUniSendingWorkerUnion,
+        payload: TUniSendingMessagePayloadUnion,
+        *,
+        parent_meta: Optional[UniMessageMeta] = None,
+        params: UniSendingParams,
+    ) -> Optional[UniAnswerMessage[UniMessage]]:
+        wd, br, meta_list = self._prepare_sending(worker, payload, parent_meta=parent_meta, answer_params=None)
+
+        br.publish(wd.topic, meta_list, alone=params.alone)  # TODO: make it list by default
+        self.echo.log_info(f"sent message to topic '{wd.topic}' for worker {wd.name} :: {len(meta_list)} :: {','.join(str(m.id) for m in meta_list)}")
         return None
 
     def start_cron(self) -> None:

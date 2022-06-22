@@ -1,12 +1,14 @@
+import math
 from typing import TypeVar, Generic, Optional, Type, Any, Union, Dict, TYPE_CHECKING, Callable
 
 from unipipeline.answer.uni_answer_message import UniAnswerMessage
 from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
-from unipipeline.errors import UniRedundantAnswerError, UniMessagePayloadParsingError, \
+from unipipeline.errors import UniMessagePayloadParsingError, \
     UniAnswerMessagePayloadParsingError, UniSendingToUndefinedWorkerError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic, UniAnswerParams
+from unipipeline.worker.uni_msg_params import UniGettingAnswerParams, UniSendingParams, TUniSendingMessagePayloadUnion, TUniSendingWorkerUnion
 from unipipeline.worker.uni_worker import UniWorker
 from unipipeline.worker.uni_worker_consumer_manager import UniWorkerConsumerManager
 from unipipeline.worker.uni_worker_consumer_message import UniWorkerConsumerMessage
@@ -23,7 +25,8 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
         self._definition = definition
         self._mediator = mediator
 
-        self._worker_manager = UniWorkerConsumerManager(self.send_to)
+        self._worker_manager = UniWorkerConsumerManager(self._send_to, self._get_answer_from)
+
         self._worker = worker_type(self._worker_manager)
         self._uni_echo = mediator.echo.mk_child(f'worker[{definition.name}]')
 
@@ -32,17 +35,31 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
 
         self._current_meta: Optional[UniMessageMeta] = None
 
-    def send_to(self, worker: Union[Type['UniWorker[Any, Any]'], str], data: Union[Dict[str, Any], UniMessage], *, alone: bool = False, need_answer: bool = False) -> Optional[UniAnswerMessage[UniMessage]]:
+    def _get_answer_from(
+        self,
+        worker: TUniSendingWorkerUnion,
+        data: TUniSendingMessagePayloadUnion,
+        *,
+        params: UniGettingAnswerParams,
+    ) -> Optional[UniAnswerMessage[UniMessage]]:
+        answer_params = UniAnswerParams(
+            topic=self._definition.answer_topic,
+            id=self._worker_manager.id,
+            ttl_s=math.ceil(params.answer_tll.total_seconds()),
+        )
+        return self._mediator.get_answer_from(worker, data, parent_meta=self._current_meta, answer_params=answer_params, params=params)
+
+    def _send_to(
+        self,
+        worker: TUniSendingWorkerUnion,
+        data: TUniSendingMessagePayloadUnion,
+        *,
+        params: UniSendingParams,
+    ) -> None:
         wd = self._mediator.config.get_worker_definition(worker)
         if wd.name not in self._definition.output_workers:
             raise UniSendingToUndefinedWorkerError(f'worker {wd.name} is not defined in workers->{self._definition.name}->output_workers')
-        if need_answer and not wd.need_answer:
-            raise UniRedundantAnswerError(f'you will get no response form worker {wd.name}')
-        if need_answer:
-            answ_params = UniAnswerParams(topic=self._definition.answer_topic, id=self._worker_manager.id)
-            return self._mediator.send_to(wd.name, data, parent_meta=self._current_meta, answer_params=answ_params, alone=alone)
-        self._mediator.send_to(wd.name, data, parent_meta=self._current_meta, answer_params=None, alone=alone)
-        return None
+        self._mediator.send_to(wd.name, data, parent_meta=self._current_meta, params=params)
 
     def process_message(self, get_meta: Callable[[], UniMessageMeta], manager: UniBrokerMessageManager) -> None:
         self._current_meta = None
@@ -77,7 +94,7 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
             return
 
         self._uni_echo.log_debug(f'processing successfully done {meta.id}')
-        if self._definition.need_answer:
+        if meta.need_answer and self._definition.need_answer:
             try:
                 self._mediator.answer_to(self._definition.name, meta, result, unwrapped=self._definition.answer_unwrapped)
             except UniSendingToUndefinedWorkerError:

@@ -30,6 +30,10 @@ class UniMessageMeta(BaseModel):
         extra = Extra.ignore
 
     @property
+    def real_ttl_s(self) -> Optional[int]:
+        return self.ttl_s or (self.answer_params.ttl_s if self.answer_params is not None else None)
+
+    @property
     def need_answer(self) -> bool:
         return self.answer_params is not None
 

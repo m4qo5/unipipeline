@@ -4,6 +4,7 @@ import sys
 
 from unipipeline.args import CMD_INIT, CMD_CHECK, CMD_CRON, CMD_PRODUCE, CMD_CONSUME, parse_args, CMD_SCAFFOLD
 from unipipeline.modules.uni import Uni
+from unipipeline.worker.uni_msg_params import UniSendingParams
 
 
 def run_check(u: Uni, args) -> None:  # type: ignore
@@ -36,7 +37,7 @@ def run_consume(u: Uni, args) -> None:  # type: ignore
 def run_produce(u: Uni, args) -> None:  # type: ignore
     u.init_producer_worker(args.produce_worker)
     u.initialize()
-    u.send_to(args.produce_worker, args.produce_data, alone=args.produce_alone)
+    u.send_to(args.produce_worker, args.produce_data, params=UniSendingParams(alone=args.produce_alone))
 
 
 args_cmd_map = {
