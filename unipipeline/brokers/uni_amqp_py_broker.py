@@ -29,11 +29,9 @@ BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
 RECOVERABLE_ERRORS = tuple({AqmpConnectionError, RecoverableChannelError, *amqp.Connection.recoverable_connection_errors})
 
 
-TMessage = TypeVar('TMessage', bound=UniMessage)
-
-# logging.getLogger('amqp').setLevel(logging.DEBUG)
-
 T = TypeVar('T')
+TFn = TypeVar('TFn', bound=Callable[..., Any])
+TMessage = TypeVar('TMessage', bound=UniMessage)
 
 
 HEADER_TTL = 'x-message-ttl'
@@ -96,9 +94,6 @@ class UniAmqpPyBrokerConsumer(NamedTuple):
     on_message_callback: Callable[[amqp.Channel, 'amqp.Message'], None]
     consumer_tag: str
     prefetch_count: int
-
-
-TFn = TypeVar('TFn', bound=Callable[..., Any])
 
 
 def retryable(
@@ -187,7 +182,6 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
         '_free_channels_lock',
         '_free_channels',
-        '_channels_creation_time_by_id',
     )
 
     def __init__(self, mediator: 'UniMediator', definition: UniBrokerDefinition) -> None:
@@ -207,15 +201,14 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self._last_interaction = time.time()
         self._lock_interaction: threading.Lock = threading.Lock()
         self._free_channels_lock: threading.Lock = threading.Lock()
-        self._free_channels: List[amqp.Channel] = list()
-        self._channels_creation_time_by_id: Dict[int, float] = dict()
+        self._free_channels: List[Tuple[float, amqp.Channel]] = list()
 
         def raise_connection_err() -> None:
             raise ConnectionError()
 
-        self._publish_ch_publishing_r = retryable(
+        self._publish_ch = retryable(  # type: ignore
             self._publish_ch,
-            self.echo.mk_child('publishing'),
+            self.echo,
             retry_max_count=self.config.retry_max_count,
             retry_delay_s=self.config.retry_delay_s,
             retryable_errors=RECOVERABLE_ERRORS,
@@ -223,7 +216,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         )
         self._new_channel = retryable(  # type: ignore
             self._new_channel,
-            self.echo.mk_child('new_channel'),
+            self.echo,
             retry_max_count=self.config.retry_max_count,
             retry_delay_s=self.config.retry_delay_s,
             retryable_errors=RECOVERABLE_ERRORS,
@@ -231,7 +224,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         )
         self.get_topic_approximate_messages_count = retryable(  # type: ignore
             self.get_topic_approximate_messages_count,
-            self.echo.mk_child('get_topic_approximate_messages_count'),
+            self.echo,
             retry_max_count=self.config.retry_max_count,
             retry_delay_s=self.config.retry_delay_s,
             retryable_errors=RECOVERABLE_ERRORS,
@@ -239,7 +232,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         )
         self.rpc_call = retryable(  # type: ignore
             self.rpc_call,
-            self.echo.mk_child('rpc_call'),
+            self.echo,
             retry_max_count=self.config.retry_max_count,
             retry_delay_s=self.config.retry_delay_s,
             retryable_errors=RECOVERABLE_ERRORS,
@@ -247,20 +240,21 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         )
         self._consuming = retryable(  # type: ignore
             self._consuming,
-            self.echo.mk_child('consuming'),
+            self.echo,
             retry_max_count=self.config.retry_max_count,
             retry_delay_s=self.config.retry_delay_s,
             retryable_errors=RECOVERABLE_ERRORS,
             on_retries_ends=raise_connection_err,
         )
-        self.publish_answer = retryable(  # type: ignore
-            self.publish_answer,
-            self.echo.mk_child('publish_answer'),
+        self._retryable_alone = retryable(  # type: ignore
+            self._retryable_alone,
+            self.echo,
             retry_max_count=self.config.retry_max_count,
             retry_delay_s=self.config.retry_delay_s,
             retryable_errors=RECOVERABLE_ERRORS,
             on_retries_ends=raise_connection_err,
         )
+
         self._heartbeat_enabled = False
         self._heartbeat_delay = max(self.config.heartbeat / 4, 0.2)
         self._heartbeat_thread: threading.Thread = threading.Thread(
@@ -273,35 +267,41 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             ),
         )
 
+    def _get_or_create_or_del_free_channel(self) -> Tuple[float, amqp.Channel]:
+        now = time.time()
+        with self._free_channels_lock:
+            for _i in range(len(self._free_channels)):
+                c = self._free_channels.pop(-1)
+                ch_time, ch = c
+
+                if not ch.is_open or ch.is_closing:
+                    continue
+
+                time_left = ch_time - now
+                ch_id = ch.channel_id
+                if time_left <= 0.:  # REMOVE CHANNEL
+                    try:
+                        with self._interaction():
+                            ch.close()
+                    except Exception as e:  # noqa
+                        self.echo.log_warning(f'channel {ch_id} :: closing error :: {str(e)}')
+                    else:
+                        self.echo.log_debug(f'channel {ch_id} :: closed (time left {time_left:0.2f}s)')
+                    continue
+
+                self.echo.log_debug(f'channel {ch_id} :: hold (time left {time_left:0.2f}s)')
+                return c
+        return now + float(self.config.heartbeat), self._new_channel()
+
     @contextlib.contextmanager
     def _channel(self) -> amqp.Channel:
-        ch: Optional[amqp.Channel] = None
-        with self._free_channels_lock:
-            free_channels_len = len(self._free_channels)
-            if free_channels_len > 0:
-                for i in range(free_channels_len):
-                    chm = self._free_channels.pop(-1)
-                    if chm.is_open and not chm.is_closing:
-                        if (time.time() - self._channels_creation_time_by_id[chm.channel_id]) > self.config.heartbeat:
-                            try:
-                                with self._interaction():
-                                    chm.close()
-                            except Exception as e:  # noqa
-                                self.echo.log_debug(f'channel {chm.channel_id} :: closing error :: {str(e)}')
-                            continue
-                        ch = chm
-                        self.echo.log_debug(f'channel {ch.channel_id} :: hold')
-                        break
-            if ch is None:
-                ch = self._new_channel()
-                self._channels_creation_time_by_id[ch.channel_id] = time.time()
-
+        c = self._get_or_create_or_del_free_channel()
         try:
-            yield ch
+            yield c[1]
         finally:
             with self._free_channels_lock:
-                self.echo.log_debug(f'channel {ch.channel_id} :: release')
-                self._free_channels.append(ch)
+                self.echo.log_debug(f'channel {c[1].channel_id} :: release')
+                self._free_channels.append(c)
 
     def _new_channel(self) -> Channel:  # retryable
         with self._interaction():
@@ -526,7 +526,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         yield now
         self._interacted()
 
-    def _alone(self, ch: amqp.Channel, topic: str, alone: bool) -> bool:
+    def _retryable_alone(self, ch: amqp.Channel, topic: str, alone: bool) -> bool:
         if alone:
             size = self._get_topic_approximate_messages_count(ch, topic)
             if size > 0:
@@ -576,18 +576,18 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         with self._channel() as ch:
             topic = self._init_topic(ch, self.config.exchange_name, topic)
 
-            if self._alone(ch, topic, alone):
+            if self._retryable_alone(ch, topic, alone):
                 return
 
             for meta in meta_list:
                 props = self._mk_mesg_props_by_meta(meta)
-                self._publish_ch_publishing_r('publish', ch, self.config.exchange_name, topic, meta, props)
+                self._publish_ch('publish', ch, self.config.exchange_name, topic, meta, props)
 
     def rpc_call(self, topic: str, meta: UniMessageMeta, *, alone: bool = False, max_delay_s: int = 1, unwrapped: bool = False) -> Optional[UniMessageMeta]:
         assert meta.answer_params is not None
 
         with self._channel() as ch:
-            if self._alone(ch, topic, alone):
+            if self._retryable_alone(ch, topic, alone):
                 return None
 
             answer_topic = self._init_topic(ch, self.config.answer_exchange_name, f'{meta.answer_params.topic}.{meta.answer_params.id}')
@@ -595,7 +595,6 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             self._publish_ch('rpc_call :: publish', ch, self.config.exchange_name, topic, meta, self._mk_mesg_props_by_meta(meta))
 
             started = time.time()
-            self.echo.log_info(f'channel {ch.channel_id} :: rpc_call :: waiting message in "{answer_topic}"')
 
             delay = 0.1
             while True:  # TODO: rewrite it to consumer
@@ -616,7 +615,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                     sleep(delay)
                     continue
 
-                self.echo.log_debug(f'channel {ch.channel_id} :: rpc_call :: waiting :: found message in "{answer_topic}"!')
+                self.echo.log_info(f'channel {ch.channel_id} :: rpc_call :: waiting :: found message in "{answer_topic}"!')
 
                 return self.parse_message_body(
                     msg.body,
