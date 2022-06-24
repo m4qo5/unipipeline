@@ -335,7 +335,8 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
 
     def _get_answ(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
         ch = self._ch_answ_consumer.get_channel(force_recreate=True)
-        exchange, topic = self._init_topic(ch, self.config.answer_exchange_name, self._mk_answer_topic(answer_params))
+        topic = self._init_topic(ch, self.config.answer_exchange_name, self._mk_answer_topic(answer_params))
+        exchange = self.config.exchange_name
 
         started = time.time()
         while True:
