@@ -14,10 +14,9 @@ from amqp.exceptions import ConnectionError as AqmpConnectionError, RecoverableC
 
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
-from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_definition import UniDynamicDefinition
-from unipipeline.errors import UniAnswerDelayError
+from unipipeline.errors import UniAnswerDelayError, UniMessageRejectError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
 
@@ -33,28 +32,6 @@ RECOVERABLE_ERRORS = tuple({RecoverableChannelError, *amqp.Connection.recoverabl
 T = TypeVar('T')
 TFn = TypeVar('TFn', bound=Callable[..., Any])
 TMessage = TypeVar('TMessage', bound=UniMessage)
-
-
-class UniPyPikaBrokerMessageManager(UniBrokerMessageManager):
-
-    def __init__(self, channel: amqp.Channel, delivery_tag: str, reject: Callable[[amqp.Channel, str], None], ack: Callable[[amqp.Channel, str], None]) -> None:
-        self._channel = channel
-        self._delivery_tag = delivery_tag
-        self._reacted = False
-        self._reject = reject
-        self._ack = ack
-
-    def reject(self) -> None:
-        if self._reacted:
-            return
-        self._reacted = True
-        self._reject(self._channel, self._delivery_tag)
-
-    def ack(self) -> None:
-        if self._reacted:
-            return
-        self._reacted = True
-        self._ack(self._channel, self._delivery_tag)
 
 
 class UniAmqpPyBrokerConfig(UniDynamicDefinition):
@@ -361,30 +338,18 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self._connection = None
         self.echo.log_debug('close :: done')
 
-    def _ack(self, ch: amqp.Channel, delivery_tag: str) -> None:
-        self.echo.log_debug(f'channel {ch.channel_id} :: message "{delivery_tag}" :: ack :: started')
-        with self._interaction():
-            ch.basic_ack(delivery_tag=delivery_tag)
-        self.echo.log_debug(f'channel {ch.channel_id} :: message "{delivery_tag}" :: ack :: done')
-
-    def _reject(self, ch: amqp.Channel, delivery_tag: str) -> None:
-        self.echo.log_debug(f'channel {ch.channel_id} :: message "{delivery_tag}" :: reject :: started')
-        with self._interaction():
-            ch.basic_reject(delivery_tag=delivery_tag, requeue=True)
-        self.echo.log_debug(f'channel {ch.channel_id} :: message "{delivery_tag}" :: reject :: done')
-
     def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         echo = self.echo.mk_child(f'topic[{consumer.topic}]')
         if self._consuming_enabled:
             raise OverflowError(f'you cannot add consumer dynamically :: tag="{consumer.id}" group_id={consumer.group_id}')
 
         def consumer_wrapper(ch: amqp.Channel, message: amqp.Message) -> None:
+            key = f'consumer "{consumer.id}" :: channel "{ch.channel_id}" :: message "{message.delivery_tag}"'
             self._interacted()
             self._consumer_in_processing = True
-            self.echo.log_debug(f'message "{message.delivery_tag}" :: received')
+            self.echo.log_debug(f'{key} :: received')
 
-            manager = UniPyPikaBrokerMessageManager(ch, message.delivery_tag, reject=self._reject, ack=self._ack)
-
+            rejected = False
             try:
                 get_meta = functools.partial(
                     self.parse_message_body,
@@ -393,17 +358,29 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                     content_type=message.content_type,
                     unwrapped=consumer.unwrapped,
                 )
-                consumer.message_handler(get_meta, manager)
+                consumer.message_handler(get_meta)
+            except UniMessageRejectError:
+                rejected = True
+                self.echo.log_debug(f'{key} :: reject :: started')
+                with self._interaction():
+                    ch.basic_reject(delivery_tag=message.delivery_tag, requeue=True)
+                self.echo.log_debug(f'{key} :: reject :: done')
             except Exception as e: # noqa
+                rejected = True
                 traceback.print_exc()
-                self.echo.log_error(f'consumer {consumer.id} :: message "{message.delivery_tag}" :: {str(e)}')
-                # self.stop_consuming()
+                self.echo.log_error(f'{key} :: {str(e)}')
                 raise
+
+            if not rejected:
+                self.echo.log_debug(f'{key} :: ack :: started')
+                with self._interaction():
+                    ch.basic_ack(delivery_tag=message.delivery_tag)
+                self.echo.log_debug(f'{key} :: ack :: done')
 
             self._consumer_in_processing = False
             if self._interrupted:
                 self.stop_consuming()
-            self.echo.log_debug(f'consumer {consumer.id} :: message "{message.delivery_tag}" :: processing finished')
+            self.echo.log_debug(f'{key} :: processing finished')
 
         self._consumers.append(UniAmqpPyBrokerConsumer(
             id=consumer.id,
@@ -546,7 +523,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             return UniAmqpPyBrokerMsgProps(
                 content_type=self.definition.content_type,
                 content_encoding='utf-8',
-                reply_to=f'{meta.answer_params.topic}.{meta.answer_params.id}',
+                reply_to=self._mk_answer_topic(meta.answer_params),
                 correlation_id=str(meta.id),
                 delivery_mode=2 if self.config.persistent_message else 0,
                 application_headers=headers,
@@ -577,9 +554,8 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
     def _rpc_call(self, ch: amqp.Channel, topic: str, meta: UniMessageMeta, *, alone: bool = False, max_delay_s: int = 1, unwrapped: bool = False) -> Optional[UniMessageMeta]:
         assert meta.answer_params is not None
-        answer_params = meta.answer_params
 
-        answer_exchange, answer_topic = self._init_answer_topic(ch, answer_params.topic, answer_params.id)
+        answer_exchange, answer_topic = self._init_answer_topic(ch, meta.answer_params.topic, meta.answer_params.id)
 
         exchange, topic = self._init_topic(ch, topic)
         if self._alone(ch, topic, alone):
@@ -629,4 +605,10 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         )
 
         with self._channel() as get_ch:
-            self._retry_net_interaction('publish_answer._publish_ch', lambda has_error: self._publish_ch('answer :: publish', get_ch(has_error), self.config.answer_exchange_name, f'{answer_params.topic}.{answer_params.id}', meta, props))
+            self._retry_net_interaction(
+                'publish_answer._publish_ch',
+                lambda has_error: self._publish_ch('answer :: publish', get_ch(has_error), self.config.answer_exchange_name, self._mk_answer_topic(answer_params), meta, props)
+            )
+
+    def _mk_answer_topic(self, answer_params: UniAnswerParams) -> str:
+        return f'{answer_params.topic}.{answer_params.id}'

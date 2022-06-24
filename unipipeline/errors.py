@@ -40,3 +40,7 @@ class UniPayloadSerializationError(UniMessageError):
 
 class UniSendingToUndefinedWorkerError(UniError):
     pass
+
+
+class UniMessageRejectError(UniError):
+    pass

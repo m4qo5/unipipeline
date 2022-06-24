@@ -2,8 +2,7 @@ from datetime import datetime
 from typing import TypeVar, Optional, Generic, Type
 from uuid import UUID
 
-from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
-from unipipeline.errors import UniMessagePayloadParsingError
+from unipipeline.errors import UniMessagePayloadParsingError, UniMessageRejectError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta
 
@@ -12,22 +11,14 @@ TAnswerMsgPayload = TypeVar('TAnswerMsgPayload', bound=Optional[UniMessage])
 
 
 class UniWorkerConsumerMessage(Generic[TInputMsgPayload]):
-    def __init__(self, message_input: Type[TInputMsgPayload], manager: UniBrokerMessageManager, meta: UniMessageMeta) -> None:
-        self._message_manager = manager
+    def __init__(self, message_input: Type[TInputMsgPayload], meta: UniMessageMeta) -> None:
         self._meta = meta
         self._message_input_payload_type = message_input
         self._message_payload_cache: Optional[TInputMsgPayload] = None
         self._acknowledged_or_rejected = False
 
-    def ack(self) -> None:
-        if not self._acknowledged_or_rejected:
-            self._message_manager.ack()
-            self._acknowledged_or_rejected = True
-
     def reject(self) -> None:
-        if not self._acknowledged_or_rejected:
-            self._message_manager.reject()
-            self._acknowledged_or_rejected = True
+        raise UniMessageRejectError()
 
     @property
     def id(self) -> UUID:

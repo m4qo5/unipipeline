@@ -3,7 +3,6 @@ import uuid
 from typing import TypeVar, Generic, Optional, Type, Any, Union, Dict, TYPE_CHECKING, Callable
 
 from unipipeline.answer.uni_answer_message import UniAnswerMessage
-from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
 from unipipeline.errors import UniMessagePayloadParsingError, \
     UniAnswerMessagePayloadParsingError, UniSendingToUndefinedWorkerError
@@ -62,16 +61,15 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
             raise UniSendingToUndefinedWorkerError(f'worker {wd.name} is not defined in workers->{self._definition.name}->output_workers')
         self._mediator.send_to(wd.name, data, parent_meta=self._current_meta, params=params)
 
-    def process_message(self, get_meta: Callable[[], UniMessageMeta], manager: UniBrokerMessageManager) -> None:
+    def process_message(self, get_meta: Callable[[], UniMessageMeta]) -> None:
         self._current_meta = None
 
         self._uni_echo.log_debug('processing start')
         try:
             meta = get_meta()
-            msg = UniWorkerConsumerMessage[TInputMsgPayload](self._input_message_type, manager, meta)
+            msg = UniWorkerConsumerMessage[TInputMsgPayload](self._input_message_type, meta)
         except Exception as e: # noqa
             self._uni_echo.log_error(str(e))
-            manager.ack()  # remove from queue
             return
 
         self._current_meta = meta
@@ -83,14 +81,12 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
         except UniAnswerMessagePayloadParsingError as e:
             self._uni_echo.log_warning(f'payload is invalid! message {meta.id} was skipped')
             self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.ANSWER_MESSAGE_PAYLOAD_ERR, e)
-            msg.ack()  # remove from queue
             self._current_meta = None
             return
 
         except UniMessagePayloadParsingError as e:
             self._uni_echo.log_warning(f'answer payload is invalid! message {meta.id} was skipped')
             self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR, e)
-            msg.ack()  # remove from queue
             self._current_meta = None
             return
 
@@ -100,8 +96,5 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
                 self._mediator.answer_to(self._definition.name, meta, result, unwrapped=self._definition.answer_unwrapped)
             except UniSendingToUndefinedWorkerError:
                 pass
-
-        if self._definition.ack_after_success:
-            msg.ack()
 
         self._current_meta = None

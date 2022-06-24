@@ -10,10 +10,9 @@ from pika.exceptions import AMQPConnectionError, AMQPError, ConnectionClosedByBr
 
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
-from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_definition import UniDynamicDefinition
-from unipipeline.errors import UniAnswerDelayError
+from unipipeline.errors import UniAnswerDelayError, UniMessageRejectError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
 from unipipeline.utils.uni_echo import UniEcho
@@ -29,23 +28,6 @@ CONNECTION_ERRORS = (ConnectionClosedByBroker, AMQPConnectionError)
 TMessage = TypeVar('TMessage', bound=UniMessage)
 
 T = TypeVar('T')
-
-
-class UniAmqpPikaBrokerMessageManager(UniBrokerMessageManager):
-
-    def __init__(self, channel: BlockingChannel, method_frame: spec.Basic.Deliver) -> None:
-        self._channel = channel
-        self._method_frame = method_frame
-        self._acknowledged = False
-
-    def reject(self) -> None:
-        self._channel.basic_reject(delivery_tag=self._method_frame.delivery_tag, requeue=True)
-
-    def ack(self) -> None:
-        if self._acknowledged:
-            return
-        self._acknowledged = True
-        self._channel.basic_ack(delivery_tag=self._method_frame.delivery_tag)
 
 
 class UniAmqpPikaBrokerConfig(UniDynamicDefinition):
@@ -234,8 +216,16 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
                 unwrapped=consumer.unwrapped,
             )
 
-            manager = UniAmqpPikaBrokerMessageManager(channel, method_frame)
-            consumer.message_handler(get_meta, manager)
+            rejected = False
+            try:
+                consumer.message_handler(get_meta)
+            except UniMessageRejectError:
+                channel.basic_reject(delivery_tag=method_frame.delivery_tag, requeue=True)
+                rejected = True
+
+            if not rejected:
+                channel.basic_ack(delivery_tag=method_frame.delivery_tag)
+
             self._in_processing = False
             if self._interrupted:
                 self._end_consuming()
@@ -328,7 +318,7 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
                 props = BasicProperties(
                     content_type=self.definition.content_type,
                     content_encoding='utf-8',
-                    reply_to=f'{meta.answer_params.topic}.{meta.answer_params.id}',
+                    reply_to=self._mk_answer_topic(meta.answer_params),
                     correlation_id=str(meta.id),
                     delivery_mode=2 if self.config.persistent_message else 0,
                     headers=headers,
@@ -345,7 +335,7 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
 
     def _get_answ(self, answer_params: UniAnswerParams, max_delay_s: int, unwrapped: bool) -> UniMessageMeta:
         ch = self._ch_answ_consumer.get_channel(force_recreate=True)
-        topic = self._init_topic(ch, self.config.answer_exchange_name, f'{answer_params.topic}.{answer_params.id}')
+        exchange, topic = self._init_topic(ch, self.config.answer_exchange_name, self._mk_answer_topic(answer_params))
 
         started = time.time()
         while True:
@@ -354,8 +344,8 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
             if method is None:
                 if (time.time() - started) > max_delay_s:
                     raise UniAnswerDelayError(f'answer for {self.config.answer_exchange_name}->{topic} reached delay limit {max_delay_s} seconds')
-                self.echo.log_debug(f'no answer {int(time.time() - started + 1)}s in {self.config.answer_exchange_name}->{topic}')
-                sleep(1)
+                self.echo.log_debug(f'no answer {int(time.time() - started + 1)}s in {exchange}->{topic}')
+                sleep(0.33)
                 continue
 
             self.echo.log_debug(f'took answer from {self.config.answer_exchange_name}->{topic}')
@@ -378,4 +368,7 @@ class UniAmqpPikaBroker(UniBroker[UniAmqpPikaBrokerConfig]):
             delivery_mode=1,
         )
         ch = self._ch_answ_publisher.get_channel()
-        self._retry_run(echo, functools.partial(self._publish, ch=ch, exchange=self.config.answer_exchange_name, topic=f'{answer_params.topic}.{answer_params.id}', meta=meta, props=props))
+        self._retry_run(echo, functools.partial(self._publish, ch=ch, exchange=self.config.answer_exchange_name, topic=self._mk_answer_topic(answer_params), meta=meta, props=props))
+
+    def _mk_answer_topic(self, answer_params: UniAnswerParams) -> str:
+        return f'{answer_params.topic}.{answer_params.id}'

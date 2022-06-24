@@ -21,7 +21,6 @@ class UniWorkerDefinition(UniDefinition):
     input_message: UniMessageDefinition
     answer_message: Optional[UniMessageDefinition]
     output_workers: Set[str]
-    ack_after_success: bool
     waitings: Set[UniWaitingDefinition]
     external: Optional[str]
     input_unwrapped: bool

@@ -4,9 +4,9 @@ from uuid import UUID
 
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
-from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_definition import UniDynamicDefinition
+from unipipeline.errors import UniMessageRejectError
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
 from unipipeline.utils.uni_echo import UniEcho
 
@@ -14,20 +14,8 @@ if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
 
 
-class UniMemoryBrokerMessageManager(UniBrokerMessageManager):
-    def __init__(self, ql: 'UniMemoryBrokerQueue', msg_id: int) -> None:
-        self._msg_id = msg_id
-        self._ql = ql
-
-    def reject(self) -> None:
-        self._ql.move_back_from_reserved(self._msg_id)
-
-    def ack(self) -> None:
-        self._ql.mark_as_processed(self._msg_id)
-
-
 TItem = TypeVar('TItem')
-TConsumer = Callable[[Callable[[], UniMessageMeta], UniBrokerMessageManager], None]
+TConsumer = Callable[[Callable[[], UniMessageMeta]], None]
 
 
 class UniMemoryBrokerQueue:
@@ -120,10 +108,16 @@ class UniMemoryBrokerQueue:
                         break
 
                     (msg_id, meta) = self.reserve_next()
-                    manager = UniMemoryBrokerMessageManager(self, msg_id)
 
                     self._echo.log_info(f'process_all :: lsg_id={lst_id} :: i={i} :: msg_id={msg_id} :: {meta}')
-                    lst(lambda: meta, manager)
+                    rejected = False
+                    try:
+                        lst(lambda: meta)
+                    except UniMessageRejectError:
+                        self.move_back_from_reserved(msg_id)
+                        rejected = True
+                    if not rejected:
+                        self.mark_as_processed(msg_id)
                     self._echo.log_debug(f'process_all len_listeners={len(self._listeners)} :: messages={self.messages_to_process_count()}')
 
 

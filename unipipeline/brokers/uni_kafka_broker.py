@@ -1,13 +1,13 @@
 import functools
-from typing import Optional, Any, Dict, List, Set, TYPE_CHECKING, Tuple, Callable
+from typing import Optional, Any, Dict, List, Set, TYPE_CHECKING, Tuple
 
 from kafka import KafkaProducer, KafkaConsumer  # type: ignore
 
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
-from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_dynamic_definition import UniDynamicDefinition
+from unipipeline.errors import UniMessageRejectError
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta
 
 if TYPE_CHECKING:
@@ -18,21 +18,6 @@ class UniKafkaBrokerConfig(UniDynamicDefinition):
     api_version: Tuple[int, ...]
     retry_max_count: int = 100
     retry_delay_s: int = 3
-
-
-class UniKafkaBrokerMessageManager(UniBrokerMessageManager):
-    def __init__(self, commit: Callable[[], None]) -> None:
-        self._commit = commit
-        self._acknowledged = False
-
-    def reject(self) -> None:
-        pass
-
-    def ack(self) -> None:
-        if self._acknowledged:
-            return
-        self._acknowledged = True
-        self._commit()
 
 
 class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
@@ -137,9 +122,6 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
 
         self._kfk_active_consumers.append(kfk_consumer)
 
-        def commit() -> None:
-            kfk_consumer.commit()
-
         # TODO: retry
         for consumer_record in kfk_consumer:
             self._in_processing = True
@@ -152,8 +134,13 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
                 unwrapped=consumer.unwrapped,
             )
 
-            manager = UniKafkaBrokerMessageManager(commit)
-            consumer.message_handler(get_meta, manager)
+            rejected = False
+            try:
+                consumer.message_handler(get_meta)
+            except UniMessageRejectError:
+                rejected = True
+            if not rejected:
+                kfk_consumer.commit()
 
             self._in_processing = False
             if self._interrupted:

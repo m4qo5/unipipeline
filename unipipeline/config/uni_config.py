@@ -426,7 +426,6 @@ class UniConfig:
 
             # notification_file="/var/unipipeline/{{service.name}}/{{service.id}}/worker_{{name}}_{{id}}/metrics",
 
-            ack_after_success=True,
             waiting_for=[],
             output_workers=[],
         )

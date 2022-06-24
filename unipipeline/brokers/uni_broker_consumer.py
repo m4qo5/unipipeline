@@ -1,6 +1,5 @@
 from typing import NamedTuple, Callable
 
-from unipipeline.brokers.uni_broker_message_manager import UniBrokerMessageManager
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta
 
 
@@ -10,4 +9,4 @@ class UniBrokerConsumer(NamedTuple):
     group_id: str
     unwrapped: bool
     prefetch_count: int
-    message_handler: Callable[[Callable[[], UniMessageMeta], UniBrokerMessageManager], None]
+    message_handler: Callable[[Callable[[], UniMessageMeta]], None]
