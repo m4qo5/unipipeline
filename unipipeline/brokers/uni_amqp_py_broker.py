@@ -2,13 +2,14 @@ import contextlib
 import functools
 import threading
 import time
+import traceback
 import urllib.parse
 from time import sleep
-from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING, Dict, Tuple, Any, cast, Type, Generator
+from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING, Dict, Tuple, Any, Type, Generator
 from urllib.parse import urlparse
+from uuid import UUID
 
 import amqp  # type: ignore
-from amqp import Channel
 from amqp.exceptions import ConnectionError as AqmpConnectionError, RecoverableChannelError, AMQPError  # type: ignore
 
 from unipipeline.brokers.uni_broker import UniBroker
@@ -19,22 +20,19 @@ from unipipeline.definitions.uni_definition import UniDynamicDefinition
 from unipipeline.errors import UniAnswerDelayError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
-from unipipeline.utils.uni_echo import UniEcho
 
 if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
 
 BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
 
-RECOVERABLE_ERRORS = tuple({AqmpConnectionError, RecoverableChannelError, *amqp.Connection.recoverable_connection_errors})
+RETRYABLE_ERRORS = (AMQPError, AqmpConnectionError, )
+RECOVERABLE_ERRORS = tuple({RecoverableChannelError, *amqp.Connection.recoverable_connection_errors})
 
 
 T = TypeVar('T')
 TFn = TypeVar('TFn', bound=Callable[..., Any])
 TMessage = TypeVar('TMessage', bound=UniMessage)
-
-
-HEADER_TTL = 'x-message-ttl'
 
 
 class UniPyPikaBrokerMessageManager(UniBrokerMessageManager):
@@ -96,45 +94,6 @@ class UniAmqpPyBrokerConsumer(NamedTuple):
     prefetch_count: int
 
 
-def retryable(
-    fn: TFn,
-    echo: UniEcho,
-    *,
-    retryable_errors: Tuple[Type[Exception], ...],
-    on_retries_ends: Optional[Callable[[], None]] = None,
-    retry_max_count: int = 3,
-    retry_delay_s: int = 1,
-) -> TFn:
-    echo = echo.mk_child(fn.__name__)
-    max_retries = max(retry_max_count, 1)
-    retry_threshold_s = retry_delay_s * max_retries
-    assert retry_delay_s >= 0
-
-    @functools.wraps(fn)
-    def fn_wrapper(*args: Any, **kwargs: Any) -> Any:
-        retry_counter = 0
-        while True:
-            starts_at = time.time()
-            try:
-                res = fn(*args, **kwargs)
-                retry_counter = 0
-                return res
-            except retryable_errors as e:
-                echo.log_warning(f'found error :: {e}')
-                if int(time.time() - starts_at) >= retry_threshold_s:
-                    retry_counter = 0
-                if retry_counter >= max_retries:
-                    echo.log_error(f'max retries {max_retries} was reached :: {e}')
-                    if on_retries_ends is not None:
-                        return on_retries_ends()
-                    raise
-                retry_counter += 1
-                if retry_delay_s > 0:
-                    sleep(retry_delay_s)
-                echo.log_warning(f'retry {retry_counter}/{max_retries} :: {e}')
-    return cast(TFn, fn_wrapper)
-
-
 class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
     config_type = UniAmqpPyBrokerConfig
 
@@ -145,15 +104,13 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         return now
 
     def _get_topic_approximate_messages_count(self, ch: amqp.Channel, topic: str) -> int:
-        self._interacted()
-        res = ch.queue_declare(queue=topic, passive=True)
-        self._interacted()
-        self.echo.log_debug(f'topic "{topic}" has messages={res.message_count}, consumers={res.consumer_count}')
-        return int(res.message_count)
+        result = ch.queue_declare(queue=topic, passive=True)
+        self.echo.log_debug(f'topic "{topic}" has messages={result.message_count}, consumers={result.consumer_count}')
+        return int(result.message_count)
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:
-        with self._channel() as ch:
-            return self._get_topic_approximate_messages_count(ch, topic)
+        with self._channel() as get_ch:
+            return self._retry_net_interaction('get_topic_approximate_messages_count', lambda has_error: self._get_topic_approximate_messages_count(get_ch(has_error), topic))
 
     @classmethod
     def get_connection_uri(cls) -> str:
@@ -203,69 +160,19 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self._free_channels_lock: threading.Lock = threading.Lock()
         self._free_channels: List[Tuple[float, amqp.Channel]] = list()
 
-        def raise_connection_err() -> None:
-            raise ConnectionError()
-
-        self._publish_ch = retryable(  # type: ignore
-            self._publish_ch,
-            self.echo,
-            retry_max_count=self.config.retry_max_count,
-            retry_delay_s=self.config.retry_delay_s,
-            retryable_errors=RECOVERABLE_ERRORS,
-            on_retries_ends=raise_connection_err,
-        )
-        self._new_channel = retryable(  # type: ignore
-            self._new_channel,
-            self.echo,
-            retry_max_count=self.config.retry_max_count,
-            retry_delay_s=self.config.retry_delay_s,
-            retryable_errors=RECOVERABLE_ERRORS,
-            on_retries_ends=raise_connection_err,
-        )
-        self.get_topic_approximate_messages_count = retryable(  # type: ignore
-            self.get_topic_approximate_messages_count,
-            self.echo,
-            retry_max_count=self.config.retry_max_count,
-            retry_delay_s=self.config.retry_delay_s,
-            retryable_errors=RECOVERABLE_ERRORS,
-            on_retries_ends=raise_connection_err,
-        )
-        self.rpc_call = retryable(  # type: ignore
-            self.rpc_call,
-            self.echo,
-            retry_max_count=self.config.retry_max_count,
-            retry_delay_s=self.config.retry_delay_s,
-            retryable_errors=RECOVERABLE_ERRORS,
-            on_retries_ends=raise_connection_err,
-        )
-        self._consuming = retryable(  # type: ignore
-            self._consuming,
-            self.echo,
-            retry_max_count=self.config.retry_max_count,
-            retry_delay_s=self.config.retry_delay_s,
-            retryable_errors=RECOVERABLE_ERRORS,
-            on_retries_ends=raise_connection_err,
-        )
-        self._retryable_alone = retryable(  # type: ignore
-            self._retryable_alone,
-            self.echo,
-            retry_max_count=self.config.retry_max_count,
-            retry_delay_s=self.config.retry_delay_s,
-            retryable_errors=RECOVERABLE_ERRORS,
-            on_retries_ends=raise_connection_err,
-        )
-
         self._heartbeat_enabled = False
         self._heartbeat_delay = max(self.config.heartbeat / 4, 0.2)
-        self._heartbeat_thread: threading.Thread = threading.Thread(
-            name=f'broker-{self.definition.name}-system',
-            target=self._heartbeat_tick_loop,
-            daemon=False,
-            kwargs=dict(
-                delay_s=self._heartbeat_delay,
-                heartbeat_delay_threshold=self._heartbeat_delay,
-            ),
-        )
+        self._heartbeat_thread: Optional[threading.Thread] = None
+
+    def _close_ch(self, ch: amqp.Channel) -> None:
+        ch_id = ch.channel_id
+        try:
+            with self._interaction():
+                ch.close()
+        except Exception as e:  # noqa
+            self.echo.log_warning(f'channel {ch_id} :: closing error :: {str(e)}')
+        else:
+            self.echo.log_debug(f'channel {ch_id} :: closed successfully')
 
     def _get_or_create_or_del_free_channel(self) -> Tuple[float, amqp.Channel]:
         now = time.time()
@@ -280,30 +187,41 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                 time_left = ch_time - now
                 ch_id = ch.channel_id
                 if time_left <= 0.:  # REMOVE CHANNEL
-                    try:
-                        with self._interaction():
-                            ch.close()
-                    except Exception as e:  # noqa
-                        self.echo.log_warning(f'channel {ch_id} :: closing error :: {str(e)}')
-                    else:
-                        self.echo.log_debug(f'channel {ch_id} :: closed (time left {time_left:0.2f}s)')
+                    self._close_ch(ch)
                     continue
 
                 self.echo.log_debug(f'channel {ch_id} :: hold (time left {time_left:0.2f}s)')
                 return c
-        return now + float(self.config.heartbeat), self._new_channel()
+        return (
+            now + float(self.config.heartbeat),
+            self._retry_net_interaction('_get_or_create_or_del_free_channel._new_channel', lambda has_err: self._new_channel()),  # type: ignore
+        )
 
     @contextlib.contextmanager
-    def _channel(self) -> amqp.Channel:
-        c = self._get_or_create_or_del_free_channel()
-        try:
-            yield c[1]
-        finally:
-            with self._free_channels_lock:
-                self.echo.log_debug(f'channel {c[1].channel_id} :: release')
-                self._free_channels.append(c)
+    def _channel(self, *, close: bool = False) -> Generator[Callable[[bool], amqp.Channel], Any, Any]:
+        c_to_close = []
+        current_c = None
 
-    def _new_channel(self) -> Channel:  # retryable
+        def get_ch(force_new: bool) -> amqp.Channel:
+            nonlocal current_c
+            if force_new or current_c is None:
+                current_c = self._get_or_create_or_del_free_channel()
+                c_to_close.append(current_c)
+            return current_c[1]
+
+        try:
+            yield get_ch
+        finally:
+            if close:
+                for c in c_to_close:
+                    self._close_ch(c[1])
+            else:
+                with self._free_channels_lock:
+                    for c in c_to_close:
+                        self.echo.log_debug(f'channel {c[1].channel_id} :: release')
+                        self._free_channels.append(c)
+
+    def _new_channel(self) -> amqp.Channel:
         with self._interaction():
             ch = self.connected_connection.channel()
             self.echo.log_debug(f'channel {ch.channel_id} :: new')
@@ -312,17 +230,12 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
     @property
     def connected_connection(self) -> amqp.Connection:
         self.connect()
+        assert self._connection is not None  # only for mypy
         return self._connection
 
-    def _init_topic(self, ch: amqp.Channel, exchange: str, topic: str) -> str:
-        with self._interaction():
-            q_key = f'{exchange}->{topic}'
-            if q_key in self._initialized_topics:
-                return topic
-            self._initialized_topics.add(q_key)
-
-            if exchange not in self._initialized_topics:
-                self._initialized_exchanges.add(exchange)
+    def _init_exchange(self, ch: amqp.Channel, exchange: str) -> None:
+        if exchange not in self._initialized_exchanges:
+            with self._interaction():
                 ch.exchange_declare(
                     exchange=exchange,
                     type="direct",
@@ -330,76 +243,135 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                     durable=True,
                     auto_delete=False,
                 )
-                self.echo.log_info(f'channel {ch.channel_id} :: exchange "{exchange}" initialized')
+            self._initialized_exchanges.add(exchange)
+            self.echo.log_debug(f'channel {ch.channel_id} :: exchange "{exchange}" was initialized')
 
-            if exchange == self.config.exchange_name:
-                ch.queue_declare(queue=topic, durable=True, auto_delete=False, passive=False)
-            elif exchange == self.config.answer_exchange_name:
-                ch.queue_declare(queue=topic, durable=False, auto_delete=True, exclusive=True, passive=False)
-            else:
-                raise TypeError(f'invalid exchange name "{exchange}"')
-
+    def _init_answer_topic(self, ch: amqp.Channel, topic: str, id: UUID) -> Tuple[str, str]:
+        topic = f'{topic}.{id}'
+        exchange = self.config.answer_exchange_name
+        self._init_exchange(ch, exchange)
+        with self._interaction():
+            ch.queue_declare(queue=topic, durable=False, auto_delete=True, exclusive=True, passive=False)
+            self.echo.log_debug(f'channel {ch.channel_id} :: queue "{topic}" was initialized')
             ch.queue_bind(queue=topic, exchange=exchange, routing_key=topic)
-            self.echo.log_info(f'channel {ch.channel_id} :: queue "{q_key}" initialized')
-        return topic
+            self.echo.log_debug(f'channel {ch.channel_id} :: queue "{topic}" was bound to exchange "{exchange}"')
+        return exchange, topic
+
+    def _init_topic(self, ch: amqp.Channel, topic: str, *, cache_create: bool = True) -> Tuple[str, str]:
+        exchange = self.config.exchange_name
+
+        q_key = f'{exchange}->{topic}'
+        if cache_create and q_key in self._initialized_topics:
+            return exchange, topic
+
+        self._init_exchange(ch, exchange)
+
+        with self._interaction():
+            ch.queue_declare(queue=topic, durable=True, auto_delete=False, exclusive=False, passive=False)
+            self.echo.log_debug(f'channel {ch.channel_id} :: queue "{topic}" was initialized')
+            ch.queue_bind(queue=topic, exchange=exchange, routing_key=topic)
+            self.echo.log_debug(f'channel {ch.channel_id} :: queue "{topic}" was bound to exchange "{exchange}"')
+        self._initialized_topics.add(q_key)
+        return exchange, topic
 
     def initialize(self, topics: Set[str], answer_topic: Set[str]) -> None:
         return
 
     def stop_consuming(self) -> None:
+        self._stop_heartbeat_tick()
         if not self._consuming_enabled:
             return
         self._interrupted = True
         if not self._consumer_in_processing:
-            # self.close()
             self._consuming_enabled = False
-            self.echo.log_info('consumption stopped')
+            self.echo.log_debug('consumption stopped')
 
-        self._stop_heartbeat_tick()
-
-    def connect(self) -> None:
-        try:
-            if self._connection is None or not self._connection.connected:
+    def _retry_net_interaction(
+        self,
+        stamp: str,
+        fn: Callable[[bool], T],
+        *,
+        delay: Optional[float] = None,
+        retryable_errors: Tuple[Type[Exception], ...] = RETRYABLE_ERRORS,
+        recoverable_errors: Tuple[Type[Exception], ...] = RECOVERABLE_ERRORS,
+        error_type: Type[Exception] = ConnectionError,
+        reset: bool = True
+    ) -> T:
+        delay = float(self.config.retry_delay_s) if delay is None else delay
+        reset_delay = delay * 10
+        total_count = max(self.config.retry_max_count, 0)
+        retry_count_left = total_count
+        has_error = False
+        last_start_time = 0.
+        errors_to_retry = (*recoverable_errors, *retryable_errors)
+        while retry_count_left >= 0:
+            last_start_time = time.time()
+            try:
                 with self._interaction():
-                    self._connection = self._connection or amqp.Connection(
-                        host=f'{self.parsed_connection_uri.hostname}:{self.parsed_connection_uri.port}',
-                        password=self.parsed_connection_uri.password,
-                        userid=self.parsed_connection_uri.username,
-                        heartbeat=self.config.heartbeat,
-                    )
-                    assert self._connection is not None  # only for mypy
-                    self._connection.connect()
-                    self._connection.send_heartbeat()
-                self.echo.log_info('connected')
-        except RECOVERABLE_ERRORS as e:
-            self.echo.log_error(f'connection problem :: {str(e)}')
-            raise ConnectionError(str(e))
+                    return fn(has_error)
+            except errors_to_retry as e:
+                retry_count_left -= 1
+                has_error = True
+                self.echo.log_warning(f'{stamp} :: error :: {type(e).__name__} :: {str(e)}')
+            self.echo.log_warning(f'{stamp} :: retry {total_count - retry_count_left}/{total_count}. delay={delay:0.2f}s')
+
+            sleep(delay)
+
+            if reset and (time.time() - last_start_time > reset_delay):  # reset
+                has_error = False
+                retry_count_left = total_count
+        raise error_type(f'{stamp} :: max retry count {total_count} was reached')
+
+    def _connect(self) -> None:
+        if self._connection is None or not self._connection.connected:
+            if self._connection is not None:
+                try:
+                    self._connection.close()
+                except Exception:  # noqa
+                    pass
+                self._connection = None
+            with self._interaction():
+                self._connection = amqp.Connection(
+                    host=f'{self.parsed_connection_uri.hostname}:{self.parsed_connection_uri.port}',
+                    password=self.parsed_connection_uri.password,
+                    userid=self.parsed_connection_uri.username,
+                    heartbeat=self.config.heartbeat,
+                )
+                assert self._connection is not None  # only for mypy
+                self._connection.connect()
+                self._connection.send_heartbeat()
+            self.echo.log_debug('connected')
+
+    def connect(self) -> None:  # WITH RETRY
+        self._retry_net_interaction('connect', lambda _1: self._connect(), retryable_errors=(Exception,))
 
     def close(self) -> None:
         self._stop_heartbeat_tick()
 
         if self._connection is None or not self._connection.connected or self._connection.is_closing:
-            self.echo.log_info('close :: already closed')
+            self._connection = None
+            self.echo.log_debug('close :: already closed')
             return
 
         try:
             with self._interaction():
                 self._connection.close()
-        except AMQPError as e:
+        except Exception as e:  # noqa
             self.echo.log_warning(f'close :: error :: {str(e)}')
-            pass
         self._connection = None
-        self.echo.log_info('close :: done')
+        self.echo.log_debug('close :: done')
 
     def _ack(self, ch: amqp.Channel, delivery_tag: str) -> None:
+        self.echo.log_debug(f'channel {ch.channel_id} :: message "{delivery_tag}" :: ack :: started')
         with self._interaction():
             ch.basic_ack(delivery_tag=delivery_tag)
-        self.echo.log_info(f'channel {ch.channel_id} :: ack "{delivery_tag}"')
+        self.echo.log_debug(f'channel {ch.channel_id} :: message "{delivery_tag}" :: ack :: done')
 
     def _reject(self, ch: amqp.Channel, delivery_tag: str) -> None:
+        self.echo.log_debug(f'channel {ch.channel_id} :: message "{delivery_tag}" :: reject :: started')
         with self._interaction():
             ch.basic_reject(delivery_tag=delivery_tag, requeue=True)
-        self.echo.log_info(f'channel {ch.channel_id} :: reject "{delivery_tag}"')
+        self.echo.log_debug(f'channel {ch.channel_id} :: message "{delivery_tag}" :: reject :: done')
 
     def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         echo = self.echo.mk_child(f'topic[{consumer.topic}]')
@@ -409,7 +381,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         def consumer_wrapper(ch: amqp.Channel, message: amqp.Message) -> None:
             self._interacted()
             self._consumer_in_processing = True
-            self.echo.log_info(f'message "{message.delivery_tag}" :: received')
+            self.echo.log_debug(f'message "{message.delivery_tag}" :: received')
 
             manager = UniPyPikaBrokerMessageManager(ch, message.delivery_tag, reject=self._reject, ack=self._ack)
 
@@ -423,14 +395,15 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                 )
                 consumer.message_handler(get_meta, manager)
             except Exception as e: # noqa
-                self.echo.log_error(f'message "{message.delivery_tag}" :: {str(e)}')
-                manager.reject()
+                traceback.print_exc()
+                self.echo.log_error(f'consumer {consumer.id} :: message "{message.delivery_tag}" :: {str(e)}')
+                # self.stop_consuming()
                 raise
 
             self._consumer_in_processing = False
             if self._interrupted:
                 self.stop_consuming()
-            self.echo.log_info(f'message "{message.delivery_tag}" :: processing finished')
+            self.echo.log_debug(f'consumer {consumer.id} :: message "{message.delivery_tag}" :: processing finished')
 
         self._consumers.append(UniAmqpPyBrokerConsumer(
             id=consumer.id,
@@ -440,17 +413,21 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             prefetch_count=consumer.prefetch_count,
         ))
 
-        echo.log_info(f'added consumer :: tag="{consumer.id}" group_id={consumer.group_id}')
+        echo.log_debug(f'added consumer :: tag="{consumer.id}" group_id={consumer.group_id}')
 
     def _stop_heartbeat_tick(self) -> None:
         if not self._heartbeat_enabled:
             return
         self._heartbeat_enabled = False
-        if self._heartbeat_thread.is_alive():
-            self._heartbeat_thread.join()
-        self.echo.log_info('heartbeat :: disabled')
+        if self._heartbeat_thread is not None:
+            self.echo.log_debug('heartbeat :: disable')
+            if self._heartbeat_thread.is_alive():
+                self._heartbeat_thread.join()
+            self._heartbeat_thread = None
+        self.echo.log_debug('heartbeat :: disabled')
 
     def _start_heartbeat_tick(self) -> None:
+        self._stop_heartbeat_tick()
         if self._heartbeat_enabled:
             return
         self._heartbeat_enabled = self._heartbeat_delay > 0
@@ -458,58 +435,68 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         if not self._heartbeat_enabled:
             return
 
-        self.echo.log_info(f'heartbeat :: enabled (delay={self._heartbeat_delay}s)')
-        self._heartbeat_thread.start()
+        if self._heartbeat_thread is None:
+            self._heartbeat_thread = threading.Thread(
+                name=f'broker-{self.definition.name}-system',
+                target=self._heartbeat_loop_tick,
+                daemon=False,
+                kwargs=dict(
+                    delay_s=self._heartbeat_delay,
+                    heartbeat_delay_threshold=self._heartbeat_delay,
+                ),
+            )
 
-    def _heartbeat_tick_loop(self, delay_s: float, heartbeat_delay_threshold: float) -> None:
-        self.echo.log_debug('heartbeat :: loop started')
+        if not self._heartbeat_thread.is_alive():
+            self._heartbeat_thread.start()
 
-        while self._heartbeat_enabled:
-            sleep(delay_s)
-            now = time.time()
+    def _heartbeat_loop_tick(self, delay_s: float, heartbeat_delay_threshold: float) -> None:
+        self.echo.log_debug(f'heartbeat :: loop started (delay={delay_s:0.2f}s, threshold={heartbeat_delay_threshold:0.2f}s)')
+        step_s = 0.1
+        sum_steps = 0.
 
+        while self._heartbeat_enabled:  # is False -> stopping this thread loop
+            sleep(step_s)
+            sum_steps += step_s
+            if sum_steps < delay_s:
+                continue
+            sum_steps = 0
             with self._lock_interaction:
-                current_delay = now - self._last_interaction
+                current_delay = time.time() - self._last_interaction
 
             if current_delay < heartbeat_delay_threshold:
                 self.echo.log_debug(f'heartbeat :: skipped ({current_delay:0.2f}s > {heartbeat_delay_threshold:0.2f}s)')
                 continue
 
-            try:
-                with self._interaction():
-                    self.connected_connection.send_heartbeat()
-                    self.echo.log_debug(f'heartbeat :: tick (since last interaction {current_delay:0.2f}s)')
-            except RECOVERABLE_ERRORS as e:
-                self.echo.log_warning(f'heartbeat :: error :: {str(e)}')
-                continue
-            except Exception as e:  # noqa
-                self.echo.log_error(f'heartbeat :: error :: {str(e)}')
-                self._heartbeat_enabled = False
-                return
+            self.connected_connection.send_heartbeat()
+            self.echo.log_debug(f'heartbeat :: tick (since last interaction {current_delay:0.2f}s)')
+
+    def _bind_consumer(self, ch: amqp.Channel, c: UniAmqpPyBrokerConsumer) -> amqp.Channel:
+        _1, topic = self._init_topic(ch, c.queue, cache_create=False)
+        ch.basic_qos(prefetch_count=self.config.prefetch, a_global=False, prefetch_size=0)
+        self.echo.log_debug(f'channel {ch.channel_id} :: set qos (prefetch={c.prefetch_count})')
+        ch.basic_consume(queue=topic, callback=functools.partial(c.on_message_callback, ch), consumer_tag=c.consumer_tag)
+        self.echo.log_debug(f'channel {ch.channel_id} :: consumer "{c.consumer_tag}" bound on "{topic}"')
+        return ch
 
     def _consuming(self) -> None:
         if len(self._consumers) == 0:
             self.echo.log_warning('consuming :: has no consumers to start consuming')
             return
 
-        for c in self._consumers:
-            ch = self._new_channel()
-            topic = self._init_topic(ch, self.config.exchange_name, c.queue)
-            self.echo.log_debug(f'consuming :: channel {ch.channel_id} :: added consumer {c.consumer_tag} on {self.config.exchange_name}->{topic}. prefetch: {self.config.prefetch}')
-            ch.basic_qos(prefetch_count=self.config.prefetch, a_global=False, prefetch_size=0)
-            self.echo.log_info(f'consuming :: channel {ch.channel_id} :: starting consuming :: consumers_count={len(self._consumers)}')
-            ch.basic_consume(queue=topic, callback=functools.partial(c.on_message_callback, ch), consumer_tag=c.consumer_tag)
+        self.echo.log_debug('consuming :: new cycle was started')
+        self._connect()
+        with self._interaction():
+            assert self._connection is not None  # only for mypy
+            for c in self._consumers:
+                ch = self._connection.channel()
+                self._bind_consumer(ch, c)
 
         self._start_heartbeat_tick()
-        while self._consuming_enabled:
-            self.echo.log_debug('consuming :: waiting for new messages...')
-            try:
-                self.connected_connection.drain_events()
-            except RECOVERABLE_ERRORS as e:
-                self.echo.log_warning(f'consuming :: error :: {str(e)}')
-                continue
+        self.echo.log_debug('consuming :: waiting for new messages...')
 
-        self._stop_heartbeat_tick()
+        while self._consuming_enabled:
+            assert self._connection is not None  # only for mypy
+            self._connection.drain_events()
 
     def start_consuming(self) -> None:
         if self._consuming_enabled:
@@ -517,8 +504,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self._consuming_enabled = True
         self._interrupted = False
         self._consumer_in_processing = False
-
-        self._consuming()
+        self._retry_net_interaction('consuming', lambda has_error: self._consuming())
 
     @contextlib.contextmanager
     def _interaction(self) -> Generator[float, Any, Any]:
@@ -526,25 +512,23 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         yield now
         self._interacted()
 
-    def _retryable_alone(self, ch: amqp.Channel, topic: str, alone: bool) -> bool:
+    def _alone(self, ch: amqp.Channel, topic: str, alone: bool) -> bool:
         if alone:
             size = self._get_topic_approximate_messages_count(ch, topic)
             if size > 0:
-                self.echo.log_info(f'sending was skipped, because topic {topic} has messages: {size}>0')
+                self.echo.log_debug(f'sending was skipped, because topic {topic} has messages: {size}>0')
                 return True
         return False
 
     def _publish_ch(self, process_name: str, ch: amqp.Channel, exchange: str, topic: str, meta: UniMessageMeta, props: UniAmqpPyBrokerMsgProps) -> None:
-        with self._interaction():
-            ch.basic_publish(
-                amqp.Message(body=self.serialize_message_body(meta), **props._asdict()),
-                exchange=exchange,
-                routing_key=topic,
-                mandatory=self.config.mandatory_publishing,
-                # immediate=self.config.immediate_publishing,
-            )
-
-        self.echo.log_info(f'channel {ch.channel_id} :: {process_name} :: message {meta.id} published in "{topic}"')
+        ch.basic_publish(
+            amqp.Message(body=self.serialize_message_body(meta), **props._asdict()),
+            exchange=exchange,
+            routing_key=topic,
+            mandatory=self.config.mandatory_publishing,
+            # immediate=self.config.immediate_publishing,
+        )
+        self.echo.log_debug(f'channel {ch.channel_id} :: {process_name} :: message "{meta.id}" published into "{topic}"')
 
     def _mk_mesg_props_by_meta(self, meta: UniMessageMeta) -> UniAmqpPyBrokerMsgProps:
         headers = dict()
@@ -553,7 +537,9 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
         ttl_s = meta.real_ttl_s
         if ttl_s is not None:
-            headers[HEADER_TTL] = str(ttl_s * 1000)
+            expiration = str(ttl_s * 1000)
+        else:
+            expiration = None
 
         if meta.need_answer:
             assert meta.answer_params is not None
@@ -564,65 +550,63 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                 correlation_id=str(meta.id),
                 delivery_mode=2 if self.config.persistent_message else 0,
                 application_headers=headers,
+                expiration=expiration,
             )
         return UniAmqpPyBrokerMsgProps(
             content_type=self.definition.content_type,
             content_encoding='utf-8',
             delivery_mode=2 if self.config.persistent_message else 0,
             application_headers=headers,
+            expiration=expiration,
         )
 
     def publish(self, topic: str, meta_list: List[UniMessageMeta], alone: bool = False) -> None:
-        with self._channel() as ch:
-            topic = self._init_topic(ch, self.config.exchange_name, topic)
+        with self._channel() as get_ch:
+            exchange, topic = self._retry_net_interaction('publish._init_topic', lambda has_error: self._init_topic(get_ch(has_error), topic))
 
-            if self._retryable_alone(ch, topic, alone):
+            if self._retry_net_interaction('publish._alone', lambda has_error: self._alone(get_ch(has_error), topic, alone)):
                 return
 
             for meta in meta_list:
                 props = self._mk_mesg_props_by_meta(meta)
-                self._publish_ch('publish', ch, self.config.exchange_name, topic, meta, props)
+                self._retry_net_interaction('publish._publish_ch', lambda has_error: self._publish_ch('publish', get_ch(has_error), exchange, topic, meta, props))
 
     def rpc_call(self, topic: str, meta: UniMessageMeta, *, alone: bool = False, max_delay_s: int = 1, unwrapped: bool = False) -> Optional[UniMessageMeta]:
+        with self._channel(close=True) as get_ch:
+            return self._retry_net_interaction('rpc_call', lambda has_error: self._rpc_call(get_ch(has_error), topic, meta, alone=alone, max_delay_s=max_delay_s, unwrapped=unwrapped))
+
+    def _rpc_call(self, ch: amqp.Channel, topic: str, meta: UniMessageMeta, *, alone: bool = False, max_delay_s: int = 1, unwrapped: bool = False) -> Optional[UniMessageMeta]:
         assert meta.answer_params is not None
+        answer_params = meta.answer_params
 
-        with self._channel() as ch:
-            if self._retryable_alone(ch, topic, alone):
-                return None
+        answer_exchange, answer_topic = self._init_answer_topic(ch, answer_params.topic, answer_params.id)
 
-            answer_topic = self._init_topic(ch, self.config.answer_exchange_name, f'{meta.answer_params.topic}.{meta.answer_params.id}')
-            topic = self._init_topic(ch, self.config.exchange_name, topic)
-            self._publish_ch('rpc_call :: publish', ch, self.config.exchange_name, topic, meta, self._mk_mesg_props_by_meta(meta))
+        exchange, topic = self._init_topic(ch, topic)
+        if self._alone(ch, topic, alone):
+            return None
+        self._publish_ch('rpc_call :: publish', ch, exchange, topic, meta, self._mk_mesg_props_by_meta(meta))
 
-            started = time.time()
+        started = time.time()
+        while True:  # TODO: rewrite it to consumer
+            msg: Optional[amqp.Message] = ch.basic_get(queue=answer_topic, no_ack=True)
+            current_delay = time.time() - started
+            if msg is None:
+                if current_delay > max_delay_s:
+                    raise UniAnswerDelayError(f'channel {ch.channel_id} :: rpc_call :: waiting :: answer for {answer_exchange}->{answer_topic} reached delay limit. {current_delay:0.2f}s > {max_delay_s}s')
+                else:
+                    self.echo.log_debug(f'channel {ch.channel_id} :: rpc_call :: waiting :: no answer {current_delay:0.2f}s in {answer_exchange}->{answer_topic}')
+            else:
+                break
+            sleep(0.1)
 
-            delay = 0.1
-            while True:  # TODO: rewrite it to consumer
-                current_delay = time.time() - started
+        self.echo.log_debug(f'channel {ch.channel_id} :: rpc_call :: waiting :: found message in "{answer_topic}"!')
 
-                with self._interaction():
-                    try:
-                        msg: Optional[amqp.Message] = ch.basic_get(queue=answer_topic, no_ack=True)
-                    except RECOVERABLE_ERRORS as e:
-                        self.echo.log_warning(f'channel {ch.channel_id} :: rpc_call :: waiting :: error {str(e)}')
-                        sleep(delay)
-                        continue
-
-                if msg is None:
-                    if current_delay > max_delay_s:
-                        raise UniAnswerDelayError(f'channel {ch.channel_id} :: rpc_call :: waiting :: answer for {self.config.answer_exchange_name}->{answer_topic} reached delay limit. {current_delay}s > {max_delay_s}s')
-                    self.echo.log_debug(f'channel {ch.channel_id} :: rpc_call :: waiting :: no answer {int(time.time() - started + 1)}s in {self.config.answer_exchange_name}->{answer_topic}')
-                    sleep(delay)
-                    continue
-
-                self.echo.log_info(f'channel {ch.channel_id} :: rpc_call :: waiting :: found message in "{answer_topic}"!')
-
-                return self.parse_message_body(
-                    msg.body,
-                    compression=(msg.headers or dict()).get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
-                    content_type=msg.content_type,
-                    unwrapped=unwrapped,
-                )
+        return self.parse_message_body(
+            msg.body,
+            compression=(msg.headers or dict()).get(BASIC_PROPERTIES__HEADER__COMPRESSION_KEY, None),
+            content_type=msg.content_type,
+            unwrapped=unwrapped,
+        )
 
     def publish_answer(self, answer_params: UniAnswerParams, meta: UniMessageMeta) -> None:
         headers = dict()
@@ -632,14 +616,17 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
         ttl_s = meta.real_ttl_s
         if ttl_s is not None:
-            headers[HEADER_TTL] = str(ttl_s * 1000)
+            expiration = str(ttl_s * 1000)
+        else:
+            expiration = None
 
         props = UniAmqpPyBrokerMsgProps(
             content_type=self.definition.content_type,
             content_encoding='utf-8',
             delivery_mode=1,
             application_headers=headers,
+            expiration=expiration,
         )
 
-        with self._channel() as ch, self._interaction():
-            self._publish_ch('answer :: publish', ch, self.config.answer_exchange_name, f'{answer_params.topic}.{answer_params.id}', meta, props)
+        with self._channel() as get_ch:
+            self._retry_net_interaction('publish_answer._publish_ch', lambda has_error: self._publish_ch('answer :: publish', get_ch(has_error), self.config.answer_exchange_name, f'{answer_params.topic}.{answer_params.id}', meta, props))
