@@ -42,7 +42,7 @@ class UniMessageMeta(BaseModel):
         return self.error is not None
 
     @staticmethod
-    def create_new(data: Dict[str, Any], unwrapped: bool, answer_params: Optional[UniAnswerParams] = None, error: Optional[UniMessageMetaErr] = None) -> 'UniMessageMeta':
+    def create_new(data: Dict[str, Any], unwrapped: bool, answer_params: Optional[UniAnswerParams] = None, error: Optional[UniMessageMetaErr] = None, ttl_s: Optional[int] = None) -> 'UniMessageMeta':
         return UniMessageMeta(
             id=uuid.uuid4(),
             date_created=datetime.now(),
@@ -51,9 +51,10 @@ class UniMessageMeta(BaseModel):
             error=error,
             answer_params=answer_params,
             unwrapped=unwrapped,
+            ttl_s=ttl_s,
         )
 
-    def create_child(self, payload: Dict[str, Any], unwrapped: bool, answer_params: Optional[UniAnswerParams] = None) -> 'UniMessageMeta':
+    def create_child(self, payload: Dict[str, Any], unwrapped: bool, answer_params: Optional[UniAnswerParams] = None, ttl_s: Optional[int] = None) -> 'UniMessageMeta':
         return UniMessageMeta(
             id=uuid.uuid4(),
             date_created=datetime.now(),
@@ -62,9 +63,10 @@ class UniMessageMeta(BaseModel):
             unwrapped=unwrapped,
             answer_params=answer_params,
             error=None,
+            ttl_s=ttl_s,
         )
 
-    def create_error_child(self, error_topic: UniMessageMetaErrTopic, error: Exception) -> 'UniMessageMeta':
+    def create_error_child(self, error_topic: UniMessageMetaErrTopic, error: Exception, ttl_s: Optional[int] = None) -> 'UniMessageMeta':
         return UniMessageMeta(
             id=self.id,
             date_created=self.date_created,
@@ -78,4 +80,5 @@ class UniMessageMeta(BaseModel):
                 error_message=str(error),
                 retry_times=self.error.retry_times + 1 if self.error is not None else 0
             ),
+            ttl_s=ttl_s,
         )

@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Union, Dict, Any, List, Tuple, Type, TYPE_CHECKING
+from typing import Union, Dict, Any, List, Tuple, Type, TYPE_CHECKING, Optional
 
 from pydantic import BaseModel
 
@@ -15,6 +15,7 @@ TUniSendingMessagePayloadUnion = Union[Dict[str, Any], UniMessage, List[Dict[str
 
 class UniSendingParams(BaseModel):
     alone: bool = False
+    ttl_s: Optional[int] = None
 
 
 class UniGettingAnswerParams(BaseModel):
@@ -22,5 +23,5 @@ class UniGettingAnswerParams(BaseModel):
     alone: bool = False
 
 
-default_sending_params: UniSendingParams = UniSendingParams(alone=False)
+default_sending_params: UniSendingParams = UniSendingParams(alone=False, ttl_s=None)
 default_getting_answer_params: UniGettingAnswerParams = UniGettingAnswerParams(answer_tll=timedelta(seconds=5))

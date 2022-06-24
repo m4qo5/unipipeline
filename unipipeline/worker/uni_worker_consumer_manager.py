@@ -31,8 +31,8 @@ class UniWorkerConsumerManager:
     def exit(self) -> None:
         raise NotImplementedError(f'{type(self).__name__}.exit was not implemented')  # TODO
 
-    def get_answer_from(self, worker: str, data: Union[Dict[str, Any], UniMessage], params: UniGettingAnswerParams = default_getting_answer_params) -> Optional[UniAnswerMessage[UniMessage]]:
-        return self._get_answer_from(worker, data, params=params)
+    def get_answer_from(self, worker: str, data: Union[Dict[str, Any], UniMessage], params: UniGettingAnswerParams = default_getting_answer_params) -> Optional[UniAnswerMessage[TAnswMessage]]:
+        return self._get_answer_from(worker, data, params=params)  # type: ignore
 
     def send_to(self, worker: str, data: Union[Dict[str, Any], TInputMessage], params: UniSendingParams = default_sending_params) -> None:
         self._send(worker, data, params=params)

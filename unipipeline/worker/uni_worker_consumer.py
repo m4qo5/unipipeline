@@ -1,4 +1,5 @@
 import math
+import uuid
 from typing import TypeVar, Generic, Optional, Type, Any, Union, Dict, TYPE_CHECKING, Callable
 
 from unipipeline.answer.uni_answer_message import UniAnswerMessage
@@ -44,7 +45,7 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
     ) -> Optional[UniAnswerMessage[UniMessage]]:
         answer_params = UniAnswerParams(
             topic=self._definition.answer_topic,
-            id=self._worker_manager.id,
+            id=uuid.uuid4(),  # self._worker_manager.id
             ttl_s=math.ceil(params.answer_tll.total_seconds()),
         )
         return self._mediator.get_answer_from(worker, data, parent_meta=self._current_meta, answer_params=answer_params, params=params)

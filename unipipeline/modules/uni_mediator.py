@@ -130,7 +130,7 @@ class UniMediator:
         b.publish_answer(req_meta.answer_params, answ_meta)
         self.echo.log_info(f'worker {worker_name} answers to {req_meta.answer_params.topic}->{req_meta.answer_params.id} :: meta.id={answ_meta.id}')
 
-    def _to_meta(self, wd: UniWorkerDefinition, parent_meta: Optional[UniMessageMeta], payload: Union[Dict[str, Any], UniMessage], answer_params: Optional[UniAnswerParams]) -> UniMessageMeta:
+    def _to_meta(self, wd: UniWorkerDefinition, parent_meta: Optional[UniMessageMeta], payload: Union[Dict[str, Any], UniMessage], answer_params: Optional[UniAnswerParams], *, ttl_s: Optional[int]) -> UniMessageMeta:
         message_type = self.get_message_type(wd.input_message.name)
         try:
             if isinstance(payload, message_type):
@@ -143,9 +143,9 @@ class UniMediator:
             raise UniPayloadSerializationError(str(e))
 
         if parent_meta is not None:
-            meta = parent_meta.create_child(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
+            meta = parent_meta.create_child(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params, ttl_s=ttl_s)
         else:
-            meta = UniMessageMeta.create_new(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params)
+            meta = UniMessageMeta.create_new(payload_data, unwrapped=wd.input_unwrapped, answer_params=answer_params, ttl_s=ttl_s)
         return meta
 
     def _prepare_sending(
@@ -154,11 +154,12 @@ class UniMediator:
         payload: TUniSendingMessagePayloadUnion,
         *,
         parent_meta: Optional[UniMessageMeta],
-        answer_params: Optional[UniAnswerParams]
+        answer_params: Optional[UniAnswerParams],
+        ttl_s: Optional[int] = None,
     ) -> Tuple[UniWorkerDefinition, UniBroker[Any], List[UniMessageMeta]]:
         wd = self.config.get_worker_definition(worker_name)
         br = self.get_broker(wd.broker.name)
-        meta_list = [self._to_meta(wd, parent_meta, payload, answer_params)] if not isinstance(payload, (list, tuple)) else [self._to_meta(wd, parent_meta, p, answer_params) for p in payload]
+        meta_list = [self._to_meta(wd, parent_meta, payload, answer_params, ttl_s=ttl_s)] if not isinstance(payload, (list, tuple)) else [self._to_meta(wd, parent_meta, p, answer_params, ttl_s=ttl_s) for p in payload]
         if wd.name not in self._worker_initialized_list:
             raise OverflowError(f'worker {wd.name} was not initialized')
 
@@ -205,7 +206,7 @@ class UniMediator:
         parent_meta: Optional[UniMessageMeta] = None,
         params: UniSendingParams,
     ) -> Optional[UniAnswerMessage[UniMessage]]:
-        wd, br, meta_list = self._prepare_sending(worker, payload, parent_meta=parent_meta, answer_params=None)
+        wd, br, meta_list = self._prepare_sending(worker, payload, parent_meta=parent_meta, answer_params=None, ttl_s=params.ttl_s)
 
         br.publish(wd.topic, meta_list, alone=params.alone)  # TODO: make it list by default
         self.echo.log_info(f"sent message to topic '{wd.topic}' for worker {wd.name} :: {len(meta_list)} :: {','.join(str(m.id) for m in meta_list)}")
