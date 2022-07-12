@@ -229,7 +229,6 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
     def _just_init_topic(self, ch: amqp.Channel, exchange: str, topic: str, *, is_answer: bool) -> Tuple[str, str]:
         self._init_exchange(ch, exchange, is_answer=is_answer)
         with self._interaction():
-            print(is_answer, topic, dict(queue=topic, durable=not is_answer, auto_delete=is_answer, exclusive=is_answer, passive=False))
             ch.queue_declare(queue=topic, durable=not is_answer, auto_delete=is_answer, exclusive=is_answer, passive=False)
             self.echo.log_debug(f'channel {ch.channel_id} :: queue "{topic}" was initialized')
             ch.queue_bind(queue=topic, exchange=exchange, routing_key=topic)
