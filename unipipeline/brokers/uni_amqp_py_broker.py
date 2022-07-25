@@ -7,7 +7,6 @@ import urllib.parse
 from time import sleep
 from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING, Dict, Tuple, Any, Type, Generator
 from urllib.parse import urlparse
-from uuid import UUID
 
 import amqp  # type: ignore
 from amqp.exceptions import ConnectionError as AqmpConnectionError, RecoverableChannelError, AMQPError  # type: ignore
@@ -86,7 +85,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         yield now
         self._interacted()
 
-    def _get_topic_approximate_messages_count(self, ch: amqp.Channel, topic: str):
+    def _get_topic_approximate_messages_count(self, ch: amqp.Channel, topic: str) -> int:
         result = ch.queue_declare(queue=topic, passive=True)
         self.echo.log_debug(f'topic "{topic}" has messages={result.message_count}, consumers={result.consumer_count}')
         return int(result.message_count)
