@@ -35,6 +35,7 @@ setup(
             'unipipeline=unipipeline.main:main',
         ],
     },
+    zip_safe=False,  # https://mypy.readthedocs.io/en/latest/installed_packages.html
     package_data={
         "unipipeline": ['py.typed']
     },
@@ -43,10 +44,10 @@ setup(
     install_requires=[
         "jinja2>=3.0.3",
         "amqp>=5.1.1",
-        "pyyaml>=5.4.12",
-        "types-pyyaml>=5.4.12",
+        "pyyaml>=6.0",
+        "types-pyyaml>=6.0",
         "pydantic>=1.8.2",
-        "psycopg2-binary>=2.9.2",
+        "psycopg2-binary>=2.9.3",
         "pika>=1.2.0",
         "crontab>=0.23.0",
         "kafka-python>=2.0.2",
