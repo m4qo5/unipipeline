@@ -361,7 +361,6 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                 rejected = True
                 traceback.print_exc()
                 self.echo.log_error(f'{key} :: {str(e)}')
-                print('??????')
                 raise
 
             if not rejected:
@@ -468,7 +467,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             try:
                 assert self._connection is not None  # only for mypy
                 self._connection.drain_events()
-            except Exception as e:
+            except Exception as e:  # noqa
                 self.echo.log_error(f'consuming loop error :: {e}')
                 self.stop_consuming()
                 raise

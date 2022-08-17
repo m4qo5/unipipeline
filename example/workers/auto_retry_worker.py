@@ -5,5 +5,4 @@ from unipipeline.worker.uni_worker_consumer_message import UniWorkerConsumerMess
 
 class AutoRetryWorker(UniWorker[InputMessage, None]):
     def handle_message(self, msg: UniWorkerConsumerMessage[InputMessage]) -> None:
-        print('!!!!')
         raise RuntimeError('some critical runtime error. like db deadlock')
