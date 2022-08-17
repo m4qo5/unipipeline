@@ -361,6 +361,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                 rejected = True
                 traceback.print_exc()
                 self.echo.log_error(f'{key} :: {str(e)}')
+                print('??????')
                 raise
 
             if not rejected:
@@ -464,8 +465,13 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self.echo.log_debug('start_consuming :: waiting for new messages...')
 
         while self._consuming_enabled:
-            assert self._connection is not None  # only for mypy
-            self._connection.drain_events()
+            try:
+                assert self._connection is not None  # only for mypy
+                self._connection.drain_events()
+            except Exception as e:
+                self.echo.log_error(f'consuming loop error :: {e}')
+                self.stop_consuming()
+                raise
 
     def start_consuming(self) -> None:
         self._consuming_enabled = True
