@@ -82,3 +82,6 @@ workers:
   some_external_worker:
     input_message: some_external_message
     external: service_name
+
+  auto_retry_worker:
+    input_message: input_message
