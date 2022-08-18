@@ -273,22 +273,25 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         retry_count_left = total_count
         has_error = False
         errors_to_retry = (*recoverable_errors, *retryable_errors)
-        while retry_count_left >= 0:
-            last_start_time = time.time()
-            try:
-                with self._interaction():
-                    return fn(has_error)
-            except errors_to_retry as e:
-                retry_count_left -= 1
-                has_error = True
-                self.echo.log_warning(f'{stamp} :: error :: {type(e).__name__} :: {str(e)}')
-            self.echo.log_warning(f'{stamp} :: retry {total_count - retry_count_left}/{total_count}. delay={delay:0.2f}s')
+        try:
+            while retry_count_left >= 0:
+                last_start_time = time.time()
+                try:
+                    with self._interaction():
+                        return fn(has_error)
+                except errors_to_retry as e:
+                    retry_count_left -= 1
+                    has_error = True
+                    self.echo.log_warning(f'{stamp} :: error :: {type(e).__name__} :: {str(e)}')
+                self.echo.log_warning(f'{stamp} :: retry {total_count - retry_count_left}/{total_count}. delay={delay:0.2f}s')
 
-            sleep(delay)
+                sleep(delay)
 
-            if reset and (time.time() - last_start_time > reset_delay):  # reset
-                has_error = False
-                retry_count_left = total_count
+                if reset and (time.time() - last_start_time > reset_delay):  # reset
+                    has_error = False
+                    retry_count_left = total_count
+        finally:
+            self.stop_consuming()
         raise error_type(f'{stamp} :: max retry count {total_count} was reached')
 
     def _connect(self) -> None:
@@ -443,6 +446,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
     def _consuming(self) -> None:
         if not self._consuming_enabled or len(self._consumers) == 0:
             self.echo.log_warning('start_consuming :: has no consumers to start consuming')
+            self.stop_consuming()
             return
 
         self._interrupted = False
@@ -469,7 +473,6 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                 self._connection.drain_events()
             except Exception as e:  # noqa
                 self.echo.log_error(f'consuming loop error :: {e}')
-                self.stop_consuming()
                 raise
 
     def start_consuming(self) -> None:
