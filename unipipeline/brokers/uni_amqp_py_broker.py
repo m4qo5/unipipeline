@@ -291,7 +291,8 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                     has_error = False
                     retry_count_left = total_count
         finally:
-            self.stop_consuming()
+            if has_error:
+                self.stop_consuming()
         raise error_type(f'{stamp} :: max retry count {total_count} was reached')
 
     def _connect(self) -> None:
