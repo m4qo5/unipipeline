@@ -12,7 +12,6 @@ from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniMessage
 from unipipeline.modules.uni_cron_job import UniCronJob
 from unipipeline.utils.sig import soft_interruption
 from unipipeline.utils.uni_echo import UniEcho
-from unipipeline.utils.uni_util import UniUtil
 from unipipeline.worker.uni_msg_params import UniSendingParams, UniGettingAnswerParams, TUniSendingMessagePayloadUnion, TUniSendingWorkerUnion
 from unipipeline.worker.uni_worker import UniWorker
 from unipipeline.worker.uni_worker_consumer import UniWorkerConsumer
@@ -27,10 +26,10 @@ class UniBrokerInitRecipe(NamedTuple):
 
 
 class UniMediator:
-    def __init__(self, util: UniUtil, echo: UniEcho, config: UniConfig) -> None:
+    def __init__(self, config: UniConfig) -> None:
         self._config = config
-        self._echo = echo
-        self._util = util
+        self._echo = config._echo
+        self._util = config._util
 
         self._worker_definition_by_type: Dict[Any, UniWorkerDefinition] = dict()
         self._worker_instance_indexes: Dict[str, UniWorkerConsumer[Any, Any]] = dict()

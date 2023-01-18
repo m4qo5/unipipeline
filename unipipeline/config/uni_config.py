@@ -1,4 +1,4 @@
-from typing import Dict, Any, Set, Union, Type, Iterator, Tuple
+from typing import Dict, Any, Set, Union, Type, Iterator, Tuple, Optional
 from uuid import uuid4
 
 import yaml
@@ -13,6 +13,7 @@ from unipipeline.definitions.uni_service_definition import UniServiceDefinition
 from unipipeline.definitions.uni_waiting_definition import UniWaitingDefinition
 from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
 from unipipeline.errors import UniConfigError, UniDefinitionNotFoundError
+from unipipeline.utils.filter_camel import camel_case
 from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.utils.uni_util import UniUtil
 from unipipeline.worker.uni_worker import UniWorker
@@ -21,10 +22,16 @@ UNI_CRON_MESSAGE = "uni_cron_message"
 
 
 class UniConfig:
-    def __init__(self, util: UniUtil, echo: UniEcho, file_path: str) -> None:
-        self._util = util
+    # @staticmethod
+    # def from_file(file_path: str) -> 'UniConfig':
+    #     return UniConfig()
+
+    def __init__(self, file_path: str, echo_level: Optional[Union[str, int]] = None) -> None:
+        self._util = UniUtil()
+        self._util.template.set_filter('camel', camel_case)
+
         self._file_path = file_path
-        self._echo = echo
+        self._echo = UniEcho('UNI', level=echo_level, colors=self._util.color)
 
         self._config: Dict[str, Any] = dict()
         self._parsed = False
