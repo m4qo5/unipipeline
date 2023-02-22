@@ -15,6 +15,7 @@ class UniDefinition(BaseModel):
         extra = Extra.ignore
         allow_mutation = False
         frozen = True
+        arbitrary_types_allowed = True
 
     def configure_dynamic(self, dynamic_type: Type[T]) -> T:
         if not issubclass(dynamic_type, UniDynamicDefinition):

@@ -4,7 +4,7 @@ from uuid import UUID
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_definition import UniDefinition
 from unipipeline.definitions.uni_message_definition import UniMessageDefinition
-from unipipeline.definitions.uni_module_definition import UniModuleDefinition
+from unipipeline.definitions.uni_module_definition_worker import UniModuleDefinitionWorker
 from unipipeline.definitions.uni_waiting_definition import UniWaitingDefinition
 
 
@@ -12,7 +12,7 @@ class UniWorkerDefinition(UniDefinition):
     id: UUID
     name: str
     broker: UniBrokerDefinition
-    type: Optional[UniModuleDefinition]
+    import_template: Optional[UniModuleDefinitionWorker]
     topic: str
     prefetch_count: int
     error_topic: str

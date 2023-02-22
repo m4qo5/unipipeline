@@ -37,7 +37,6 @@ CMD_CHECK = 'check'
 CMD_CONSUME = 'consume'
 CMD_PRODUCE = 'produce'
 CMD_CRON = 'cron'
-CMD_SCAFFOLD = 'scaffold'
 
 
 parser = ArgumentParser(description='UNIPIPELINE: simple way to build the declarative and distributed data pipelines. this is cli tool for unipipeline')
@@ -55,14 +54,6 @@ check_parser.description = check_help
 check_parser.usage = f'''
     unipipeline -f {DEFAULT_CONFIG_FILE} {CMD_CHECK}
     unipipeline -f {DEFAULT_CONFIG_FILE} --verbose=yes {CMD_CHECK}
-'''
-
-scaffold_help = 'create all modules and classes if it is absent. no args'
-scaffold_parser = subparsers.add_parser(CMD_SCAFFOLD, help=scaffold_help)
-scaffold_parser.description = scaffold_help
-scaffold_parser.usage = f'''
-    unipipeline -f {DEFAULT_CONFIG_FILE} {CMD_SCAFFOLD}
-    unipipeline -f {DEFAULT_CONFIG_FILE} --verbose=yes {CMD_SCAFFOLD}
 '''
 
 init_help = 'initialize broker topics for workers'

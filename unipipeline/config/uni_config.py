@@ -1,7 +1,8 @@
-from typing import Dict, Any, Set, Union, Type, Iterator, Tuple, Optional
+from typing import Dict, Any, Set, Union, Type, Iterator, Tuple, Mapping, Optional
 from uuid import uuid4
 
 import yaml
+from pydantic import BaseModel
 
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_codec_definition import UniCodecDefinition
@@ -13,7 +14,6 @@ from unipipeline.definitions.uni_service_definition import UniServiceDefinition
 from unipipeline.definitions.uni_waiting_definition import UniWaitingDefinition
 from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
 from unipipeline.errors import UniConfigError, UniDefinitionNotFoundError
-from unipipeline.utils.filter_camel import camel_case
 from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.utils.uni_util import UniUtil
 from unipipeline.worker.uni_worker import UniWorker
@@ -21,85 +21,49 @@ from unipipeline.worker.uni_worker import UniWorker
 UNI_CRON_MESSAGE = "uni_cron_message"
 
 
-class UniConfig:
-    # @staticmethod
-    # def from_file(file_path: str) -> 'UniConfig':
-    #     return UniConfig()
+class UniConfig(BaseModel):
+    @staticmethod
+    def from_file(file_path: str) -> 'UniConfig':
+        with open(file_path, "rt") as f:
+            config_data = yaml.safe_load(f)
+        return UniConfig(**config_data)
 
-    def __init__(self, file_path: str, echo_level: Optional[Union[str, int]] = None) -> None:
-        self._util = UniUtil()
-        self._util.template.set_filter('camel', camel_case)
+    compression: Dict[str, UniCodecDefinition] = dict()
+    codecs: Dict[str, UniCodecDefinition] = dict()
+    waitings: Dict[str, UniWaitingDefinition] = dict()
+    external: Dict[str, UniExternalDefinition] = dict()
+    brokers: Dict[str, UniBrokerDefinition] = dict()
+    messages: Dict[str, UniMessageDefinition] = dict()
+    workers: Dict[str, UniWorkerDefinition] = dict()
+    cron_tasks: Dict[str, UniCronTaskDefinition] = dict()
+    service: UniServiceDefinition
 
-        self._file_path = file_path
-        self._echo = UniEcho('UNI', level=echo_level, colors=self._util.color)
+    _workers_by_class: Optional[Dict[str, UniWorkerDefinition]] = None  # TODO
 
-        self._config: Dict[str, Any] = dict()
-        self._parsed = False
-        self._config_loaded = False
-        self._compression_index: Dict[str, UniCodecDefinition] = dict()
-        self._codecs_index: Dict[str, UniCodecDefinition] = dict()
-        self._waiting_index: Dict[str, UniWaitingDefinition] = dict()
-        self._external: Dict[str, UniExternalDefinition] = dict()
-        self._brokers_index: Dict[str, UniBrokerDefinition] = dict()
-        self._messages_index: Dict[str, UniMessageDefinition] = dict()
-        self._workers_by_name_index: Dict[str, UniWorkerDefinition] = dict()
-        self._workers_by_class_index: Dict[str, UniWorkerDefinition] = dict()
-        self._cron_tasks_index: Dict[str, UniCronTaskDefinition] = dict()
-        self._service: UniServiceDefinition = None  # type: ignore
+    def _init(self, util: UniUtil, echo: UniEcho) -> None:
+        assert self._workers_by_class is None
+        if not self.workers:
+            raise UniConfigError('workers not found')
 
-    @property
-    def file(self) -> str:
-        return self._file_path
+        echo.log_info(f'service: {self.service.name}')
+        echo.log_info(f'compression codecs: {",".join(self.compression.keys())}')
+        echo.log_info(f'serialization codecs: {",".join(self.codecs.keys())}')
+        echo.log_info(f'external: {",".join(self.external.keys())}')
+        echo.log_info(f'waitings: {",".join(self.waitings.keys())}')
+        echo.log_info(f'brokers: {",".join(self.brokers.keys())}')
+        echo.log_info(f'messages: {",".join(self.messages.keys())}')
+        echo.log_info(f'workers: {",".join(self.workers.keys())}')
 
-    @property
-    def brokers(self) -> Dict[str, UniBrokerDefinition]:
-        self._parse()
-        return self._brokers_index
-
-    @property
-    def service(self) -> UniServiceDefinition:
-        self._parse()
-        return self._service
-
-    @property
-    def compression(self) -> Dict[str, UniCodecDefinition]:
-        self._parse()
-        return self._compression_index
+        self._workers_by_class = dict()
+        for wd in self.workers.values():
+            if not wd.marked_as_external:
+                assert wd.import_template is not None
+                self._workers_by_class[wd.import_template.object_name] = wd
 
     @property
-    def codecs(self) -> Dict[str, UniCodecDefinition]:
-        self._parse()
-        return self._codecs_index
-
-    @property
-    def cron_tasks(self) -> Dict[str, UniCronTaskDefinition]:
-        self._parse()
-        return self._cron_tasks_index
-
-    @property
-    def external(self) -> Dict[str, UniExternalDefinition]:
-        self._parse()
-        return self._external
-
-    @property
-    def workers(self) -> Dict[str, UniWorkerDefinition]:
-        self._parse()
-        return self._workers_by_name_index
-
-    @property
-    def workers_by_class(self) -> Dict[str, UniWorkerDefinition]:
-        self._parse()
-        return self._workers_by_class_index
-
-    @property
-    def waitings(self) -> Dict[str, UniWaitingDefinition]:
-        self._parse()
-        return self._waiting_index
-
-    @property
-    def messages(self) -> Dict[str, UniMessageDefinition]:
-        self._parse()
-        return self._messages_index
+    def workers_by_class(self) -> Mapping[str, UniWorkerDefinition]:
+        assert self._workers_by_class is not None
+        return self._workers_by_class
 
     def get_worker_definition(self, worker: Union[Type['UniWorker[Any, Any]'], str]) -> UniWorkerDefinition:
         if isinstance(worker, str):
@@ -113,16 +77,6 @@ class UniConfig:
             else:
                 raise UniDefinitionNotFoundError(f'worker {worker.__name__} is not defined in workers')
         raise UniDefinitionNotFoundError(f'invalid type of worker. must be subclass of UniWorker OR str name. "{type(worker).__name__}" was given')
-
-    def _load_config(self) -> Dict[str, Any]:
-        if self._config_loaded:
-            return self._config
-        self._config_loaded = True
-        with open(self._file_path, "rt") as f:
-            self._config = yaml.safe_load(f)
-        if not isinstance(self._config, dict):
-            raise UniConfigError('config must be dict')
-        return self._config
 
     def _parse_definition(
         self,
@@ -173,49 +127,10 @@ class UniConfig:
 
             yield name, result_definition, other_props
 
-    def _parse(self) -> None:
-        if self._parsed:
-            return
-        self._parsed = True
-
-        cfg = self._load_config()
-
-        self._service = self._parse_service(cfg)
-        self._echo.log_info(f'service: {self._service.name}')
-
-        self._compression_index = self._parse_compression(cfg)
-        self._echo.log_info(f'compression codecs: {",".join(self._compression_index.keys())}')
-
-        self._codecs_index = self._parse_codecs(cfg)
-        self._echo.log_info(f'serialization codecs: {",".join(self._codecs_index.keys())}')
-
-        self._external = self._parse_external_services(cfg)
-        self._echo.log_info(f'external: {",".join(self._external.keys())}')
-
-        self._waiting_index = self._parse_waitings(cfg, self._service)
-        self._echo.log_info(f'waitings: {",".join(self._waiting_index.keys())}')
-
-        self._brokers_index = self._parse_brokers(cfg, self._service, self._external)
-        self._echo.log_info(f'brokers: {",".join(self._brokers_index.keys())}')
-
-        self._messages_index = self._parse_messages(cfg, self._service)
-        self._echo.log_info(f'messages: {",".join(self._messages_index.keys())}')
-
-        self._workers_by_name_index = self._parse_workers(cfg, self._service, self._brokers_index, self._messages_index, self._waiting_index, self._external)
-        self._echo.log_info(f'workers: {",".join(self._workers_by_name_index.keys())}')
-
-        for wd in self._workers_by_name_index.values():
-            if wd.marked_as_external:
-                continue
-            assert wd.type is not None
-            self._workers_by_class_index[wd.type.object_name] = wd
-
-        self._cron_tasks_index = self._parse_cron_tasks(cfg, self._service, self._workers_by_name_index)
-
-    APPLICATION_JSON = 'application/json'
-    COMPRESSION_GZIP = "application/x-gzip"
-    COMPRESSION_BZ2 = "application/x-bz2"
-    COMPRESSION_LZMA = "application/x-lzma"
+    APPLICATION_JSON: str = 'application/json'
+    COMPRESSION_GZIP: str = "application/x-gzip"
+    COMPRESSION_BZ2: str = "application/x-bz2"
+    COMPRESSION_LZMA: str = "application/x-lzma"
 
     def _parse_compression(self, config: Dict[str, Any]) -> Dict[str, UniCodecDefinition]:
         result = {
@@ -437,9 +352,6 @@ class UniConfig:
             output_workers=[],
         )
 
-        if "workers" not in config:
-            raise UniConfigError('workers is not defined in config')
-
         for name, definition, other_props in self._parse_definition("workers", config["workers"], defaults, {"import_template", "input_message"}):
             for ow in definition["output_workers"]:
                 out_workers.add(ow)
@@ -503,3 +415,6 @@ class UniConfig:
             raise UniConfigError(f'workers worker_definition has invalid worker_names (in output_workers prop): {", ".join(out_intersection_workers)}')
 
         return result
+
+    class Config:
+        arbitrary_types_allowed = True

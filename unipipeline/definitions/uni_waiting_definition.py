@@ -3,6 +3,7 @@ from uuid import UUID
 
 from unipipeline.definitions.uni_definition import UniDefinition
 from unipipeline.definitions.uni_module_definition import UniModuleDefinition
+from unipipeline.definitions.uni_module_definition_waiting import UniModuleDefinitionWaiting
 from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.waiting.uni_wating import UniWaiting
 
@@ -12,13 +13,13 @@ class UniWaitingDefinition(UniDefinition):
     name: str
     retry_max_count: int
     retry_delay_s: int
-    type: UniModuleDefinition
+    import_template: UniModuleDefinitionWaiting
 
     def __hash__(self) -> int:
         return hash(self.id)
 
     def wait(self, echo: UniEcho) -> None:
-        waiting_type = self.type.import_class(UniWaiting, echo)
+        waiting_type = self.import_template.import_value
         for try_count in range(self.retry_max_count):
             try:
                 w = waiting_type()

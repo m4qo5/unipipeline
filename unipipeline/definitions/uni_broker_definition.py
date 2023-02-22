@@ -2,12 +2,12 @@ from typing import Optional
 from uuid import UUID
 
 from unipipeline.definitions.uni_definition import UniDefinition
-from unipipeline.definitions.uni_module_definition import UniModuleDefinition
+from unipipeline.definitions.uni_module_definition_broker import UniModuleDefinitionBroker
 
 
 class UniBrokerDefinition(UniDefinition):
     id: UUID
-    type: UniModuleDefinition
+    import_template: UniModuleDefinitionBroker
 
     retry_max_count: int
     retry_delay_s: int

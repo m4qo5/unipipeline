@@ -12,14 +12,18 @@ from unipipeline.worker.uni_worker import UniWorker
 
 
 class Uni:
-    def __init__(self, config: Union[UniConfig, str], echo_level: Optional[Union[str, int]] = None) -> None:
+    def __init__(self, config: Union[UniConfig, str]) -> None:
         if isinstance(config, str):
-            config = UniConfig(config, echo_level=echo_level)
+            config = UniConfig.from_file(config)
 
         if not isinstance(config, UniConfig):
             raise ValueError(f'invalid config type. {type(config).__name__} was given')
 
         self._mediator = UniMediator(config)
+        config._init(
+            util=self._mediator._util,
+            echo=self._mediator.echo,
+        )
 
     @property
     def echo(self) -> UniEcho:
@@ -32,44 +36,23 @@ class Uni:
     def set_echo_level(self, level: int) -> None:
         self._mediator.set_echo_level(level)
 
-    def scaffold(self) -> None:
-        try:
-            for waiting_def in self._mediator.config.waitings.values():
-                waiting_def.type.import_class(UniWaiting, self.echo, auto_create=True, create_template_params=waiting_def, util=self._mediator._util)
-
-            for broker_def in self._mediator.config.brokers.values():
-                broker_def.type.import_class(UniBroker, self.echo, auto_create=True, create_template_params=broker_def, util=self._mediator._util)
-
-            for message_def in self._mediator.config.messages.values():
-                message_def.type.import_class(UniMessage, self.echo, auto_create=True, create_template_params=message_def, util=self._mediator._util)
-
-            for worker_def in self._mediator.config.workers.values():
-                if worker_def.marked_as_external:
-                    continue
-                assert worker_def.type is not None
-                worker_def.type.import_class(UniWorker, self.echo, auto_create=True, create_template_params=worker_def, util=self._mediator._util)
-
-        except UniConfigError as e:
-            self.echo.exit_with_error(str(e))
-
     def check(self) -> None:
         try:
             for waiting_def in self._mediator.config.waitings.values():
-                waiting_def.type.import_class(UniWaiting, self.echo, util=self._mediator._util)
+                assert waiting_def.import_template.import_value is not None
 
             for broker_def in self._mediator.config.brokers.values():
-                broker_def.type.import_class(UniBroker, self.echo, util=self._mediator._util)
+                assert broker_def.import_template.import_value is not None
 
             for message_def in self._mediator.config.messages.values():
-                message_def.type.import_class(UniMessage, self.echo, util=self._mediator._util)
+                assert message_def.import_template.import_value is not None
 
             for worker_def in self._mediator.config.workers.values():
                 if worker_def.marked_as_external:
                     continue
-                assert worker_def.type is not None
-                worker_def.type.import_class(UniWorker, self.echo, util=self._mediator._util)
+                assert worker_def.import_template is None or worker_def.import_template.import_value is not None
 
-        except UniConfigError as e:
+        except (UniConfigError, AssertionError) as e:
             self.echo.exit_with_error(str(e))
 
     def start_cron(self) -> None:

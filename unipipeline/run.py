@@ -2,17 +2,13 @@ import logging
 import os
 import sys
 
-from unipipeline.args import CMD_INIT, CMD_CHECK, CMD_CRON, CMD_PRODUCE, CMD_CONSUME, parse_args, CMD_SCAFFOLD
+from unipipeline.args import CMD_INIT, CMD_CHECK, CMD_CRON, CMD_PRODUCE, CMD_CONSUME, parse_args
 from unipipeline.modules.uni import Uni
 from unipipeline.worker.uni_msg_params import UniSendingParams
 
 
 def run_check(u: Uni, args) -> None:  # type: ignore
     u.check()
-
-
-def run_scaffold(u: Uni, args) -> None:  # type: ignore
-    u.scaffold()
 
 
 def run_cron(u: Uni, args) -> None:  # type: ignore
@@ -43,7 +39,6 @@ def run_produce(u: Uni, args) -> None:  # type: ignore
 args_cmd_map = {
     CMD_INIT: run_init,
     CMD_CHECK: run_check,
-    CMD_SCAFFOLD: run_scaffold,
     CMD_CRON: run_cron,
     CMD_PRODUCE: run_produce,
     CMD_CONSUME: run_consume,
@@ -53,6 +48,8 @@ args_cmd_map = {
 def main() -> None:
     sys.path.insert(0, os.getcwdb().decode('utf-8'))
     args = parse_args()
-    u = Uni(args.config_file, echo_level=logging.DEBUG if args.verbose else None)
+    u = Uni(args.config_file)
+    if args.verbose:
+        u.set_echo_level(logging.DEBUG)
     args_cmd_map[args.cmd](u, args)
     u.echo.success('done')

@@ -1,161 +1,109 @@
 import importlib
-import os.path
+from functools import cached_property
 from time import sleep
-from typing import NamedTuple, Type, TypeVar, Any, Optional, Set, Callable
-
-from unipipeline.utils.uni_echo import UniEcho
-from unipipeline.utils.uni_util import UniUtil
+from types import ModuleType
+from typing import TypeVar, Any, Optional, Callable, Generic, Union
 
 T = TypeVar('T')
 
-uni_broker_template = '''
-from typing import Set, List
 
-from unipipeline import UniBroker, UniMessageMeta, UniBrokerConsumer
+class UniModuleDefinition(Generic[T]):
+    ASSIGNED_TYPE_IS_INSTANCE: bool = False
+    ASSIGNED_TYPE: Optional[T] = None  # if None => Function
+    CREATE_TEMPLATE: str = ''
 
+    @classmethod
+    def validate_value(cls, value: Any) -> Optional[str]:
+        if value is None:
+            return 'value could not be None'
 
-class {{name}}(UniBroker):
+        if cls.ASSIGNED_TYPE is None:
+            return None if callable(value) else f'object is not callable. {type(value).__name__} was given'
 
-    def stop_consuming(self) -> None:
-        raise NotImplementedError('method stop_consuming must be specified for class "{{name}}"')
+        if cls.ASSIGNED_TYPE_IS_INSTANCE:
+            return None if isinstance(value, cls.ASSIGNED_TYPE) else f'value has not valid type. must be {cls.ASSIGNED_TYPE.__name__}. {type(value).__name__} was given'
 
-    def connect(self) -> None:
-        raise NotImplementedError('method connect must be specified for class "{{name}}"')
-
-    def close(self) -> None:
-        raise NotImplementedError('method close must be specified for class "{{name}}"')
-
-    def add_consumer(self, consumer: UniBrokerConsumer) -> None:
-        raise NotImplementedError('method add_topic_consumer must be specified for class "{{name}}"')
-
-    def start_consuming(self) -> None:
-        raise NotImplementedError('method start_consuming must be specified for class "{{name}}"')
-
-    def publish(self, topic: str, meta_list: List[UniMessageMeta]) -> None:
-        raise NotImplementedError('method publish must be specified for class "{{name}}"')
-
-    def get_topic_approximate_messages_count(self, topic: str) -> int:
-        raise NotImplementedError('method get_topic_approximate_messages_count must be specified for class "{{name}}"')
-
-    def initialize(self, topics: Set[str]) -> None:
-        raise NotImplementedError('method initialize must be specified for class "{{name}}"')
-
-'''
-
-uni_message_template = '''from unipipeline import UniMessage
-
-
-class {{name}}(UniMessage):
-    pass
-
-'''
-
-
-uni_worker_template = '''from unipipeline import UniWorker, UniWorkerConsumerMessage
-
-from {{data.input_message.type.module}} import {{data.input_message.type.object_name}}
-
-
-class {{name}}(UniWorker[{{data.input_message.type.object_name}}, None]):
-    def handle_message(self, msg: UniWorkerConsumerMessage[{{data.input_message.type.object_name}}]) -> None:
-        raise NotImplementedError('method handle_message must be specified for class "{{name}}"')
-
-'''
-
-
-uni_waiting_template = '''from unipipeline import UniWaiting
-
-
-class {{name}}(UniWaiting):
-    def try_to_connect(self) -> None:
-        raise NotImplementedError('method try_to_connect must be specified for class "{{name}}"')
-
-'''
-
-tpl_map = {
-    "UniBroker": uni_broker_template,
-    "UniMessage": uni_message_template,
-    "UniWorker": uni_worker_template,
-    "UniWaiting": uni_waiting_template,
-}
-
-
-CWD = str(os.getcwdb().decode('utf-8'))
-
-
-class UniModuleDefinition(NamedTuple):
-    module: str
-    object_name: str
-
-    @staticmethod
-    def parse(type_def: str) -> 'UniModuleDefinition':
-        assert isinstance(type_def, str), f"type_def must be str. {type(type_def)} given"
-        spec = type_def.split(":")
-        assert len(spec) == 2, f'must have 2 segments. {len(spec)} was given from "{type_def}"'
-        return UniModuleDefinition(
-            module=spec[0],
-            object_name=spec[1],
-        )
-
-    def import_function(self) -> Callable[..., Any]:
-        mdl = importlib.import_module(self.module)
-        tp = getattr(mdl, self.object_name)
-        if not callable(tp):
-            raise TypeError(f'object "{self.module}:{self.object_name}" is not callable')
-        return tp  # type: ignore
-
-    def import_class(self, class_type: Type[T], echo: UniEcho, auto_create: bool = False, create_template_params: Any = None, util: Optional[UniUtil] = None) -> Type[T]:
         try:
-            mdl = importlib.import_module(self.module)
-        except ModuleNotFoundError:
-            if not auto_create:
-                raise
+            return None if issubclass(value, cls.ASSIGNED_TYPE) else f'value is not subclass of {cls.ASSIGNED_TYPE.__name__}'
+        except Exception:  # noqa
+            return f'value is not subclass of {cls.ASSIGNED_TYPE.__name__}'
 
-            if util is None:
-                raise TypeError('util must be set')
+    def __init__(self, import_template: Union[str, T]) -> None:
+        self._import_value: Optional[T] = None
+        if not isinstance(import_template, str):
+            if err := self.validate_value(import_template):
+                raise ValueError(err)
+            self._import_value = import_template
+            self._import_template = ''
+        else:
+            self._import_template = import_template
 
-            mdl = None
-            echo = echo.mk_child(f'module[{self.module}::{self.object_name}]')
-            hierarchy = self.module.split('.')
-            path = os.path.abspath(f'{os.path.join("../modules/", *hierarchy)}.py')
-            path_dir = os.path.dirname(path)
-            os.makedirs(path_dir, exist_ok=True)
+        self._module = ''
+        self._object_name = ''
 
-            path_inits: Set[str] = {os.path.join(path_dir, "../modules/__init__.py"), }
+    def patch_import_template(self, transform: Optional[Callable[[str], Union[str, T]]] = None) -> None:
+        if self._import_value is not None:
+            return
+        tpl: str = self._import_template
+        if transform is not None:
+            transformation_res = transform(tpl)
+            if not isinstance(transformation_res, str):
+                self._import_value = transformation_res
+                if name := getattr(transformation_res, '__name__', None):
+                    self._object_name = name
+                return
+            tpl = transformation_res
+        spec = tpl.split(":")
+        if len(spec) != 2:
+            raise ValueError(f'must have 2 segments. {len(spec)} was given from "{self._import_template}"')
+        self._module = spec[0]
+        self._object_name = spec[1]
+        self._import_value = None
 
-            if path_dir.startswith(CWD):
-                current_dir: Optional[str] = None
-                for pi_dir in path_dir[len(CWD):].strip('/').split('/'):
-                    if current_dir is not None:
-                        pi_dir = os.path.join(current_dir, pi_dir)
-                    current_dir = pi_dir
-                    path_inits.add(os.path.join(CWD, pi_dir, "../modules/__init__.py"))
+    def _load_mdl(self, cache: bool = True, critical: bool = False, retries: int = 0, retry_delay: float = 1.) -> Optional[ModuleType]:
+        for i in range(retries + 1):  # because fs has cache time
+            if not cache:
+                importlib.invalidate_caches()
+            try:
+                return importlib.import_module(self.module)
+            except ModuleNotFoundError:
+                if retries > 0 and retries == i:
+                    if critical:
+                        raise
+                    return None
+                else:
+                    sleep(retry_delay)  # cache of FS
+        return None
 
-            for pi in path_inits:
-                if not os.path.isfile(pi):
-                    with open(pi, "wt+") as fi:
-                        fi.write("")
-                    echo.log_debug(f'file {pi} was created')
-
-            with open(path, 'wt') as fm:
-                fm.writelines(util.template.template(tpl_map[class_type.__name__], data=create_template_params, name=self.object_name))
-                echo.log_info(f'file {path} was created')
-
-            success = False
-            for i in range(10):  # because fs has cache time
-                try:
-                    importlib.invalidate_caches()
-                    mdl = importlib.import_module(self.module)
-                    success = True
-                    break
-                except ModuleNotFoundError:
-                    echo.log_debug(f'still not found. try to waiting for {i}s before invalidating the cache')
-                    sleep(i)
-            if not success:
-                echo.log_error('could not be loaded')
-                exit(1)
+    @cached_property
+    def import_value(self) -> T:
+        if self._import_value is not None:
+            return self._import_value
+        mdl = self._load_mdl(critical=True)
         assert mdl is not None
-        tp = getattr(mdl, self.object_name)
-        if not issubclass(tp, class_type):
-            ValueError(f'class {self.object_name} is not subclass of {class_type.__name__}')
-        return tp  # type: ignore
+        value = getattr(mdl, self.object_name, None)
+        if err := self.validate_value(value):
+            raise ValueError(err)
+        self._import_value = value
+        return value  # type: ignore
+
+    @property
+    def module(self) -> str:
+        return self._module
+
+    @property
+    def object_name(self) -> str:
+        return self._object_name
+
+
+def test_uni_module_definition() -> None:
+    from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
+    i = UniModuleDefinition('unipipeline.definitions.%1:UniBrokerDefinition')  # type: ignore
+    i.ASSIGNED_TYPE = UniBrokerDefinition
+    i.patch_import_template(lambda x: x.replace('%1', 'uni_broker_definition'))
+    assert i.import_value == UniBrokerDefinition
+
+    i = UniModuleDefinition(UniBrokerDefinition)
+    i.ASSIGNED_TYPE = UniBrokerDefinition
+    i.patch_import_template(lambda x: x.replace('%1', 'uni_broker_definition'))
+    assert i.import_value == UniBrokerDefinition

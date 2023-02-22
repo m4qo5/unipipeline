@@ -1,7 +1,7 @@
 from unipipeline.definitions.uni_definition import UniDefinition
-from unipipeline.definitions.uni_module_definition import UniModuleDefinition
+from unipipeline.definitions.uni_module_definition_message import UniModuleDefinitionMessage
 
 
 class UniMessageDefinition(UniDefinition):
     name: str
-    type: UniModuleDefinition
+    import_template: UniModuleDefinitionMessage

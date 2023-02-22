@@ -12,6 +12,7 @@ from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniMessage
 from unipipeline.modules.uni_cron_job import UniCronJob
 from unipipeline.utils.sig import soft_interruption
 from unipipeline.utils.uni_echo import UniEcho
+from unipipeline.utils.uni_util import UniUtil
 from unipipeline.worker.uni_msg_params import UniSendingParams, UniGettingAnswerParams, TUniSendingMessagePayloadUnion, TUniSendingWorkerUnion
 from unipipeline.worker.uni_worker import UniWorker
 from unipipeline.worker.uni_worker_consumer import UniWorkerConsumer
@@ -28,8 +29,8 @@ class UniBrokerInitRecipe(NamedTuple):
 class UniMediator:
     def __init__(self, config: UniConfig) -> None:
         self._config = config
-        self._echo = config._echo
-        self._util = config._util
+        self._util = UniUtil()
+        self._echo = UniEcho('UNI', colors=self._util.color)
 
         self._worker_definition_by_type: Dict[Any, UniWorkerDefinition] = dict()
         self._worker_instance_indexes: Dict[str, UniWorkerConsumer[Any, Any]] = dict()
@@ -63,7 +64,7 @@ class UniMediator:
     def get_broker(self, name: str, singleton: bool = True) -> UniBroker[Any]:
         if not singleton:
             broker_def = self.config.brokers[name]
-            broker_type = broker_def.type.import_class(UniBroker, self.echo, util=self._util)
+            broker_type = broker_def.import_template.import_value
             br = broker_type(mediator=self, definition=broker_def)
             return br
         if name not in self._broker_instance_indexes:
@@ -90,7 +91,7 @@ class UniMediator:
         if name in self._message_types:
             return self._message_types[name]
 
-        self._message_types[name] = self.config.messages[name].type.import_class(UniMessage, self.echo, util=self._util)
+        self._message_types[name] = self.config.messages[name].import_template.import_value
 
         return self._message_types[name]
 
@@ -286,7 +287,7 @@ class UniMediator:
             return self._compression_modules[name]
         if name in self._config.compression:
             c = self._config.compression[name]
-            self._compression_modules[name] = c.encoder_type.import_function()
+            self._compression_modules[name] = c.encoder_type.import_value  # type: ignore
             return self._compression_modules[name]
         raise ValueError(f'compression of "{name}" is not supported')
 
@@ -295,7 +296,7 @@ class UniMediator:
             return self._decompression_modules[name]
         if name in self._config.compression:
             c = self._config.compression[name]
-            self._decompression_modules[name] = c.decoder_type.import_function()
+            self._decompression_modules[name] = c.decoder_type.import_value  # type: ignore
             return self._decompression_modules[name]
         raise ValueError(f'decompression of "{name}" is not supported')
 
@@ -352,7 +353,7 @@ class UniMediator:
             return self._content_type_serializers[name]
         if name in self._config.codecs:
             c = self._config.codecs[name]
-            self._content_type_serializers[name] = c.encoder_type.import_function()
+            self._content_type_serializers[name] = c.encoder_type.import_value  # type: ignore
             return self._content_type_serializers[name]
         raise ValueError(f'content_type "{name}" is not supported')
 
@@ -361,13 +362,13 @@ class UniMediator:
             return self._content_type_parsers[name]
         if name in self._config.codecs:
             c = self._config.codecs[name]
-            self._content_type_parsers[name] = c.decoder_type.import_function()
+            self._content_type_parsers[name] = c.decoder_type.import_value   # type: ignore
             return self._content_type_parsers[name]
         raise ValueError(f'content_type "{name}" is not supported')
 
     def add_worker_to_init_list(self, name: str, no_related: bool) -> None:
         if name not in self._config.workers:
-            self.echo.exit_with_error(f'worker "{name}" is not found in config "{self.config.file}"')
+            self.echo.exit_with_error(f'worker "{name}" is not found in config')
         wd = self._config.workers[name]
         self._worker_init_list.add(name)
         for waiting in wd.waitings:
@@ -442,8 +443,8 @@ class UniMediator:
         if wd.marked_as_external:
             raise OverflowError(f'worker "{worker}" is external. you could not get it')
         if not singleton or wd.name not in self._worker_instance_indexes:
-            assert wd.type is not None
-            worker_type = wd.type.import_class(UniWorker, self.echo, util=self._util)
+            assert wd.import_template is not None
+            worker_type = wd.import_template.import_value
             self.echo.log_info(f'get_worker :: initialized worker "{wd.name}"')
             wc = UniWorkerConsumer(wd, self, worker_type)
         else:
