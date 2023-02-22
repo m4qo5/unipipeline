@@ -151,7 +151,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         try:
             with self._interaction():
                 ch.close()
-        except Exception as e:  # noqa
+        except AMQPError as e:  # noqa
             self.echo.log_warning(f'channel {ch_id} :: closing error :: {str(e)}')
         else:
             self.echo.log_debug(f'channel {ch_id} :: closed successfully')
@@ -264,7 +264,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         delay: Optional[float] = None,
         retryable_errors: Tuple[Type[Exception], ...] = RETRYABLE_ERRORS,
         recoverable_errors: Tuple[Type[Exception], ...] = RECOVERABLE_ERRORS,
-        error_type: Type[Exception] = ConnectionError,
+        error_type: Type[Exception] = AqmpConnectionError,
         reset: bool = True
     ) -> T:
         delay = float(self.config.retry_delay_s) if delay is None else delay
