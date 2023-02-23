@@ -5,11 +5,11 @@ import time
 import traceback
 import urllib.parse
 from time import sleep
-from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING, Dict, Tuple, Any, Type, Generator
+from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING, Dict, Tuple, Any, Generator
 from urllib.parse import urlparse
 
 import amqp  # type: ignore
-from amqp.exceptions import ConnectionError as AqmpConnectionError, RecoverableChannelError, AMQPError  # type: ignore
+from amqp.exceptions import AMQPError  # type: ignore
 
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
@@ -23,9 +23,6 @@ if TYPE_CHECKING:
     from unipipeline.modules.uni_mediator import UniMediator
 
 BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
-
-RETRYABLE_ERRORS = (AMQPError, AqmpConnectionError, )
-RECOVERABLE_ERRORS = tuple({RecoverableChannelError, *amqp.Connection.recoverable_connection_errors})
 
 
 T = TypeVar('T')
@@ -250,57 +247,61 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
     def stop_consuming(self) -> None:
         self._stop_heartbeat_tick()
         if not self._consuming_enabled:
+            self.echo.log_debug('consumption exit skipped')
             return
         self._interrupted = True
         if not self._consumer_in_processing:
             self._consuming_enabled = False
             self.echo.log_debug('consumption stopped')
+        else:
+            self._consumer_in_processing = False
+            self._consuming_enabled = False
+            self.echo.log_debug('consumption force stopped')
 
     def _retry_net_interaction(
         self,
-        stamp: str,
+        log_prefix: str,
         fn: Callable[[bool], T],
         *,
         delay: Optional[float] = None,
-        retryable_errors: Tuple[Type[Exception], ...] = RETRYABLE_ERRORS,
-        recoverable_errors: Tuple[Type[Exception], ...] = RECOVERABLE_ERRORS,
-        error_type: Type[Exception] = AqmpConnectionError,
-        reset: bool = True
     ) -> T:
         delay = float(self.config.retry_delay_s) if delay is None else delay
         reset_delay = delay * 10
         total_count = max(self.config.retry_max_count, 0)
         retry_count_left = total_count
         has_error = False
-        errors_to_retry = (*recoverable_errors, *retryable_errors)
-        try:
-            while retry_count_left >= 0:
-                last_start_time = time.time()
-                try:
-                    with self._interaction():
-                        return fn(has_error)
-                except errors_to_retry as e:
-                    retry_count_left -= 1
-                    has_error = True
-                    self.echo.log_warning(f'{stamp} :: error :: {type(e).__name__} :: {str(e)}')
-                self.echo.log_warning(f'{stamp} :: retry {total_count - retry_count_left}/{total_count}. delay={delay:0.2f}s')
+        while True:
+            last_start_time = time.time()
+            try:
+                with self._interaction():
+                    return fn(has_error)
+            except AMQPError as e:
+                retry_count_left -= 1
+                has_error = True
+                self.echo.log_warning(f'{log_prefix} :: error :: {type(e).__name__} :: {str(e)}')
+                self.echo.log_warning(f'{log_prefix} :: retry {total_count - retry_count_left}/{total_count}. delay={delay:0.2f}s')
 
                 sleep(delay)
 
-                if reset and (time.time() - last_start_time > reset_delay):  # reset
+                if time.time() - last_start_time > reset_delay:
                     has_error = False
                     retry_count_left = total_count
-        finally:
-            if has_error:
+                if not retry_count_left:
+                    self.echo.log_error(f'{log_prefix} :: max retry count {total_count} was reached')
+                    self.echo.log_error(f'{log_prefix} :: exit on error')
+                    self.stop_consuming()
+                    raise ConnectionError(f'{log_prefix} :: max retry count {total_count} was reached :: {e}')
+            except Exception as e:  # noqa
+                self.echo.log_error(f'{log_prefix} :: exit on error')
                 self.stop_consuming()
-        raise error_type(f'{stamp} :: max retry count {total_count} was reached')
+                raise
 
     def _connect(self) -> None:
         if self._connection is None or not self._connection.connected:
             if self._connection is not None:
                 try:
                     self._connection.close()
-                except Exception:  # noqa
+                except AMQPError:
                     pass
                 self._connection = None
             with self._interaction():
@@ -316,7 +317,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             self.echo.log_debug('connected')
 
     def connect(self) -> None:  # WITH RETRY
-        self._retry_net_interaction('connect', lambda _1: self._connect(), retryable_errors=(Exception,))
+        self._retry_net_interaction('connect', lambda _1: self._connect())
 
     def close(self) -> None:
         self._stop_heartbeat_tick()
@@ -329,7 +330,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         try:
             with self._interaction():
                 self._connection.close()
-        except Exception as e:  # noqa
+        except AMQPError as e:  # noqa
             self.echo.log_warning(f'close :: error :: {str(e)}')
         self._connection = None
         self.echo.log_debug('close :: done')
