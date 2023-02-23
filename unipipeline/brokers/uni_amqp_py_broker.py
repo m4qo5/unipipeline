@@ -5,11 +5,11 @@ import time
 import traceback
 import urllib.parse
 from time import sleep
-from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING, Dict, Tuple, Any, Generator
+from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHECKING, Dict, Tuple, Any, Generator, Union, Type
 from urllib.parse import urlparse
 
 import amqp  # type: ignore
-from amqp.exceptions import AMQPError  # type: ignore
+from amqp.exceptions import AMQPError, RecoverableChannelError  # type: ignore
 
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
 BASIC_PROPERTIES__HEADER__COMPRESSION_KEY = 'compression'
 
+PUBLISHING_RETRYABLE_ERRORS = (AMQPError, *{RecoverableChannelError, *amqp.Connection.recoverable_connection_errors})
 
 T = TypeVar('T')
 TFn = TypeVar('TFn', bound=Callable[..., Any])
@@ -89,7 +90,11 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:
         with self._channel() as get_ch:
-            return self._retry_net_interaction('get_topic_approximate_messages_count', lambda has_error: self._get_topic_approximate_messages_count(get_ch(has_error), topic))
+            return self._retry_net_interaction(
+                'get_topic_approximate_messages_count',
+                lambda has_error: self._get_topic_approximate_messages_count(get_ch(has_error), topic),
+                retryable_errors=PUBLISHING_RETRYABLE_ERRORS,
+            )
 
     @classmethod
     def get_connection_uri(cls) -> str:
@@ -264,6 +269,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         fn: Callable[[bool], T],
         *,
         delay: Optional[float] = None,
+        retryable_errors: Union[Tuple[Type[Exception], ...], Type[Exception]] = AMQPError
     ) -> T:
         delay = float(self.config.retry_delay_s) if delay is None else delay
         reset_delay = delay * 10
@@ -275,7 +281,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             try:
                 with self._interaction():
                     return fn(has_error)
-            except AMQPError as e:
+            except retryable_errors as e:
                 retry_count_left -= 1
                 has_error = True
                 self.echo.log_warning(f'{log_prefix} :: error :: {type(e).__name__} :: {str(e)}')
@@ -317,7 +323,11 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             self.echo.log_debug('connected')
 
     def connect(self) -> None:  # WITH RETRY
-        self._retry_net_interaction('connect', lambda _1: self._connect())
+        self._retry_net_interaction(
+            'connect',
+            lambda _1: self._connect(),
+            retryable_errors=PUBLISHING_RETRYABLE_ERRORS,
+        )
 
     def close(self) -> None:
         self._stop_heartbeat_tick()
@@ -528,18 +538,34 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
     def publish(self, topic: str, meta_list: List[UniMessageMeta], alone: bool = False) -> None:
         with self._channel() as get_ch:
-            exchange, topic = self._retry_net_interaction('publish._init_topic', lambda has_error: self._init_topic(get_ch(has_error), topic))
+            exchange, topic = self._retry_net_interaction(
+                'publish._init_topic',
+                lambda has_error: self._init_topic(get_ch(has_error), topic),
+                retryable_errors=PUBLISHING_RETRYABLE_ERRORS,
+            )
 
-            if self._retry_net_interaction('publish._alone', lambda has_error: self._has_messages_in_topic(get_ch(has_error), topic, alone)):
+            if self._retry_net_interaction(
+                'publish._alone',
+                lambda has_error: self._has_messages_in_topic(get_ch(has_error), topic, alone),
+                retryable_errors=PUBLISHING_RETRYABLE_ERRORS,
+            ):
                 return
 
             for meta in meta_list:
                 props = self._mk_mesg_props_by_meta(meta)
-                self._retry_net_interaction('publish._publish_ch', lambda has_error: self._publish_ch('publish', get_ch(has_error), exchange, topic, meta, props))
+                self._retry_net_interaction(
+                    'publish._publish_ch',
+                    lambda has_error: self._publish_ch('publish', get_ch(has_error), exchange, topic, meta, props),
+                    retryable_errors=PUBLISHING_RETRYABLE_ERRORS,
+                )
 
     def rpc_call(self, topic: str, meta: UniMessageMeta, *, alone: bool = False, max_delay_s: int = 1, unwrapped: bool = False) -> Optional[UniMessageMeta]:
         with self._channel(close=True) as get_ch:
-            return self._retry_net_interaction('rpc_call', lambda has_error: self._rpc_call(get_ch(has_error), topic, meta, alone=alone, max_delay_s=max_delay_s, unwrapped=unwrapped))
+            return self._retry_net_interaction(
+                'rpc_call',
+                lambda has_error: self._rpc_call(get_ch(has_error), topic, meta, alone=alone, max_delay_s=max_delay_s, unwrapped=unwrapped),
+                retryable_errors=PUBLISHING_RETRYABLE_ERRORS,
+            )
 
     def _rpc_call(self, ch: amqp.Channel, topic: str, meta: UniMessageMeta, *, alone: bool = False, max_delay_s: int = 1, unwrapped: bool = False) -> Optional[UniMessageMeta]:
         assert meta.answer_params is not None
@@ -591,7 +617,8 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         with self._channel() as get_ch:
             self._retry_net_interaction(
                 'publish_answer._publish_ch',
-                lambda has_error: self._publish_ch('answer :: publish', get_ch(has_error), self.config.answer_exchange_name, self._mk_answer_topic(answer_params), meta, props)
+                lambda has_error: self._publish_ch('answer :: publish', get_ch(has_error), self.config.answer_exchange_name, self._mk_answer_topic(answer_params), meta, props),
+                retryable_errors=PUBLISHING_RETRYABLE_ERRORS,
             )
 
     def _mk_answer_topic(self, answer_params: UniAnswerParams) -> str:
