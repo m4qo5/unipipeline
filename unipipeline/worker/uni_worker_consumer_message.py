@@ -17,8 +17,8 @@ class UniWorkerConsumerMessage(Generic[TInputMsgPayload]):
         self._message_payload_cache: Optional[TInputMsgPayload] = None
         self._acknowledged_or_rejected = False
 
-    def reject(self) -> None:
-        raise UniMessageRejectError()
+    def reject(self, exc: Optional[Exception] = None) -> None:
+        raise UniMessageRejectError(exc)
 
     @property
     def id(self) -> UUID:

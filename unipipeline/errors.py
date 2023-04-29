@@ -1,3 +1,6 @@
+from typing import Optional
+
+
 class UniError(Exception):
     pass
 
@@ -43,4 +46,10 @@ class UniSendingToUndefinedWorkerError(UniError):
 
 
 class UniMessageRejectError(UniError):
-    pass
+
+    def __init__(self, exc: Optional[Exception] = None) -> None:
+        self._exc = exc
+
+    @property
+    def rejection_exception(self) -> Optional[Exception]:
+        return self._exc

@@ -5,7 +5,7 @@ from typing import TypeVar, Generic, Optional, Type, Any, Union, Dict, TYPE_CHEC
 from unipipeline.answer.uni_answer_message import UniAnswerMessage
 from unipipeline.definitions.uni_worker_definition import UniWorkerDefinition
 from unipipeline.errors import UniMessagePayloadParsingError, \
-    UniAnswerMessagePayloadParsingError, UniSendingToUndefinedWorkerError
+    UniAnswerMessagePayloadParsingError, UniSendingToUndefinedWorkerError, UniMessageRejectError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic, UniAnswerParams
 from unipipeline.worker.uni_msg_params import UniGettingAnswerParams, UniSendingParams, TUniSendingMessagePayloadUnion, TUniSendingWorkerUnion
@@ -89,6 +89,13 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
             self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR, e)
             self._current_meta = None
             return
+
+        except UniMessageRejectError as e:
+            self._uni_echo.log_warning(f'rejected message {meta.id}')
+            if e.rejection_exception is not None:
+                self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.USER_ERROR, e.rejection_exception)
+            self._current_meta = None
+            raise
 
         self._uni_echo.log_debug(f'processing successfully done {meta.id}')
         if meta.need_answer and self._definition.need_answer:
