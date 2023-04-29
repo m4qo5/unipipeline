@@ -106,7 +106,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
             # fetch_max_wait_ms=1000 * 30,  # 30sec
             # max_in_flight_requests_per_connection=3,
             # max_poll_interval_ms=300_000,
-            session_timeout_ms=60_000,  # 1min
+            session_timeout_ms=3 * 300_000,  # 1min
         )
 
         self._kfk_active_consumers.append(kfk_consumer)
