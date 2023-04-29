@@ -141,11 +141,15 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
             rejected = False
             try:
                 consumer.message_handler(get_meta)
-            except UniMessageRejectError:
+            except UniMessageRejectError as e:
                 rejected = True
-                kfk_consumer.commit()
+                echo.log_warning(f'consuming message [{consumer_record.offset}]. reject {type(e).__name__}. {e}')
+            except Exception as e:
+                echo.log_error(f'consuming message [{consumer_record.offset}]. error {type(e).__name__}. {e}')
+                raise
             if not rejected:
                 kfk_consumer.commit()
+                echo.log_info(f'consuming message [{consumer_record.offset}]. ok')
 
             self._in_processing = False
             if self._interrupted:
