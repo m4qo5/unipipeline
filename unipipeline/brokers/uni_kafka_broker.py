@@ -46,18 +46,19 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
         self._in_processing = False
 
     def stop_consuming(self) -> None:    # TODO
+        self._interrupted = True
         self._end_consuming()
 
-    def _end_consuming(self) -> None:
+    def _end_consuming(self, force: bool = False) -> None:
         if not self._consuming_started:
             return
-        self._interrupted = True
-        if not self._in_processing:
-            for kfk_consumer in self._kfk_active_consumers:
-                kfk_consumer.close()
-            self._kfk_active_consumers.clear()
-            self._consuming_started = False
-            self.echo.log_info('consumption stopped')
+        if self._in_processing and not force:
+            return
+        for kfk_consumer in self._kfk_active_consumers:
+            kfk_consumer.close()
+        self._kfk_active_consumers.clear()
+        self._consuming_started = False
+        self.echo.log_info('consumption stopped')
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:
         return 0  # TODO
@@ -111,6 +112,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
         self._kfk_active_consumers.append(kfk_consumer)
 
         # TODO: retry
+        exit_with_error = ''
         for consumer_record in kfk_consumer:
             self._in_processing = True
             echo.log_info(f'consuming message [{consumer_record.offset}]. started')
@@ -133,22 +135,22 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
                 echo.log_error(f'consuming message [{consumer_record.offset}]. error {type(e).__name__}. {e}')
                 raise
 
+            self._in_processing = False
             if not rejected:
                 try:
                     kfk_consumer.commit()
                 except Exception as e:  # noqa
-                    echo.log_error(f'consuming message [{consumer_record.offset}]. error {type(e).__name__}. {e}')
-                    self._interrupted = True
+                    exit_with_error = f'consuming message [{consumer_record.offset}]. error {type(e).__name__}. {e}'
+                    break
                 else:
                     echo.log_info(f'consuming message [{consumer_record.offset}]. ok')
-
-            self._in_processing = False
             if self._interrupted:
-                self._end_consuming()
                 break
 
-        for kfk_consumer in self._kfk_active_consumers:
-            kfk_consumer.close()
+        self._end_consuming(True)
+
+        if exit_with_error:
+            echo.exit_with_error(exit_with_error)
 
     def _connect_producer(self) -> None:
         if self._producer is not None:
