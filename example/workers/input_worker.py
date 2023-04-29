@@ -24,10 +24,10 @@ class InputWorker(UniWorker[InputMessage, None]):
             value=f'from input_worker {datetime.now()}'
         ))
 
-        answ_msg: Optional[UniAnswerMessage[EnderAfterAnswerMessage]] = self.manager.get_answer_from('ender_after_input_worker', EnderAfterInputMessage(value=f'from input_worker {datetime.now()}'))
-        assert answ_msg is not None
-        answ = answ_msg.payload.value
-
-        self.manager.send_to('some_external_worker', SomeExternalMessage(
-            value=f'answ: {answ[:30]} ==> from input_worker {datetime.now()}'
-        ), UniSendingParams(ttl_s=15))
+        # answ_msg: Optional[UniAnswerMessage[EnderAfterAnswerMessage]] = self.manager.get_answer_from('ender_after_input_worker', EnderAfterInputMessage(value=f'from input_worker {datetime.now()}'))
+        # assert answ_msg is not None
+        # answ = answ_msg.payload.value
+        #
+        # self.manager.send_to('some_external_worker', SomeExternalMessage(
+        #     value=f'answ: {answ[:30]} ==> from input_worker {datetime.now()}'
+        # ), UniSendingParams(ttl_s=15))

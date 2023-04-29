@@ -48,6 +48,7 @@ example-mem-consumer-cron = "python3 ./example/example_consumer.py --type mem --
 example-mem-cron = "python3 ./example/example_cron_producer.py --type mem"
 example-mem-csi = "python3 ./example/example_csi.py --type mem"
 example-kafka-producer = "python3 ./example/example_producer.py --type kafka"
+example-kafka-producer-dangerous-pack = "python3 ./example/example_producer.py --worker input_worker --type kafka --count 1000 --delay 0 --batch-count 100"
 example-kafka-consumer-input = "python3 ./example/example_consumer.py --type kafka --worker input_worker"
 example-kafka-consumer-after-cron = "python3 ./example/example_consumer.py --type kafka --worker ender_after_cron_worker"
 example-kafka-consumer-after-input = "python3 ./example/example_consumer.py --type kafka --worker ender_after_input_worker"
