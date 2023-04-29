@@ -118,6 +118,10 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
             bootstrap_servers=self._bootstrap_servers,
             enable_auto_commit=False,
             group_id=consumer.group_id,
+            # fetch_max_wait_ms=1000 * 30,  # 30sec
+            # max_in_flight_requests_per_connection=3,
+            # max_poll_interval_ms=300_000,
+            # session_timeout_ms=10_000,
         )
 
         self._kfk_active_consumers.append(kfk_consumer)
@@ -139,6 +143,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
                 consumer.message_handler(get_meta)
             except UniMessageRejectError:
                 rejected = True
+                kfk_consumer.commit()
             if not rejected:
                 kfk_consumer.commit()
 
