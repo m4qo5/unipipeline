@@ -55,6 +55,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
         if not self._in_processing:
             for kfk_consumer in self._kfk_active_consumers:
                 kfk_consumer.close()
+            self._kfk_active_consumers.clear()
             self._consuming_started = False
             self.echo.log_info('consumption stopped')
 
@@ -65,26 +66,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
         pass  # TODO
 
     def connect(self) -> None:
-        if self._producer is not None:
-            if self._producer._closed:
-                self._producer.close()
-                self._producer = None
-            else:
-                return
-
-        # TODO: change default connection as producer yo abstract connection to kafka server
-        self._producer = KafkaProducer(
-            bootstrap_servers=self._bootstrap_servers,
-            api_version=self.config.api_version,
-            retries=self.config.retry_max_count,
-            acks=1,
-            **self._security_conf,
-        )
-
-        if not self._producer.bootstrap_connected():
-            raise ConnectionError()
-
-        self.echo.log_info('connected')
+        pass
 
     def close(self) -> None:
         if self._producer is not None:
@@ -118,10 +100,12 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
             bootstrap_servers=self._bootstrap_servers,
             enable_auto_commit=False,
             group_id=consumer.group_id,
+            max_poll_records=1,
+            max_poll_interval_ms=3 * 300_000,
             # fetch_max_wait_ms=1000 * 30,  # 30sec
             # max_in_flight_requests_per_connection=3,
             # max_poll_interval_ms=300_000,
-            # session_timeout_ms=10_000,
+            session_timeout_ms=60_000,  # 1min
         )
 
         self._kfk_active_consumers.append(kfk_consumer)
@@ -129,6 +113,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
         # TODO: retry
         for consumer_record in kfk_consumer:
             self._in_processing = True
+            echo.log_info(f'consuming message [{consumer_record.offset}]. started')
 
             get_meta = functools.partial(
                 self.parse_message_body,
@@ -147,9 +132,15 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
             except Exception as e:  # noqa
                 echo.log_error(f'consuming message [{consumer_record.offset}]. error {type(e).__name__}. {e}')
                 raise
+
             if not rejected:
-                kfk_consumer.commit()
-                echo.log_info(f'consuming message [{consumer_record.offset}]. ok')
+                try:
+                    kfk_consumer.commit()
+                except Exception as e:  # noqa
+                    echo.log_error(f'consuming message [{consumer_record.offset}]. error {type(e).__name__}. {e}')
+                    self._interrupted = True
+                else:
+                    echo.log_info(f'consuming message [{consumer_record.offset}]. ok')
 
             self._in_processing = False
             if self._interrupted:
@@ -159,8 +150,30 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
         for kfk_consumer in self._kfk_active_consumers:
             kfk_consumer.close()
 
+    def _connect_producer(self) -> None:
+        if self._producer is not None:
+            if self._producer._closed:
+                self._producer.close()
+                self._producer = None
+            else:
+                return
+
+        # TODO: change default connection as producer yo abstract connection to kafka server
+        self._producer = KafkaProducer(
+            bootstrap_servers=self._bootstrap_servers,
+            api_version=self.config.api_version,
+            retries=self.config.retry_max_count,
+            acks=1,
+            **self._security_conf,
+        )
+
+        if not self._producer.bootstrap_connected():
+            raise ConnectionError()
+
+        self.echo.log_info('connected')
+
     def _get_producer(self) -> KafkaProducer:
-        self.connect()
+        self._connect_producer()
         assert self._producer is not None
         return self._producer
 
