@@ -340,7 +340,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         try:
             with self._interaction():
                 self._connection.close()
-        except AMQPError as e:  # noqa
+        except (AMQPError, OSError) as e:  # noqa
             self.echo.log_warning(f'close :: error :: {str(e)}')
         self._connection = None
         self.echo.log_debug('close :: done')
