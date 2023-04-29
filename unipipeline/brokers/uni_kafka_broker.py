@@ -144,7 +144,7 @@ class UniKafkaBroker(UniBroker[UniKafkaBrokerConfig]):
             except UniMessageRejectError as e:
                 rejected = True
                 echo.log_warning(f'consuming message [{consumer_record.offset}]. reject {type(e).__name__}. {e}')
-            except Exception as e:
+            except Exception as e:  # noqa
                 echo.log_error(f'consuming message [{consumer_record.offset}]. error {type(e).__name__}. {e}')
                 raise
             if not rejected:
