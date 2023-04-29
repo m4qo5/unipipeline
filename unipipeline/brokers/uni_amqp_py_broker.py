@@ -345,6 +345,8 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self._connection = None
         self.echo.log_debug('close :: done')
 
+        TimeoutError
+
     def add_consumer(self, consumer: UniBrokerConsumer) -> None:
         echo = self.echo.mk_child(f'topic[{consumer.topic}]')
         if self._consuming_enabled:
