@@ -94,8 +94,11 @@ class UniWorkerConsumer(Generic[TInputMsgPayload, TAnswerMsgPayload]):
             self._uni_echo.log_warning(f'rejected message {meta.id}')
             if e.rejection_exception is not None:
                 self._mediator.move_to_error_topic(self._definition, meta, UniMessageMetaErrTopic.USER_ERROR, e.rejection_exception)
-            self._current_meta = None
-            raise
+                self._current_meta = None
+                return  # JUST ACK
+            else:
+                self._current_meta = None
+                raise
 
         self._uni_echo.log_debug(f'processing successfully done {meta.id}')
         if meta.need_answer and self._definition.need_answer:
