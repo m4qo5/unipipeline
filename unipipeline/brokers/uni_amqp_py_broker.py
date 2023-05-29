@@ -89,7 +89,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         return int(result.message_count)
 
     def get_topic_approximate_messages_count(self, topic: str) -> int:
-        with self._channel() as get_ch:
+        with self._everytime_new_channel(close=True) as get_ch:
             return self._retry_net_interaction(
                 'get_topic_approximate_messages_count',
                 lambda has_error: self._get_topic_approximate_messages_count(get_ch(has_error), topic),
@@ -185,7 +185,22 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         return now + float(self.config.heartbeat), ch
 
     @contextlib.contextmanager
-    def _channel(self, *, close: bool = False) -> Generator[Callable[[bool], amqp.Channel], Any, Any]:
+    def _everytime_new_channel(self, *, close: bool) -> Generator[Callable[[bool], amqp.Channel], Any, Any]:
+        c_to_close = []
+
+        def get_ch(force_new: bool) -> amqp.Channel:
+            current_c = self._get_or_create_or_del_free_channel()
+            c_to_close.append(current_c)
+            return current_c[1]
+
+        try:
+            yield get_ch
+        finally:
+            for c in c_to_close:
+                self._close_ch(c[1])
+
+    @contextlib.contextmanager
+    def _channel(self, *, close: bool) -> Generator[Callable[[bool], amqp.Channel], Any, Any]:
         c_to_close = []
         current_c = None
 
@@ -356,7 +371,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             self._consumer_in_processing = True
             self.echo.log_debug(f'{key} :: received')
 
-            rejected = False
+            rejected = True
             try:
                 get_meta = functools.partial(
                     self.parse_message_body,
@@ -366,14 +381,13 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                     unwrapped=consumer.unwrapped,
                 )
                 consumer.message_handler(get_meta)
+                rejected = False
             except UniMessageRejectError:
-                rejected = True
                 self.echo.log_debug(f'{key} :: reject :: started')
                 with self._interaction():
                     ch.basic_reject(delivery_tag=message.delivery_tag, requeue=True)
                 self.echo.log_debug(f'{key} :: reject :: done')
             except Exception as e: # noqa
-                rejected = True
                 traceback.print_exc()
                 self.echo.log_error(f'{key} :: {str(e)}')
                 raise
@@ -408,6 +422,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             self.echo.log_debug('heartbeat :: disable')
             if self._heartbeat_thread.is_alive():
                 self._heartbeat_thread.join()
+                self.echo.log_debug('heartbeat :: thread joined')
             self._heartbeat_thread = None
         self.echo.log_debug('heartbeat :: disabled')
 
@@ -422,9 +437,9 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
         if self._heartbeat_thread is None:
             self._heartbeat_thread = threading.Thread(
-                name=f'broker-{self.definition.name}-system',
+                name=f'broker-{self.definition.name}-heartbeat',
                 target=self._heartbeat_loop_tick,
-                daemon=False,
+                daemon=True,
                 kwargs=dict(
                     delay_s=self._heartbeat_delay,
                     heartbeat_delay_threshold=self._heartbeat_delay,
@@ -451,7 +466,8 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             if current_delay < heartbeat_delay_threshold:
                 self.echo.log_debug(f'heartbeat :: skipped ({current_delay:0.2f}s > {heartbeat_delay_threshold:0.2f}s)')
                 continue
-
+            if not self._heartbeat_enabled:
+                break
             self.connected_connection.send_heartbeat()
             self.echo.log_debug(f'heartbeat :: tick (since last interaction {current_delay:0.2f}s)')
 
@@ -537,7 +553,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         )
 
     def publish(self, topic: str, meta_list: List[UniMessageMeta], alone: bool = False) -> None:
-        with self._channel() as get_ch:
+        with self._everytime_new_channel(close=True) as get_ch:
             exchange, topic = self._retry_net_interaction(
                 'publish._init_topic',
                 lambda has_error: self._init_topic(get_ch(has_error), topic),
@@ -560,7 +576,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                 )
 
     def rpc_call(self, topic: str, meta: UniMessageMeta, *, alone: bool = False, max_delay_s: int = 1, unwrapped: bool = False) -> Optional[UniMessageMeta]:
-        with self._channel(close=True) as get_ch:
+        with self._everytime_new_channel(close=True) as get_ch:
             return self._retry_net_interaction(
                 'rpc_call',
                 lambda has_error: self._rpc_call(get_ch(has_error), topic, meta, alone=alone, max_delay_s=max_delay_s, unwrapped=unwrapped),
@@ -614,7 +630,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             expiration=str(ttl_s * 1000) if ttl_s is not None else None,
         )
 
-        with self._channel() as get_ch:
+        with self._everytime_new_channel(close=True) as get_ch:
             self._retry_net_interaction(
                 'publish_answer._publish_ch',
                 lambda has_error: self._publish_ch('answer :: publish', get_ch(has_error), self.config.answer_exchange_name, self._mk_answer_topic(answer_params), meta, props),

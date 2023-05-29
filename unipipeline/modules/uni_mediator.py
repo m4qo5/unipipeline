@@ -78,6 +78,7 @@ class UniMediator:
         if error_topic == UniMessageMetaErrTopic.MESSAGE_PAYLOAD_ERR.value:
             error_topic = wd.error_payload_topic
         br.publish(error_topic, [meta])
+        self._echo.log_info(f'successfully moved message "{meta.id}" to error topic')
 
     def add_worker_to_consume_list(self, name: str) -> None:
         wd = self._config.workers[name]
