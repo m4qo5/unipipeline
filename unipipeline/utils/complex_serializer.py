@@ -9,7 +9,7 @@ class ComplexEncoder(json.JSONEncoder):
     def default(self, obj: Any) -> Any:
         if isinstance(obj, datetime):
             return obj.isoformat()
-        if isinstance(obj, UUID):
+        if isinstance(obj, UUID) or isinstance(obj, Decimal):
             return str(obj)
         if isinstance(obj, bytes):
             return obj.hex()
