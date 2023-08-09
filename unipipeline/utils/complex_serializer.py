@@ -10,12 +10,14 @@ class ComplexEncoder(json.JSONEncoder):
     def default(self, obj: Any) -> Any:
         if isinstance(obj, datetime):
             return obj.isoformat()
-        if isinstance(obj, UUID) or isinstance(obj, Decimal):
+        if isinstance(obj, UUID):
             return str(obj)
         if isinstance(obj, bytes):
             return obj.hex()
         if isinstance(obj, Enum):
             return obj.value
+        if isinstance(obj, Decimal):
+            return str(obj)
         return json.JSONEncoder.default(self, obj)
 
 
