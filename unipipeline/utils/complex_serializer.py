@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 from uuid import UUID
+from decimal import Decimal
 
 
 class ComplexEncoder(json.JSONEncoder):
@@ -15,6 +16,8 @@ class ComplexEncoder(json.JSONEncoder):
             return obj.hex()
         if isinstance(obj, Enum):
             return obj.value
+        if isinstance(obj, Decimal):
+            return str(obj)
         return json.JSONEncoder.default(self, obj)
 
 
