@@ -10,7 +10,6 @@ from unipipeline.errors import UniRedundantAnswerError, UniEmptyAnswerError, Uni
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniMessageMetaErrTopic, UniAnswerParams
 from unipipeline.modules.uni_cron_job import UniCronJob
-from unipipeline.utils.sig import soft_interruption
 from unipipeline.utils.uni_echo import UniEcho
 from unipipeline.worker.uni_msg_params import UniSendingParams, UniGettingAnswerParams, TUniSendingMessagePayloadUnion, TUniSendingWorkerUnion
 from unipipeline.worker.uni_worker import UniWorker
@@ -260,27 +259,11 @@ class UniMediator:
             self.echo.log_info(f'consumer {wn} initialized')
             brokers.add(wd.broker.name)
 
-        with soft_interruption(self._handle_interruption, self._handle_force_interruption, self._interruption_err):
-            for bn in brokers:
-                b = self.get_broker(bn)
-                self._brokers_with_active_consumption.append(b)
-                self.echo.log_info(f'broker {bn} consuming start')
-                b.start_consuming()
-
-    def _interruption_err(self, err: Exception) -> None:
-        self.echo.log_error(str(err))
-        raise err
-
-    def _handle_force_interruption(self) -> None:
-        self.echo.log_warning('force interruption detected')
-
-    def _handle_interruption(self) -> None:
-        self.echo.log_warning('interruption detected')
-        for b in self._brokers_with_active_consumption:
-            self.echo.log_debug(f'broker "{b.definition.name}" was notified about interruption')
-            b.stop_consuming()
-        self._brokers_with_active_consumption = list()
-        self.echo.log_info('all brokers was notified about interruption')
+        for bn in brokers:
+            b = self.get_broker(bn)
+            self._brokers_with_active_consumption.append(b)
+            self.echo.log_info(f'broker {bn} consuming start')
+            b.start_consuming()
 
     def get_compressor(self, name: str) -> Callable[[bytes], bytes]:
         if name in self._compression_modules:
