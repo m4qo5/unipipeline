@@ -9,7 +9,7 @@ from typing import Optional, TypeVar, Set, List, NamedTuple, Callable, TYPE_CHEC
 from urllib.parse import urlparse
 
 import amqp  # type: ignore
-from amqp.exceptions import AMQPError, RecoverableChannelError  # type: ignore
+from amqp.exceptions import AMQPError, RecoverableChannelError, NotFound  # type: ignore
 
 from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
@@ -95,6 +95,14 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
                 lambda has_error: self._get_topic_approximate_messages_count(get_ch(has_error), topic),
                 retryable_errors=PUBLISHING_RETRYABLE_ERRORS,
             )
+
+    def topic_exists(self, topic: str) -> bool:
+        with self._everytime_new_channel(close=True) as channel:
+            try:
+                channel.queue_declare(queue=topic, passive=True)
+            except NotFound:
+                return False
+        return True
 
     @classmethod
     def get_connection_uri(cls) -> str:
