@@ -148,6 +148,10 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self._heartbeat_delay = max(self.config.heartbeat / 4, 0.2)
         self._heartbeat_thread: Optional[threading.Thread] = None
 
+    @property
+    def initialized_topics(self) -> Set[str]:
+        return self._initialized_topics
+
     def _close_ch(self, ch: amqp.Channel) -> None:
         ch_id = ch.channel_id
         try:
