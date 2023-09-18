@@ -148,6 +148,10 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self._heartbeat_delay = max(self.config.heartbeat / 4, 0.2)
         self._heartbeat_thread: Optional[threading.Thread] = None
 
+    @property
+    def initialized_topics(self) -> Set[str]:
+        return self._initialized_topics
+
     def _close_ch(self, ch: amqp.Channel) -> None:
         ch_id = ch.channel_id
         try:
@@ -306,12 +310,12 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
 
                 if time.time() - last_start_time > reset_delay:
                     has_error = False
-                    retry_count_left = total_count
-                if not retry_count_left:
-                    self.echo.log_error(f'{log_prefix} :: max retry count {total_count} was reached')
+                    retry__left = total_
+                if not retry__left:
+                    self.echo.log_error(f'{log_prefix} :: max retry  {total_} was reached')
                     self.echo.log_error(f'{log_prefix} :: exit on error')
                     self.stop_consuming()
-                    raise ConnectionError(f'{log_prefix} :: max retry count {total_count} was reached :: {e}')
+                    raise ConnectionError(f'{log_prefix} :: max retry  {total_} was reached :: {e}')
             except Exception as e:  # noqa
                 self.echo.log_error(f'{log_prefix} :: exit on error')
                 self.stop_consuming()
@@ -409,7 +413,7 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
             queue=consumer.topic,
             on_message_callback=consumer_wrapper,
             consumer_tag=consumer.id,
-            prefetch_count=consumer.prefetch_count,
+            prefetch_=consumer.prefetch_,
         ))
 
         echo.log_debug(f'added consumer :: tag="{consumer.id}" group_id={consumer.group_id}')
