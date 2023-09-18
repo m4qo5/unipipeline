@@ -15,7 +15,7 @@ from unipipeline.brokers.uni_broker import UniBroker
 from unipipeline.brokers.uni_broker_consumer import UniBrokerConsumer
 from unipipeline.definitions.uni_broker_definition import UniBrokerDefinition
 from unipipeline.definitions.uni_definition import UniDynamicDefinition
-from unipipeline.errors import UniAnswerDelayError, UniMessageRejectError
+from unipipeline.errors import UniAnswerDelayError, UniMessageRejectError, UniTopicNotFoundError
 from unipipeline.message.uni_message import UniMessage
 from unipipeline.message_meta.uni_message_meta import UniMessageMeta, UniAnswerParams
 
@@ -84,7 +84,10 @@ class UniAmqpPyBroker(UniBroker[UniAmqpPyBrokerConfig]):
         self._interacted()
 
     def _get_topic_approximate_messages_count(self, ch: amqp.Channel, topic: str) -> int:
-        result = ch.queue_declare(queue=topic, passive=True)
+        try:
+            result = ch.queue_declare(queue=topic, passive=True)
+        except NotFound:
+            raise UniTopicNotFoundError
         self.echo.log_debug(f'topic "{topic}" has messages={result.message_count}, consumers={result.consumer_count}')
         return int(result.message_count)
 

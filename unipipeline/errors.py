@@ -45,6 +45,10 @@ class UniSendingToUndefinedWorkerError(UniError):
     pass
 
 
+class UniTopicNotFoundError(UniError):
+    pass
+
+
 class UniMessageRejectError(UniError):
 
     def __init__(self, exc: Optional[Exception] = None) -> None:
